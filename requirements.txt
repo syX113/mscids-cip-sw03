@@ -2,3 +2,6 @@ marimo
 pandas
 altair
 pyarrow
+duckdb
+fastapi
+pydantic
