@@ -1,27 +1,37 @@
 # mscids-cip-sw03
 
-This repo includes a visually rich Marimo demo notebook showcasing reactive UI, layouts, media, and data exploration.
+A course repo with two Marimo notebooks: a visual demo and a full lecture notebook on data storage, serialization, databases, and APIs.
 
-## Files
+## Table of Contents
 
-- `marimo_demo.py`: the demo notebook
-- `env.yaml`: conda environment for running the demo
-- `requirements.txt`: minimal pip requirements (marimo only)
+1. Overview
+2. Notebooks
+3. Installation with Conda
+4. Installation with Pip
+5. Optional Extras
+6. Run Notebooks
 
-## Setup (Conda)
+## Overview
+
+This repository contains interactive Marimo notebooks for SW03. The lecture notebook is designed for live teaching with demos, controls, and discussion prompts.
+
+## Notebooks
+
+- `marimo_demo.py` — a compact UI/UX demo showing Marimo layouts, reactive elements, and charts.
+- `lecture_sw03.py` — the main lecture notebook covering ACID, serialization, columnar storage, compression, DuckDB, REST, Pydantic, FastAPI, indexing, and charts.
+
+## Installation with Conda
+
+Uses `env.yaml`.
 
 ```bash
 conda env create -f env.yaml
 conda activate mscids-cip-sw03
 ```
 
-Optional extras for charts and dataframe tooling:
+## Installation with Pip
 
-```bash
-conda install -c conda-forge pandas altair
-```
-
-## Setup (Pip)
+Uses `requirements.txt`.
 
 ```bash
 python -m venv .venv
@@ -29,27 +39,34 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Optional extras for charts and dataframe tooling:
+## Optional Extras
+
+Some sections use optional packages. Install them if you want every demo to run.
 
 ```bash
-pip install pandas altair
+pip install fastavro requests uvicorn dash flask
 ```
 
-## Run
+## Run Notebooks
 
-Interactive editor (recommended for the full notebook experience):
+Open in the Marimo editor (recommended for live teaching):
+
+```bash
+marimo edit lecture_sw03.py
+```
+
+Run in app mode:
+
+```bash
+marimo run lecture_sw03.py
+```
+
+Run the demo notebook:
 
 ```bash
 marimo edit marimo_demo.py
 ```
 
-App mode:
-
 ```bash
 marimo run marimo_demo.py
 ```
-
-## Notes
-
-- The media gallery embeds a sample video and a PDF from public URLs, so it needs internet access.
-- If `pandas` or `altair` are missing, the notebook will show a friendly fallback message for those sections.

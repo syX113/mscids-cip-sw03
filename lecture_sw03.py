@@ -113,10 +113,11 @@ def _(mo):
           }
 
           main, .marimo-main, .mo-main {
-            max-width: 2100px;
-            width: min(99vw, 2100px);
-            margin: 0 auto;
-            padding: 0 40px 80px;
+            max-width: 100% !important;
+            width: min(100vw, 2400px) !important;
+            margin: 0 auto !important;
+            padding: 0 28px 80px;
+            box-sizing: border-box;
           }
 
           h1, h2, h3 {
@@ -134,8 +135,8 @@ def _(mo):
             position: absolute;
             left: 0;
             bottom: 0;
-            width: 180px;
-            height: 4px;
+            width: 100%;
+            height: 3px;
             border-radius: 999px;
             background: linear-gradient(90deg, rgba(47, 111, 237, 0.7), rgba(20, 184, 166, 0.6));
             opacity: 0.6;
@@ -367,7 +368,7 @@ def _(mo):
     agenda = mo.md(
         """
 <div class="section-card">
-  <h2>Agenda (Lecture Flow)</h2>
+  <h2>Discussed Topics  </h2>
   <div class="grid-2">
     <div>
       <ul>
@@ -395,26 +396,6 @@ def _(mo):
     )
     agenda
     return (agenda,)
-
-
-@app.cell
-def _(mo):
-    deps = mo.md(
-        """
-<div class="section-card">
-  <h3>Optional Python Packages</h3>
-  <p>
-    Some demos use optional libraries. If they are missing, the notebook will gracefully skip those parts.
-  </p>
-
-```bash
-pip install pandas pyarrow fastavro duckdb requests pydantic fastapi uvicorn dash flask
-```
-</div>
-        """
-    ).callout(kind="info")
-    deps
-    return (deps,)
 
 
 @app.cell
@@ -1002,7 +983,7 @@ def _(mo):
     _qa_block_concurrency = mo.md(
         """
 <div class="section-card">
-  <h3>Discussion Prompt — Atomicity & Concurrency</h3>
+  <h3>Discussion — Atomicity & Concurrency</h3>
   <details>
     <summary><strong>Q1:</strong> If you were forced to use files, how would you implement an atomic transfer?</summary>
     <p><strong>Answer:</strong> Consider a write‑ahead log, append‑only records, or a temp file + atomic rename.
@@ -1294,7 +1275,7 @@ def _(mo):
     _qa_block_serialization = mo.md(
         """
 <div class="section-card">
-  <h3>Discussion Prompt — Serialization Choices</h3>
+  <h3>Discussion — Serialization Choices</h3>
   <details>
     <summary><strong>Q1:</strong> How do you choose between JSON, Avro, and Parquet for a new system?</summary>
     <p><strong>Answer:</strong> Start with the workload. JSON for interoperability, Avro for schema‑evolving events,
@@ -1434,7 +1415,7 @@ def _(mo):
     _qa_block_storage = mo.md(
         """
 <div class="section-card">
-  <h3>Discussion Prompt — Row vs Column Storage</h3>
+  <h3>Discussion — Row vs Column Storage</h3>
   <details>
     <summary><strong>Q1:</strong> Which workload patterns make a row store the better choice?</summary>
     <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions with full‑row access.</p>
@@ -2233,7 +2214,7 @@ def _(mo):
     _qa_block_duckdb = mo.md(
         """
 <div class="section-card">
-  <h3>Discussion Prompt — DuckDB & Schema</h3>
+  <h3>Discussion — DuckDB & Schema</h3>
   <details>
     <summary><strong>Q1:</strong> When would you materialize data into DuckDB instead of scanning raw files?</summary>
     <p><strong>Answer:</strong> When repeated queries or joins are common, materialization amortizes parsing and
@@ -2464,7 +2445,7 @@ def _(mo):
     _qa_block_api = mo.md(
         """
 <div class="section-card">
-  <h3>Discussion Prompt — APIs & Validation</h3>
+  <h3>Discussion — APIs & Validation</h3>
   <details>
     <summary><strong>Q1:</strong> When is a POST request idempotent, and why does it matter?</summary>
     <p><strong>Answer:</strong> It’s idempotent if repeated calls yield the same result (e.g., client‑supplied IDs).
@@ -2979,20 +2960,34 @@ def _(
 
 @app.cell
 def _(mo):
-    footer = mo.md(
+    _links_section = mo.md("## Some Useful Links")
+    _links_section
+    return (_links_section,)
+
+
+@app.cell
+def _(mo):
+    _links = mo.md(
         """
----
-
-### Next Steps for Students
-
-1. Rerun the experiments with different parameters and discuss the results.
-2. Add a new serialization format (e.g., MessagePack) and compare.
-3. Extend the FastAPI example with a database backend.
+<div class="section-card">
+  <p>Reference material for deeper dives and lookup:</p>
+  <ul>
+    <li>Marimo documentation: <code>https://marimo.io</code></li>
+    <li>DuckDB documentation: <code>https://duckdb.org/docs</code></li>
+    <li>SQLite documentation: <code>https://www.sqlite.org/docs.html</code></li>
+    <li>Apache Parquet: <code>https://parquet.apache.org</code></li>
+    <li>Apache Arrow: <code>https://arrow.apache.org</code></li>
+    <li>Apache Avro: <code>https://avro.apache.org</code></li>
+    <li>FastAPI documentation: <code>https://fastapi.tiangolo.com</code></li>
+    <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
+    <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
+    <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>
+  </ul>
+</div>
         """
     )
-    footer
-    return (footer,)
-
+    _links
+    return (_links,)
 
 if __name__ == "__main__":
     app.run()
