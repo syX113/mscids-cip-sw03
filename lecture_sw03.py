@@ -91,37 +91,54 @@ def _(mo):
 
           :root {
             --ink: #0b1220;
-            --ink-2: #1f2a44;
-            --muted: #4b5b75;
-            --border: rgba(11, 18, 32, 0.12);
-            --surface: rgba(255, 255, 255, 0.88);
-            --surface-strong: rgba(255, 255, 255, 0.96);
+            --ink-2: #22304d;
+            --muted: #52627a;
+            --border: rgba(11, 18, 32, 0.14);
+            --surface: rgba(255, 255, 255, 0.9);
+            --surface-strong: rgba(255, 255, 255, 0.98);
             --accent: #2f6fed;
             --accent-2: #14b8a6;
             --accent-3: #f59e0b;
-            --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+            --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
           }
 
           body {
             background:
-              radial-gradient(circle at 12% 8%, rgba(47, 111, 237, 0.18), transparent 42%),
-              radial-gradient(circle at 85% 18%, rgba(20, 184, 166, 0.16), transparent 40%),
-              radial-gradient(circle at 25% 85%, rgba(245, 158, 11, 0.14), transparent 42%),
-              linear-gradient(180deg, #f7f9ff 0%, #eef2fb 48%, #f7f9ff 100%);
+              radial-gradient(circle at 12% 6%, rgba(47, 111, 237, 0.12), transparent 45%),
+              radial-gradient(circle at 90% 12%, rgba(20, 184, 166, 0.1), transparent 40%),
+              linear-gradient(180deg, #f8fafc 0%, #eef2f7 55%, #f8fafc 100%);
             color: var(--ink);
             font-family: "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
             background-attachment: fixed;
           }
 
           main, .marimo-main, .mo-main {
-            max-width: 1520px;
-            width: min(96vw, 1520px);
+            max-width: 2100px;
+            width: min(99vw, 2100px);
             margin: 0 auto;
-            padding: 0 24px 60px;
+            padding: 0 40px 80px;
           }
 
           h1, h2, h3 {
             color: var(--ink);
+          }
+
+          h2 {
+            margin-top: 2.2rem;
+            position: relative;
+            padding-bottom: 0.3rem;
+          }
+
+          h2::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 180px;
+            height: 4px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(47, 111, 237, 0.7), rgba(20, 184, 166, 0.6));
+            opacity: 0.6;
           }
 
           h1, .hero-title {
@@ -130,8 +147,8 @@ def _(mo):
           }
 
           pre, code {
-            background: rgba(53, 89, 224, 0.08);
-            border: 1px solid rgba(53, 89, 224, 0.2);
+            background: rgba(47, 111, 237, 0.08);
+            border: 1px solid rgba(47, 111, 237, 0.18);
             border-radius: 10px;
             font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
             color: var(--ink);
@@ -168,26 +185,29 @@ def _(mo):
             border-radius: 18px;
             padding: 18px 20px;
             box-shadow: var(--shadow);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(8px);
+          }
+
+          .section-card h3 {
+            margin-top: 0;
           }
 
           .hero {
             position: relative;
             border-radius: 22px;
             padding: 28px 28px 24px 28px;
-            background: linear-gradient(120deg, rgba(47, 111, 237, 0.15), rgba(20, 184, 166, 0.12), rgba(245, 158, 11, 0.12));
-            border: 1px solid rgba(47, 111, 237, 0.25);
-            box-shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
+            background: linear-gradient(120deg, rgba(47, 111, 237, 0.12), rgba(20, 184, 166, 0.1), rgba(245, 158, 11, 0.1));
+            border: 1px solid rgba(47, 111, 237, 0.22);
+            box-shadow: 0 26px 60px rgba(15, 23, 42, 0.14);
             overflow: hidden;
-            animation: float 12s ease-in-out infinite;
           }
 
           .hero::after {
             content: "";
             position: absolute;
             inset: 0;
-            background: radial-gradient(circle at 20% 20%, rgba(47, 111, 237, 0.35), transparent 45%);
-            opacity: 0.9;
+            background: radial-gradient(circle at 20% 20%, rgba(47, 111, 237, 0.28), transparent 45%);
+            opacity: 0.8;
             pointer-events: none;
           }
 
@@ -211,7 +231,7 @@ def _(mo):
           }
 
           .hero-title {
-            font-size: 2.4rem;
+            font-size: 2.6rem;
             margin: 14px 0 10px 0;
             line-height: 1.05;
           }
@@ -264,10 +284,46 @@ def _(mo):
             margin-top: 6px;
           }
 
-          @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-6px); }
-            100% { transform: translateY(0px); }
+          details {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.82);
+          }
+
+          details + details {
+            margin-top: 10px;
+          }
+
+          summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--ink-2);
+          }
+
+          summary::-webkit-details-marker {
+            display: none;
+          }
+
+          summary::before {
+            content: "";
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid var(--muted);
+            border-bottom: 2px solid var(--muted);
+            margin-right: 10px;
+            transform: translateY(-1px) rotate(-45deg);
+            transition: transform 0.15s ease;
+          }
+
+          details[open] summary::before {
+            transform: translateY(0px) rotate(45deg);
+          }
+
+          .mo-callout {
+            border-radius: 16px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
           }
         </style>
         """
@@ -282,20 +338,21 @@ def _(mo):
         """
 <div class="hero">
   <div class="hero-content">
-    <div class="eyebrow">SW03 Lecture Studio</div>
-    <div class="hero-title">Data Storage, Serialization, APIs, and Apps</div>
+    <div class="eyebrow">CIP - SW03 Lecture Studio</div>
+    <div class="hero-title">Storage, Serialization, APIs & Apps</div>
     <div class="hero-subtitle">
-      A high‑intensity, hands‑on notebook that connects storage theory to real code:
+      A hands‑on notebook to demonstrate:
       race conditions, serialization trade‑offs, columnar analytics, API design, and
       rapid app prototyping.
     </div>
     <div class="hero-pills">
       <span class="pill">ACID & Concurrency</span>
+      <span class="pill">Atomicity Transfers</span>
       <span class="pill">Serialization Benchmarks</span>
       <span class="pill">Columnar Analytics</span>
       <span class="pill">APIs & FastAPI</span>
-      <span class="pill">Frontend Frameworks</span>
-      <span class="pill">Streamlit Studio</span>
+      <span class="pill">Indexes & Plans</span>
+      <span class="pill">Marimo Charts</span>
     </div>
   </div>
 </div>
@@ -315,10 +372,11 @@ def _(mo):
     <div>
       <ul>
         <li>File locks and why databases matter (ACID vs. files)</li>
+        <li>Atomicity demo: transfer + rollback</li>
         <li>Serialization & deserialization benchmarks (JSON, Pickle, Arrow, Avro)</li>
         <li>Column‑based vs row‑based storage</li>
         <li>Compression & encoding (Parquet, gzip, compression ratios)</li>
-        <li>DuckDB for analytics on files</li>
+        <li>DuckDB for analytics on files + schema‑on‑read vs write</li>
       </ul>
     </div>
     <div>
@@ -326,8 +384,9 @@ def _(mo):
         <li>REST APIs (GET, POST, PUT, DELETE)</li>
         <li>Pydantic models for validation</li>
         <li>FastAPI demo + automatic documentation</li>
-        <li>Frontend framework comparison (Streamlit, Dash, Flask, React)</li>
-        <li>Streamlit in‑depth: build a tiny app</li>
+        <li>Indexing demo (SQLite) + query plans</li>
+        <li>Frontend framework comparison (Dash, Flask, React, Marimo)</li>
+        <li>Marimo charts lab: scatter, line, box + statistics</li>
       </ul>
     </div>
   </div>
@@ -349,7 +408,7 @@ def _(mo):
   </p>
 
 ```bash
-pip install pandas pyarrow fastavro duckdb requests pydantic fastapi uvicorn streamlit dash flask
+pip install pandas pyarrow fastavro duckdb requests pydantic fastapi uvicorn dash flask
 ```
 </div>
         """
@@ -377,6 +436,8 @@ Files are great for **simple storage**, but they do **not** provide ACID guarant
 - **Consistency**: no built‑in rules about valid states.
 - **Isolation**: concurrent writers can overwrite each other.
 - **Durability**: durability depends on flush/fsync timing.
+
+**What to observe:** when multiple workers update a shared file, the *actual* value drops below the *expected* value because increments are lost.
 
 In our experiment, the expected final counter is:
 
@@ -597,7 +658,11 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
         _table = mo.ui.table(race_rows, label="Concurrency results")
         _summary = mo.md(
             """
-**Takeaway:** File writes can lose updates without locking. Databases provide atomic updates and isolation out of the box.
+**How to read the table**
+
+- **No lock**: fastest but incorrect (lost updates).
+- **File lock**: correct but slower (serializes access).
+- **SQLite**: correct *and* often fast because the database manages concurrency.
             """
         ).callout(kind="info")
 
@@ -605,6 +670,359 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
 
     _output
     return (_output,)
+
+
+@app.cell
+def _(mo):
+    _interleave_intro = mo.md(
+        """
+### Interleaving Simulator: Why Lost Updates Happen
+
+The file counter uses a **read → modify → write** sequence. Without a lock, two workers can interleave:
+
+1. Worker A reads 0  
+2. Worker B reads 0  
+3. Worker A writes 1  
+4. Worker B writes 1  ← lost update (A’s increment disappears)
+
+The simulator below shuffles these steps to make the race condition visible.
+        """
+    ).callout(kind="neutral")
+    _interleave_intro
+    return (_interleave_intro,)
+
+
+@app.cell
+def _(mo):
+    interleave_steps = mo.ui.slider(
+        1, 6, value=2, label="Increments per worker (simulated)"
+    )
+    interleave_seed = mo.ui.slider(1, 999, value=13, label="Interleaving seed")
+    show_trace = mo.ui.switch(value=True, label="Show step-by-step trace")
+
+    _controls = mo.vstack(
+        [
+            mo.hstack([interleave_steps, interleave_seed], widths="equal"),
+            show_trace,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return interleave_seed, interleave_steps, show_trace
+
+
+@app.cell
+def _(interleave_seed, interleave_steps, mo, random, show_trace):
+    _rng = random.Random(interleave_seed.value)
+    def _build_ops():
+        ops = []
+        for idx in range(interleave_steps.value):
+            ops.append(("read", idx))
+            ops.append(("write", idx))
+        return ops
+
+    _ops = {"A": _build_ops(), "B": _build_ops()}
+
+    _local = {"A": None, "B": None}
+    _shared = 0
+    _log = []
+    _step = 0
+
+    while _ops["A"] or _ops["B"]:
+        _available = [w for w in ("A", "B") if _ops[w]]
+        _worker = _rng.choice(_available)
+        _op = _ops[_worker].pop(0)
+        _action, _idx = _op
+        _before = _shared
+        if _action == "read":
+            _local[_worker] = _shared
+            _after = _shared
+            _note = "read shared"
+        else:
+            _shared = (_local[_worker] or 0) + 1
+            _after = _shared
+            _note = "write local+1"
+
+        _log.append(
+            {
+                "step": _step,
+                "worker": _worker,
+                "action": _action,
+                "shared_before": _before,
+                "local_value": _local[_worker],
+                "shared_after": _after,
+                "note": _note,
+            }
+        )
+        _step += 1
+
+    _expected = interleave_steps.value * 2
+    _lost = _expected - _shared
+    _summary = mo.md(
+        f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**."
+    ).callout(kind="info")
+
+    _panel_items = [_summary]
+    if show_trace.value:
+        _panel_items.append(mo.ui.table(_log, label="Interleaving trace"))
+
+    _panel = mo.vstack(_panel_items, gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
+def _(mo):
+    _atomic_intro = mo.md(
+        """
+### Atomicity Demo: Transfer With Failure
+
+A transfer should preserve the total balance:
+
+$$
+B_{total} = B_{Alice} + B_{Bob}
+$$
+
+Without transactions, a crash between **debit** and **credit** can violate this invariant.
+Databases roll back the partial work, so the total remains consistent.
+
+**Try this:** run once with failure **on** (see the file total break),
+then run with failure **off** (both systems remain consistent).
+        """
+    ).callout(kind="neutral")
+    _atomic_intro
+    return (_atomic_intro,)
+
+
+@app.cell
+def _(mo):
+    atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount")
+    atomic_fail = mo.ui.switch(value=True, label="Inject failure after debit")
+    run_atomic = mo.ui.button(label="Run atomicity demo", value=1, kind="success")
+
+    _controls = mo.vstack(
+        [mo.hstack([atomic_amount, atomic_fail], widths="equal"), run_atomic],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return atomic_amount, atomic_fail, run_atomic
+
+
+@app.cell
+def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile):
+    if run_atomic.value == 0:
+        _output = mo.md(
+            "Click **Run atomicity demo** to simulate the transfer step-by-step."
+        ).callout(kind="neutral")
+    else:
+        _initial = {"Alice": 1000, "Bob": 500}
+        _expected_total = sum(_initial.values())
+        _timeline = []
+
+        def _normalize_state(state):
+            if isinstance(state, dict):
+                _state = dict(state)
+            else:
+                try:
+                    _state = dict(state)
+                except Exception:
+                    _state = {}
+            return {
+                "Alice": _state.get("Alice", 0),
+                "Bob": _state.get("Bob", 0),
+            }
+
+        def _add_timeline(system, step, state, note):
+            _state = _normalize_state(state)
+            _timeline.append(
+                {
+                    "system": system,
+                    "step": step,
+                    "Alice": _state["Alice"],
+                    "Bob": _state["Bob"],
+                    "total": sum(_state.values()),
+                    "note": note,
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as _tmpdir:
+            _tmpdir = Path(_tmpdir)
+            _file_path = _tmpdir / "ledger.json"
+            _file_path.write_text(json.dumps(_initial), encoding="utf-8")
+
+            _add_timeline("file (JSON)", "start", dict(_initial), "initial balances")
+            _file_balances = dict(_initial)
+            _file_balances["Alice"] -= atomic_amount.value
+            _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
+            _add_timeline(
+                "file (JSON)", "debit", dict(_file_balances), "Alice debited"
+            )
+            if not atomic_fail.value:
+                _file_balances["Bob"] += atomic_amount.value
+                _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
+                _add_timeline(
+                    "file (JSON)", "credit", dict(_file_balances), "Bob credited"
+                )
+            else:
+                _add_timeline(
+                    "file (JSON)", "crash", dict(_file_balances), "crash before credit"
+                )
+
+            _file_final = json.loads(_file_path.read_text(encoding="utf-8"))
+
+            _db_path = _tmpdir / "ledger.db"
+            _con = sqlite3.connect(str(_db_path), isolation_level=None)
+            _con.execute(
+                "CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)"
+            )
+            _con.executemany("INSERT INTO accounts VALUES (?, ?)", list(_initial.items()))
+
+            try:
+                _con.execute("BEGIN")
+                _add_timeline(
+                    "sqlite", "start", dict(_initial), "initial balances"
+                )
+                _con.execute(
+                    "UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'",
+                    (atomic_amount.value,),
+                )
+                _db_after_debit = dict(
+                    _con.execute(
+                        "SELECT name, balance FROM accounts ORDER BY name"
+                    ).fetchall()
+                )
+                _add_timeline(
+                    "sqlite",
+                    "debit (txn)",
+                    _db_after_debit,
+                    "uncommitted debit",
+                )
+                if atomic_fail.value:
+                    raise RuntimeError("Simulated crash after debit")
+                _con.execute(
+                    "UPDATE accounts SET balance = balance + ? WHERE name = 'Bob'",
+                    (atomic_amount.value,),
+                )
+                _con.execute("COMMIT")
+                _db_final = dict(
+                    _con.execute(
+                        "SELECT name, balance FROM accounts ORDER BY name"
+                    ).fetchall()
+                )
+                _add_timeline(
+                    "sqlite", "commit", _db_final, "transaction committed"
+                )
+            except Exception:
+                try:
+                    _con.execute("ROLLBACK")
+                except sqlite3.OperationalError:
+                    pass
+                _db_final = dict(
+                    _con.execute(
+                        "SELECT name, balance FROM accounts ORDER BY name"
+                    ).fetchall()
+                )
+                _add_timeline(
+                    "sqlite", "rollback", _db_final, "transaction rolled back"
+                )
+
+            _db_rows = _con.execute(
+                "SELECT name, balance FROM accounts ORDER BY name"
+            ).fetchall()
+            _con.close()
+
+        if not _db_rows:
+            _db_rows = list(_initial.items())
+
+        _initial_table = mo.ui.table(
+            [{"account": k, "balance": v} for k, v in _initial.items()],
+            label="Initial balances",
+        )
+        _file_table = mo.ui.table(
+            [{"account": k, "balance": v} for k, v in _file_final.items()],
+            label="File ledger (JSON)",
+        )
+        _db_table = mo.ui.table(
+            [{"account": name, "balance": bal} for name, bal in _db_rows],
+            label="SQLite ledger (transaction)",
+        )
+        _timeline_table = mo.ui.table(_timeline, label="Step-by-step timeline")
+
+        _file_total = sum(_file_final.values())
+        _db_total = sum(row[1] for row in _db_rows)
+        _status = "Failure injected" if atomic_fail.value else "No failure"
+        _file_ok = _file_total == _expected_total
+        _db_ok = _db_total == _expected_total
+
+        _file_status = "consistent" if _file_ok else "BROKEN"
+        _db_status = "consistent" if _db_ok else "BROKEN"
+        _file_kind = "success" if _file_ok else "danger"
+        _db_kind = "success" if _db_ok else "danger"
+
+        _summary = mo.md(
+            f"""
+**Scenario:** {_status}  
+**Expected total:** `{_expected_total}`  
+**File total:** `{_file_total}` → **{_file_status}**  
+**SQLite total:** `{_db_total}` → **{_db_status}**
+
+When failure is injected, the file-based ledger can end in a **partial state**,
+while the database rolls back to the consistent total.
+            """
+        ).callout(kind="info")
+
+        _file_callout = mo.md(
+            "File writes are **not atomic**: debit and credit can be split by a crash."
+        ).callout(kind=_file_kind)
+        _db_callout = mo.md(
+            "SQLite uses **transactions**: either both updates happen or none."
+        ).callout(kind=_db_kind)
+
+        _output = mo.vstack(
+            [
+                _initial_table,
+                _timeline_table,
+                _file_callout,
+                _file_table,
+                _db_callout,
+                _db_table,
+                _summary,
+            ],
+            gap=0.6,
+        )
+
+    _output
+    return (_output,)
+
+
+@app.cell
+def _(mo):
+    _qa_block_concurrency = mo.md(
+        """
+<div class="section-card">
+  <h3>Discussion Prompt — Atomicity & Concurrency</h3>
+  <details>
+    <summary><strong>Q1:</strong> If you were forced to use files, how would you implement an atomic transfer?</summary>
+    <p><strong>Answer:</strong> Consider a write‑ahead log, append‑only records, or a temp file + atomic rename.
+    Each approach trades simplicity for durability and complexity.</p>
+  </details>
+  <details>
+    <summary><strong>Q2:</strong> What invariants must always hold in your system?</summary>
+    <p><strong>Answer:</strong> Identify quantities that must never change (e.g., total balance), and design
+    tests that verify them under failures and retries.</p>
+  </details>
+  <details>
+    <summary><strong>Q3:</strong> Would you prefer to fail fast or accept temporary inconsistency?</summary>
+    <p><strong>Answer:</strong> Depends on risk: finance typically fails fast; analytics can tolerate eventual repair.
+    The right choice follows the cost of bad data vs. downtime.</p>
+  </details>
+</div>
+        """
+    )
+    _qa_block_concurrency
+    return (_qa_block_concurrency,)
 
 
 @app.cell
@@ -824,6 +1242,80 @@ def _(
 
 
 @app.cell
+def _(json, mo, pickle):
+    _safe_obj = {"coords": (3, 4), "active": True, "count": 7}
+    _unsafe_obj = {"tags": {"blue", "green"}}
+
+    _json_roundtrip = json.loads(json.dumps(_safe_obj))
+    _pickle_roundtrip = pickle.loads(pickle.dumps(_safe_obj))
+
+    _rows = [
+        {
+            "case": "Tuple in JSON",
+            "original_type": type(_safe_obj["coords"]).__name__,
+            "after_roundtrip": type(_json_roundtrip["coords"]).__name__,
+            "note": "tuple becomes list (type loss)",
+        },
+        {
+            "case": "Tuple in Pickle",
+            "original_type": type(_safe_obj["coords"]).__name__,
+            "after_roundtrip": type(_pickle_roundtrip["coords"]).__name__,
+            "note": "tuple preserved",
+        },
+    ]
+
+    try:
+        json.dumps(_unsafe_obj)
+        _error_note = "no error"
+    except TypeError as exc:
+        _error_note = f"TypeError: {exc}"
+
+    _rows.append(
+        {
+            "case": "Set in JSON",
+            "original_type": type(_unsafe_obj["tags"]).__name__,
+            "after_roundtrip": "n/a",
+            "note": _error_note,
+        }
+    )
+
+    _table = mo.ui.table(_rows, label="Type fidelity: JSON vs Pickle")
+    _note = mo.md(
+        "JSON is interoperable but can lose types; Pickle preserves Python types but is unsafe for untrusted data."
+    ).callout(kind="info")
+
+    _panel = mo.vstack([_table, _note], gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
+def _(mo):
+    _qa_block_serialization = mo.md(
+        """
+<div class="section-card">
+  <h3>Discussion Prompt — Serialization Choices</h3>
+  <details>
+    <summary><strong>Q1:</strong> How do you choose between JSON, Avro, and Parquet for a new system?</summary>
+    <p><strong>Answer:</strong> Start with the workload. JSON for interoperability, Avro for schema‑evolving events,
+    Parquet for analytics and columnar scans.</p>
+  </details>
+  <details>
+    <summary><strong>Q2:</strong> What is your threat model for serialized data?</summary>
+    <p><strong>Answer:</strong> If data crosses trust boundaries, avoid unsafe formats like Pickle and validate strictly.</p>
+  </details>
+  <details>
+    <summary><strong>Q3:</strong> Where would you measure size vs. speed trade‑offs in production?</summary>
+    <p><strong>Answer:</strong> Instrument write/read latency and storage costs; compare before/after in a canary pipeline.</p>
+  </details>
+</div>
+        """
+    )
+    _qa_block_serialization
+    return (_qa_block_serialization,)
+
+
+@app.cell
 def _(mo):
     _section = mo.md("## 3. Column-Based vs Row-Based Storage")
     _section
@@ -935,6 +1427,31 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
 
     _output
     return (_output,)
+
+
+@app.cell
+def _(mo):
+    _qa_block_storage = mo.md(
+        """
+<div class="section-card">
+  <h3>Discussion Prompt — Row vs Column Storage</h3>
+  <details>
+    <summary><strong>Q1:</strong> Which workload patterns make a row store the better choice?</summary>
+    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions with full‑row access.</p>
+  </details>
+  <details>
+    <summary><strong>Q2:</strong> How does projection pushdown change query cost?</summary>
+    <p><strong>Answer:</strong> Reading only required columns reduces I/O, especially when each column compresses well.</p>
+  </details>
+  <details>
+    <summary><strong>Q3:</strong> When can compression hurt performance?</summary>
+    <p><strong>Answer:</strong> For small datasets or CPU‑bound workloads, decompression overhead can dominate.</p>
+  </details>
+</div>
+        """
+    )
+    _qa_block_storage
+    return (_qa_block_storage,)
 
 
 @app.cell
@@ -1092,6 +1609,48 @@ def _(
 
 
 @app.cell
+def _(math, mo, random):
+    _rng = random.Random(7)
+    _categories = ["A", "B", "C", "D", "E"]
+    _samples = [_rng.choice(_categories) for _ in range(2000)]
+    _unique = len(set(_samples))
+    _code_bits = max(1, math.ceil(math.log2(_unique)))
+    _avg_len = 1
+    _original_bytes = len(_samples) * _avg_len
+    _dictionary_bytes = _unique * _avg_len
+    _encoded_bytes = len(_samples) * (_code_bits / 8)
+    _estimated_ratio = (_dictionary_bytes + _encoded_bytes) / _original_bytes
+
+    _rows = [
+        {
+            "metric": "rows",
+            "value": len(_samples),
+        },
+        {
+            "metric": "unique values",
+            "value": _unique,
+        },
+        {
+            "metric": "code bits",
+            "value": _code_bits,
+        },
+        {
+            "metric": "estimated ratio",
+            "value": f"{_estimated_ratio:.2f}x",
+        },
+    ]
+
+    _table = mo.ui.table(_rows, label="Dictionary encoding intuition")
+    _note = mo.md(
+        "Fewer unique values → fewer bits per row → better compression (especially in columnar formats)."
+    ).callout(kind="info")
+
+    _panel = mo.vstack([_table, _note], gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
 def _(mo):
     _section = mo.md("## 5. DuckDB Example (SQL on Files)")
     _section
@@ -1122,9 +1681,26 @@ The demo below runs a GROUP BY directly on a CSV file to show the experience.
 
 @app.cell
 def _(mo):
+    duck_rows = mo.ui.slider(2_000, 50_000, step=2_000, value=12_000, label="Rows")
+    duck_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Amount threshold")
+    duck_storage = mo.ui.dropdown(
+        options=["CSV scan", "CSV + DuckDB table", "Parquet + DuckDB table"],
+        value="CSV + DuckDB table",
+        label="Storage path",
+    )
     run_duck = mo.ui.button(label="Re-run DuckDB demo", value=1, kind="success")
-    run_duck
-    return (run_duck,)
+
+    _controls = mo.vstack(
+        [
+            mo.hstack([duck_rows, duck_threshold], widths="equal"),
+            duck_storage,
+            run_duck,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return duck_rows, duck_storage, duck_threshold, run_duck
 
 
 @app.cell
@@ -1134,6 +1710,9 @@ def _(
     mo,
     optional_import,
     random,
+    duck_rows,
+    duck_storage,
+    duck_threshold,
     run_duck,
     tempfile,
     time,
@@ -1143,51 +1722,536 @@ def _(
             kind="neutral"
         )
     else:
-        duckdb = optional_import("duckdb")
-        if not duckdb:
+        _duckdb = optional_import("duckdb")
+        if not _duckdb:
             _output = mo.md(
                 "DuckDB is not installed. Install with `pip install duckdb` to run this demo."
             ).callout(kind="warn")
         else:
-            rng = random.Random(33 + run_duck.value)
-            _records = [
-                {
-                    "region": rng.choice(["EU", "US", "APAC"]),
-                    "amount": rng.random() * 1000,
-                }
-                for _ in range(2000)
-            ]
+            _rng = random.Random(33 + run_duck.value)
+            _records = []
+            for _idx in range(duck_rows.value):
+                _records.append(
+                    {
+                        "order_id": _idx,
+                        "region": _rng.choice(["EU", "US", "APAC"]),
+                        "segment": _rng.choice(["consumer", "enterprise", "startup"]),
+                        "amount": round(_rng.random() * 1000, 2),
+                        "day": _rng.randint(1, 30),
+                    }
+                )
+
+            _pyarrow = optional_import("pyarrow")
+            _parquet = optional_import("pyarrow.parquet")
 
             with tempfile.TemporaryDirectory() as _tmpdir:
                 _tmpdir = Path(_tmpdir)
                 _csv_path = _tmpdir / "orders.csv"
                 with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                    _writer = csv.DictWriter(_f, fieldnames=["region", "amount"])
+                    _writer = csv.DictWriter(
+                        _f, fieldnames=["order_id", "region", "segment", "amount", "day"]
+                    )
                     _writer.writeheader()
                     _writer.writerows(_records)
 
-                con = duckdb.connect()
-                start = time.perf_counter()
-                result = con.execute(
-                    "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount "
-                    f"FROM read_csv_auto('{_csv_path}') GROUP BY region ORDER BY region"
-                ).fetchall()
-                _duration = time.perf_counter() - start
-                con.close()
+                _parquet_path = None
+                if _pyarrow and _parquet:
+                    _parquet_path = _tmpdir / "orders.parquet"
+                    _table = _pyarrow.Table.from_pylist(_records)
+                    _parquet.write_table(_table, _parquet_path)
 
-            duck_rows = [
-                {"region": row[0], "orders": row[1], "avg_amount": round(row[2], 2)}
-                for row in result
+                _db_path = _tmpdir / "analytics.duckdb"
+                _con = _duckdb.connect(str(_db_path))
+
+                _ingest_time = None
+                if duck_storage.value != "CSV scan":
+                    _ingest_start = time.perf_counter()
+                    if duck_storage.value.startswith("Parquet") and _parquet_path:
+                        _con.execute(
+                            f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')"
+                        )
+                    else:
+                        _con.execute(
+                            f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')"
+                        )
+                    _ingest_time = time.perf_counter() - _ingest_start
+
+                _threshold = duck_threshold.value
+                _query = (
+                    "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount "
+                    f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
+                )
+
+                _timings = []
+                _result_rows = None
+
+                # 1) CSV scan
+                _start = time.perf_counter()
+                _csv_result = _con.execute(
+                    _query.format(source=f"read_csv_auto('{_csv_path}')")
+                ).fetchall()
+                _timings.append(
+                    {
+                        "source": "CSV scan",
+                        "query_ms": round((time.perf_counter() - _start) * 1000, 2),
+                    }
+                )
+
+                # 2) Parquet scan (optional)
+                if _parquet_path:
+                    _start = time.perf_counter()
+                    _pq_result = _con.execute(
+                        _query.format(source=f"read_parquet('{_parquet_path}')")
+                    ).fetchall()
+                    _timings.append(
+                        {
+                            "source": "Parquet scan",
+                            "query_ms": round((time.perf_counter() - _start) * 1000, 2),
+                        }
+                    )
+
+                # 3) DuckDB table query
+                if duck_storage.value != "CSV scan":
+                    _start = time.perf_counter()
+                    _tbl_result = _con.execute(
+                        _query.format(source="orders")
+                    ).fetchall()
+                    _timings.append(
+                        {
+                            "source": "DuckDB table",
+                            "query_ms": round((time.perf_counter() - _start) * 1000, 2),
+                        }
+                    )
+                    _result_rows = _tbl_result
+                else:
+                    _result_rows = _csv_result
+
+                _con.close()
+
+                _sizes = [
+                    {"file": "orders.csv", "size": format_bytes(_csv_path.stat().st_size)},
+                    {
+                        "file": "orders.parquet",
+                        "size": format_bytes(_parquet_path.stat().st_size)
+                        if _parquet_path
+                        else "n/a",
+                    },
+                    {"file": "analytics.duckdb", "size": format_bytes(_db_path.stat().st_size)},
+                ]
+
+            _results_table = [
+                {
+                    "region": row[0],
+                    "orders": row[1],
+                    "avg_amount": round(row[2], 2),
+                }
+                for row in (_result_rows or [])
             ]
-            _table = mo.ui.table(duck_rows, label="DuckDB query results")
-            _note = mo.md(
-                f"Query runtime: **{format_ms(_duration)}** (file scanned + SQL)."
+
+            _sizes_table = mo.ui.table(_sizes, label="File sizes")
+            _timing_table = mo.ui.table(_timings, label="Query timing (ms)")
+            _results_panel = mo.ui.table(_results_table, label="Query results")
+
+            _notes = []
+            if _ingest_time is not None:
+                _notes.append(
+                    mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**")
+                )
+            _notes.append(
+                mo.md(
+                    "DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans."
+                ).callout(kind="info")
             )
 
-            _output = mo.vstack([_table, _note], gap=0.6)
+            _output = mo.vstack(
+                [_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6
+            )
 
     _output
     return (_output,)
+
+
+@app.cell
+def _(mo):
+    _index_intro = mo.md(
+        """
+### Indexing Demo: Full Scan vs Indexed Search
+
+Databases accelerate selective queries with **indexes**. Here we compare:
+
+- **Full table scan** (no index)
+- **Indexed lookup** (index on `category` + `value`)
+
+We also show the query plan to make the optimization explicit.
+        """
+    ).callout(kind="neutral")
+    _index_intro
+    return (_index_intro,)
+
+
+@app.cell
+def _(mo):
+    idx_rows = mo.ui.slider(20_000, 200_000, step=20_000, value=80_000, label="Rows")
+    idx_selectivity = mo.ui.slider(0.05, 0.9, step=0.05, value=0.2, label="Share of category = 'C'")
+    idx_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Value threshold")
+    idx_seed = mo.ui.slider(1, 999, value=17, label="Seed")
+    run_index = mo.ui.button(label="Re-run indexing demo", value=1, kind="success")
+
+    _controls = mo.vstack(
+        [
+            mo.hstack([idx_rows, idx_selectivity], widths="equal"),
+            mo.hstack([idx_threshold, idx_seed], widths="equal"),
+            run_index,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return idx_rows, idx_seed, idx_selectivity, idx_threshold, run_index
+
+
+@app.cell
+def _(
+    idx_rows,
+    idx_seed,
+    idx_selectivity,
+    idx_threshold,
+    mo,
+    random,
+    run_index,
+    sqlite3,
+    tempfile,
+    time,
+):
+    if run_index.value == 0:
+        _output = mo.md("Click **Re-run indexing demo** to execute.").callout(
+            kind="neutral"
+        )
+    else:
+        _rng = random.Random(idx_seed.value)
+        _rows = []
+        for _i in range(idx_rows.value):
+            _rows.append(
+                (
+                    _i,
+                    "C" if _rng.random() < idx_selectivity.value else _rng.choice(["A", "B", "D"]),
+                    round(_rng.random() * 1000, 2),
+                )
+            )
+
+        with tempfile.TemporaryDirectory() as _tmpdir:
+            _db_path = str(Path(_tmpdir) / "indexing.db")
+            _con = sqlite3.connect(_db_path)
+            _con.execute("CREATE TABLE events (id INTEGER, category TEXT, value REAL)")
+            _con.executemany("INSERT INTO events VALUES (?, ?, ?)", _rows)
+            _con.commit()
+
+            _query = (
+                "SELECT COUNT(*), AVG(value) FROM events "
+                f"WHERE category = 'C' AND value > {idx_threshold.value}"
+            )
+
+            _plan_scan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
+            _start = time.perf_counter()
+            _scan_result = _con.execute(_query).fetchone()
+            _scan_time = time.perf_counter() - _start
+
+            _con.execute("CREATE INDEX idx_cat_val ON events(category, value)")
+            _plan_idx = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
+            _start = time.perf_counter()
+            _idx_result = _con.execute(_query).fetchone()
+            _idx_time = time.perf_counter() - _start
+            _con.close()
+
+        _timing_table = mo.ui.table(
+            [
+                {"mode": "full scan", "query_ms": f"{_scan_time*1000:.2f}"},
+                {"mode": "indexed", "query_ms": f"{_idx_time*1000:.2f}"},
+                {
+                    "mode": "speedup",
+                    "query_ms": f"{(_scan_time / _idx_time):.2f}x" if _idx_time else "n/a",
+                },
+            ],
+            label="Query timings",
+        )
+
+        _plan_table = mo.ui.table(
+            [
+                {"plan": "scan", "detail": str(_plan_scan[0])},
+                {"plan": "index", "detail": str(_plan_idx[0])},
+            ],
+            label="Query plan (SQLite)",
+        )
+
+        _result_table = mo.ui.table(
+            [
+                {"metric": "count", "scan": _scan_result[0], "index": _idx_result[0]},
+                {
+                    "metric": "avg(value)",
+                    "scan": round(_scan_result[1] or 0, 2),
+                    "index": round(_idx_result[1] or 0, 2),
+                },
+            ],
+            label="Query results",
+        )
+
+        _note = mo.md(
+            "Look for the plan to switch from **SCAN** to **SEARCH** when the index is present."
+        ).callout(kind="info")
+
+        _output = mo.vstack(
+            [_timing_table, _plan_table, _result_table, _note],
+            gap=0.6,
+        )
+
+    _output
+    return (_output,)
+
+
+@app.cell
+def _(mo):
+    _schema_section = mo.md("### Schema-on-Read vs Schema-on-Write (DuckDB)")
+    _schema_section
+    return (_schema_section,)
+
+
+@app.cell
+def _(mo):
+    _schema_expl = mo.md(
+        """
+DuckDB can **infer** types when reading files (schema‑on‑read), or you can **enforce** types
+when loading data (schema‑on‑write). With messy data, these choices change:
+
+- the inferred column types  
+- how many values become `NULL`  
+- whether errors are surfaced early
+
+Example of a messy column:
+
+```
+amount
+120.5
+N/A
+87.0
+```
+
+**Watch for:** the inferred type of `amount`, how many values become `NULL` after casting,
+and whether numeric aggregates require explicit casts.
+        """
+    ).callout(kind="neutral")
+    _schema_expl
+    return (_schema_expl,)
+
+
+@app.cell
+def _(mo):
+    schema_rows = mo.ui.slider(500, 8000, step=500, value=3000, label="Rows")
+    schema_dirty = mo.ui.slider(0.0, 0.6, step=0.05, value=0.2, label="Dirty rate")
+    schema_seed = mo.ui.slider(1, 999, value=29, label="Seed")
+    run_schema = mo.ui.button(label="Re-run schema demo", value=1, kind="success")
+
+    _controls = mo.vstack(
+        [
+            mo.hstack([schema_rows, schema_dirty], widths="equal"),
+            mo.hstack([schema_seed, run_schema], widths="equal"),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return run_schema, schema_dirty, schema_rows, schema_seed
+
+
+@app.cell
+def _(
+    csv,
+    mo,
+    optional_import,
+    random,
+    run_schema,
+    schema_dirty,
+    schema_rows,
+    schema_seed,
+    tempfile,
+):
+    if run_schema.value == 0:
+        _output = mo.md("Click **Re-run schema demo** to execute.").callout(
+            kind="neutral"
+        )
+    else:
+        _duckdb = optional_import("duckdb")
+        if not _duckdb:
+            _output = mo.md(
+                "DuckDB is not installed. Install with `pip install duckdb` to run this demo."
+            ).callout(kind="warn")
+        else:
+            _rng = random.Random(schema_seed.value)
+            _rows = []
+            _dirty_count = 0
+            for idx in range(schema_rows.value):
+                amount = round(_rng.random() * 1000, 2)
+                if schema_dirty.value > 0 and idx == 0:
+                    amount = "N/A"
+                elif _rng.random() < schema_dirty.value:
+                    amount = _rng.choice(["N/A", "", "oops"])
+                if isinstance(amount, str):
+                    _dirty_count += 1
+                _rows.append(
+                    {
+                        "id": idx,
+                        "category": _rng.choice(["A", "B", "C"]),
+                        "amount": amount,
+                        "day": _rng.randint(1, 30),
+                    }
+                )
+
+            with tempfile.TemporaryDirectory() as _tmpdir:
+                _tmpdir = Path(_tmpdir)
+                _csv_path = _tmpdir / "dirty.csv"
+                with _csv_path.open("w", newline="", encoding="utf-8") as _f:
+                    _writer = csv.DictWriter(
+                        _f, fieldnames=["id", "category", "amount", "day"]
+                    )
+                    _writer.writeheader()
+                    _writer.writerows(_rows)
+
+                _con = _duckdb.connect()
+                _inferred = _con.execute(
+                    f"DESCRIBE SELECT * FROM read_csv_auto('{_csv_path}')"
+                ).fetchall()
+                _explicit = _con.execute(
+                    "DESCRIBE SELECT "
+                    "CAST(id AS INTEGER) AS id, "
+                    "CAST(category AS VARCHAR) AS category, "
+                    "TRY_CAST(amount AS DOUBLE) AS amount, "
+                    "CAST(day AS INTEGER) AS day "
+                    f"FROM read_csv_auto('{_csv_path}', all_varchar=true)"
+                ).fetchall()
+
+                _inferred_bad = _con.execute(
+                    "SELECT SUM(TRY_CAST(amount AS DOUBLE) IS NULL AND amount IS NOT NULL) "
+                    f"FROM read_csv_auto('{_csv_path}')"
+                ).fetchone()[0]
+                _num_avg = _con.execute(
+                    f"SELECT AVG(TRY_CAST(amount AS DOUBLE)) FROM read_csv_auto('{_csv_path}')"
+                ).fetchone()[0]
+                _lex_min = _con.execute(
+                    f"SELECT MIN(amount) FROM read_csv_auto('{_csv_path}')"
+                ).fetchone()[0]
+                _explicit_nulls = _con.execute(
+                    "SELECT SUM(amount IS NULL) FROM ("
+                    "SELECT TRY_CAST(amount AS DOUBLE) AS amount "
+                    f"FROM read_csv_auto('{_csv_path}', all_varchar=true)"
+                    ")"
+                ).fetchone()[0]
+                _con.close()
+
+            _inferred_amount_type = next(
+                (row[1] for row in _inferred if row[0] == "amount"), "unknown"
+            )
+            _dirty_pct = (_dirty_count / schema_rows.value * 100) if schema_rows.value else 0
+
+            _dirty_rows = [row for row in _rows if isinstance(row["amount"], str)]
+            _sample_source = _dirty_rows if _dirty_rows else _rows
+            _sample_rows = [
+                {
+                    "id": row["id"],
+                    "category": row["category"],
+                    "amount": row["amount"],
+                    "dirty": isinstance(row["amount"], str),
+                    "day": row["day"],
+                }
+                for row in _sample_source[:6]
+            ]
+
+            _sample_table = mo.ui.table(
+                _sample_rows, label="Sample rows (dirty values highlighted)"
+            )
+
+            _inferred_table = mo.ui.table(
+                [
+                    {"column": row[0], "inferred_type": row[1]}
+                    for row in _inferred
+                ],
+                label="Schema-on-read (inferred types)",
+            )
+            _explicit_table = mo.ui.table(
+                [
+                    {"column": row[0], "explicit_type": row[1]}
+                    for row in _explicit
+                ],
+                label="Schema-on-write (explicit types)",
+            )
+            _quality_table = mo.ui.table(
+                [
+                    {"metric": "non-numeric amount (inferred)", "value": _inferred_bad},
+                    {"metric": "NULLs after explicit cast", "value": _explicit_nulls},
+                ],
+                label="Data quality impact",
+            )
+
+            _metrics_table = mo.ui.table(
+                [
+                    {"metric": "rows", "value": schema_rows.value},
+                    {"metric": "dirty rows", "value": _dirty_count},
+                    {"metric": "dirty rate", "value": f"{_dirty_pct:.1f}%"},
+                    {"metric": "amount inferred type", "value": _inferred_amount_type},
+                    {
+                        "metric": "avg(amount) via TRY_CAST",
+                        "value": f"{_num_avg:.2f}" if _num_avg is not None else "n/a",
+                    },
+                    {"metric": "lexicographic MIN(amount)", "value": str(_lex_min)},
+                ],
+                label="Why schema choice matters",
+            )
+
+            _note = mo.md(
+                """
+**What to notice:** when `amount` is inferred as `VARCHAR`, numeric calculations require `TRY_CAST`.
+Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
+                """
+            ).callout(kind="info")
+
+            _output = mo.vstack(
+                [
+                    _sample_table,
+                    _metrics_table,
+                    _inferred_table,
+                    _explicit_table,
+                    _quality_table,
+                    _note,
+                ],
+                gap=0.6,
+            )
+
+    _output
+    return (_output,)
+
+
+@app.cell
+def _(mo):
+    _qa_block_duckdb = mo.md(
+        """
+<div class="section-card">
+  <h3>Discussion Prompt — DuckDB & Schema</h3>
+  <details>
+    <summary><strong>Q1:</strong> When would you materialize data into DuckDB instead of scanning raw files?</summary>
+    <p><strong>Answer:</strong> When repeated queries or joins are common, materialization amortizes parsing and
+    enables columnar optimizations.</p>
+  </details>
+  <details>
+    <summary><strong>Q2:</strong> What risks do you accept with schema‑on‑read?</summary>
+    <p><strong>Answer:</strong> Flexibility is high, but validation is deferred; silent `NULL`s can distort aggregates.</p>
+  </details>
+  <details>
+    <summary><strong>Q3:</strong> How would you detect data drift in a schema‑on‑read pipeline?</summary>
+    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions over time; alert on changes.</p>
+  </details>
+</div>
+        """
+    )
+    _qa_block_duckdb
+    return (_qa_block_duckdb,)
 
 
 @app.cell
@@ -1236,24 +2300,42 @@ def _(mo):
     payload = mo.ui.text_area(
         value='{"message": "hello"}', label="JSON payload (for POST/PUT)"
     )
-    send = mo.ui.button(label="Send request", value=0, kind="success")
+    use_live_http = mo.ui.switch(
+        value=False, label="Use live HTTP (requires internet)"
+    )
+    mock_latency = mo.ui.slider(0, 1500, step=100, value=200, label="Mock latency (ms)")
+    send = mo.ui.button(label="Send request", value=1, kind="success")
 
     _controls = mo.vstack(
         [
             mo.hstack([method, base_url], widths="equal"),
             path,
             payload,
+            mo.hstack([use_live_http, mock_latency], widths="equal"),
             send,
         ],
         gap=0.6,
     ).callout(kind="neutral")
 
     _controls
-    return base_url, method, path, payload, send
+    return base_url, method, mock_latency, path, payload, send, use_live_http
 
 
 @app.cell
-def _(base_url, json, method, mo, path, payload, send, url_error, url_request):
+def _(
+    base_url,
+    json,
+    method,
+    mock_latency,
+    mo,
+    path,
+    payload,
+    send,
+    time,
+    url_error,
+    url_request,
+    use_live_http,
+):
     if send.value == 0:
         _output = mo.md("Click **Send request** to call the API.").callout(
             kind="neutral"
@@ -1278,29 +2360,92 @@ def _(base_url, json, method, mo, path, payload, send, url_error, url_request):
                     f"Invalid JSON payload: `{exc}`"
                 ).callout(kind="danger")
 
+        def _simulate_response():
+            if mock_latency.value:
+                time.sleep(mock_latency.value / 1000)
+
+            payload_obj = None
+            if payload.value.strip():
+                try:
+                    payload_obj = json.loads(payload.value)
+                except json.JSONDecodeError:
+                    payload_obj = {"raw": payload.value}
+
+            _now = time.strftime("%Y-%m-%d %H:%M:%S")
+            if method.value == "GET":
+                status = 200
+                body = {
+                    "source": "simulated",
+                    "resource": path.value,
+                    "timestamp": _now,
+                    "items": [
+                        {"id": 1, "name": "alpha"},
+                        {"id": 2, "name": "beta"},
+                    ],
+                }
+            elif method.value == "POST":
+                status = 201
+                body = {
+                    "source": "simulated",
+                    "created": True,
+                    "resource": path.value,
+                    "payload": payload_obj,
+                    "id": 100 + send.value,
+                    "timestamp": _now,
+                }
+            elif method.value == "PUT":
+                status = 200
+                body = {
+                    "source": "simulated",
+                    "updated": True,
+                    "resource": path.value,
+                    "payload": payload_obj,
+                    "timestamp": _now,
+                }
+            else:
+                status = 204
+                body = None
+            return status, body
+
         if _response_panel is None:
             req = url_request.Request(
                 url, data=data_bytes, headers=headers, method=method.value
             )
 
-            try:
-                with url_request.urlopen(req, timeout=10) as _response:
-                    body = _response.read().decode("utf-8", errors="replace")
-                    status = _response.status
-            except Exception as exc:
-                _response_panel = mo.md(f"Request failed: `{exc}`").callout(
-                    kind="danger"
-                )
-            else:
+            if use_live_http.value:
                 try:
-                    parsed = json.loads(body)
-                    preview = json.dumps(parsed, indent=2)[:1200]
-                except json.JSONDecodeError:
-                    preview = body[:1200]
+                    with url_request.urlopen(req, timeout=10) as _response:
+                        body = _response.read().decode("utf-8", errors="replace")
+                        status = _response.status
+                except Exception as exc:
+                    _response_panel = mo.md(f"Request failed: `{exc}`").callout(
+                        kind="danger"
+                    )
+                else:
+                    try:
+                        parsed = json.loads(body)
+                        preview = json.dumps(parsed, indent=2)[:1200]
+                    except json.JSONDecodeError:
+                        preview = body[:1200]
 
+                    _response_panel = mo.md(
+                        f"""
+**Status:** `{status}` · **Source:** `live`
+
+```json
+{preview}
+```
+        """
+                    )
+            else:
+                status, body = _simulate_response()
+                if body is None:
+                    preview = ""
+                else:
+                    preview = json.dumps(body, indent=2)[:1200]
                 _response_panel = mo.md(
                     f"""
-**Status:** `{status}`
+**Status:** `{status}` · **Source:** `simulated`
 
 ```json
 {preview}
@@ -1312,6 +2457,32 @@ def _(base_url, json, method, mo, path, payload, send, url_error, url_request):
 
     _output
     return (_output,)
+
+
+@app.cell
+def _(mo):
+    _qa_block_api = mo.md(
+        """
+<div class="section-card">
+  <h3>Discussion Prompt — APIs & Validation</h3>
+  <details>
+    <summary><strong>Q1:</strong> When is a POST request idempotent, and why does it matter?</summary>
+    <p><strong>Answer:</strong> It’s idempotent if repeated calls yield the same result (e.g., client‑supplied IDs).
+    This matters for retries and reliability.</p>
+  </details>
+  <details>
+    <summary><strong>Q2:</strong> Where should validation happen: client, server, or both?</summary>
+    <p><strong>Answer:</strong> Both. Clients can provide fast feedback, but servers must enforce rules to protect data.</p>
+  </details>
+  <details>
+    <summary><strong>Q3:</strong> How would you evolve an API without breaking clients?</summary>
+    <p><strong>Answer:</strong> Version endpoints, keep backward compatibility, and deprecate gradually with clear docs.</p>
+  </details>
+</div>
+        """
+    )
+    _qa_block_api
+    return (_qa_block_api,)
 
 
 @app.cell
@@ -1556,10 +2727,10 @@ def _(mo):
 def _(mo):
     framework_rows = [
         {
-            "framework": "Streamlit",
-            "strengths": "Fast Python dashboards, minimal boilerplate",
-            "tradeoffs": "Limited UI control, app-style only",
-            "use_case": "Data apps, internal tools",
+            "framework": "Marimo",
+            "strengths": "Reactive notebooks, tight data + UI loop",
+            "tradeoffs": "Notebook-first; less suited to huge web apps",
+            "use_case": "Interactive labs, teaching, analysis apps",
         },
         {
             "framework": "Dash",
@@ -1603,7 +2774,7 @@ $$
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 10. Streamlit In-Depth (Tiny App)")
+    _section = mo.md("## 10. Marimo Charts Lab")
     _section
     return (_section,)
 
@@ -1612,20 +2783,10 @@ def _(mo):
 def _(mo):
     _explanation = mo.md(
         """
-### Streamlit in 15 Lines
+### Marimo Charts Lab
 
-Streamlit turns a Python script into a web app. Below is a minimal app that:
-
-- loads data  
-- lets a user filter  
-- renders a chart  
-- uses caching  
-
-App logic is just Python, but the UI is reactive:
-
-$$
-\\text{UI state} \\rightarrow \\text{recompute} \\rightarrow \\text{render}
-$$
+Use the controls below to generate a dataset and explore it with **scatter**, **line + optional regression**, and **box** plots.  
+We also compute summary statistics to make the patterns quantitative.
         """
     ).callout(kind="neutral")
     _explanation
@@ -1634,77 +2795,186 @@ $$
 
 @app.cell
 def _(mo):
-    streamlit_code = """import streamlit as st
-import pandas as pd
-import numpy as np
+    chart_rows = mo.ui.slider(200, 4000, step=200, value=1200, label="Rows")
+    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed")
+    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="Trend slope")
+    chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level")
+    chart_regression = mo.ui.switch(value=True, label="Show regression line")
 
-st.set_page_config(page_title="Tiny Streamlit App", layout="wide")
+    _controls = mo.vstack(
+        [
+            mo.hstack([chart_rows, chart_seed], widths="equal"),
+            mo.hstack([chart_slope, chart_noise], widths="equal"),
+            chart_regression,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
 
-st.title("Tiny Streamlit App")
-st.caption("A minimal interactive dashboard")
+    _controls
+    return chart_noise, chart_regression, chart_rows, chart_seed, chart_slope
 
-@st.cache_data
-def make_data(rows=500):
-    rng = np.random.default_rng(42)
-    return pd.DataFrame({
-        "x": rng.normal(size=rows).cumsum(),
-        "y": rng.normal(size=rows).cumsum(),
-        "category": rng.choice(["A", "B", "C"], size=rows),
-    })
 
-rows = st.slider("Rows", 100, 2000, 500, 100)
-category = st.selectbox("Category", ["All", "A", "B", "C"])
+@app.cell
+def _(
+    chart_noise,
+    chart_regression,
+    chart_rows,
+    chart_seed,
+    chart_slope,
+    mo,
+    optional_import,
+    random,
+    statistics,
+):
+    _rng = random.Random(chart_seed.value)
+    _rows = []
+    for _idx in range(chart_rows.value):
+        _x = _rng.gauss(0, 1)
+        _y = chart_slope.value * _x + _rng.gauss(0, chart_noise.value)
+        _rows.append(
+            {
+                "idx": _idx,
+                "x": _x,
+                "y": _y,
+                "category": _rng.choice(["A", "B", "C", "D"]),
+            }
+        )
 
-df = make_data(rows)
-if category != "All":
-    df = df[df["category"] == category]
+    def _stats(values):
+        return {
+            "mean": statistics.mean(values),
+            "median": statistics.median(values),
+            "std": statistics.pstdev(values),
+            "min": min(values),
+            "max": max(values),
+        }
 
-st.line_chart(df[["x", "y"]])
-st.dataframe(df.head(10))
-"""
-
-    code_block = mo.md(
-        f"""
-```python
-{streamlit_code}
-```
-        """
+    _x_vals = [row["x"] for row in _rows]
+    _y_vals = [row["y"] for row in _rows]
+    _stats_x = _stats(_x_vals)
+    _stats_y = _stats(_y_vals)
+    _stats_table = mo.ui.table(
+        [
+            {"metric": k, "x": f"{_stats_x[k]:.3f}", "y": f"{_stats_y[k]:.3f}"}
+            for k in _stats_x.keys()
+        ],
+        label="Summary statistics",
     )
-    _run_note = mo.md(
-        """
-Run it locally:
 
-```bash
-streamlit run streamlit_app.py
-```
-        """
-    ).callout(kind="info")
+    _pd = optional_import("pandas")
+    _alt = optional_import("altair")
+    if _pd and _alt:
+        _df = _pd.DataFrame(_rows)
 
-    _panel = mo.vstack([code_block, _run_note], gap=0.6)
-    _panel
-    return _panel, streamlit_code
+        def _linear_regression(xs, ys):
+            if len(xs) < 2:
+                return None
+            _mean_x = statistics.mean(xs)
+            _mean_y = statistics.mean(ys)
+            _var_x = sum((x - _mean_x) ** 2 for x in xs)
+            if _var_x == 0:
+                return None
+            _cov = sum((x - _mean_x) * (y - _mean_y) for x, y in zip(xs, ys))
+            _slope = _cov / _var_x
+            _intercept = _mean_y - _slope * _mean_x
+            return _slope, _intercept
 
+        _scatter = _alt.Chart(_df).mark_circle(size=60, opacity=0.6).encode(
+            x=_alt.X("x:Q"),
+            y=_alt.Y("y:Q"),
+            color=_alt.Color("category:N"),
+            tooltip=[
+                _alt.Tooltip("x:Q"),
+                _alt.Tooltip("y:Q"),
+                _alt.Tooltip("category:N"),
+            ],
+        )
+        _scatter_layers = _scatter
+        if chart_regression.value:
+            _lr = _linear_regression(_x_vals, _y_vals)
+            if _lr:
+                _slope, _intercept = _lr
+                _x_min = min(_x_vals)
+                _x_max = max(_x_vals)
+                _reg_df = _pd.DataFrame(
+                    {
+                        "x": [_x_min, _x_max],
+                        "y": [_slope * _x_min + _intercept, _slope * _x_max + _intercept],
+                    }
+                )
+                _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(
+                    x=_alt.X("x:Q"), y=_alt.Y("y:Q")
+                )
+                _scatter_layers = _scatter + _reg_line
+        _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=260))
 
-@app.cell
-def _(mo):
-    write_app = mo.ui.button(label="Create streamlit_app.py", value=0, kind="success")
-    write_app
-    return (write_app,)
+        _line = (
+            _alt.Chart(_df)
+            .mark_line(opacity=0.6)
+            .encode(
+                x=_alt.X("idx:Q"),
+                y=_alt.Y("y:Q"),
+                color=_alt.Color("category:N"),
+                tooltip=[
+                    _alt.Tooltip("idx:Q"),
+                    _alt.Tooltip("y:Q"),
+                    _alt.Tooltip("category:N"),
+                ],
+            )
+            .properties(height=260)
+        )
+        _line_layers = _line
+        if chart_regression.value:
+            _lr_idx = _linear_regression([row["idx"] for row in _rows], _y_vals)
+            if _lr_idx:
+                _slope, _intercept = _lr_idx
+                _i_min = min(row["idx"] for row in _rows)
+                _i_max = max(row["idx"] for row in _rows)
+                _line_df = _pd.DataFrame(
+                    {
+                        "idx": [_i_min, _i_max],
+                        "y": [_slope * _i_min + _intercept, _slope * _i_max + _intercept],
+                    }
+                )
+                _line_reg = _alt.Chart(_line_df).mark_line(color="#0f766e").encode(
+                    x=_alt.X("idx:Q"), y=_alt.Y("y:Q")
+                )
+                _line_layers = _line + _line_reg
+        _line_chart = mo.ui.altair_chart(_line_layers)
 
+        _box = (
+            _alt.Chart(_df)
+            .mark_boxplot()
+            .encode(
+                x=_alt.X("category:N"),
+                y=_alt.Y("y:Q"),
+                color=_alt.Color("category:N"),
+            )
+            .properties(height=260)
+        )
+        _box_chart = mo.ui.altair_chart(_box)
 
-@app.cell
-def _(Path, mo, streamlit_code, write_app):
-    if write_app.value == 0:
-        _status = mo.md(
-            "Click **Create streamlit_app.py** to write the app file in the repo."
-        ).callout(kind="neutral")
+        _panel = mo.vstack(
+            [
+                _scatter_chart,
+                _line_chart,
+                _box_chart,
+                _stats_table,
+            ],
+            gap=0.8,
+        )
     else:
-        app_path = Path("streamlit_app.py")
-        app_path.write_text(streamlit_code, encoding="utf-8")
-        _status = mo.md(f"Created `{app_path}`.").callout(kind="success")
+        _panel = mo.vstack(
+            [
+                mo.md("Install `pandas` + `altair` to unlock charts.").callout(kind="info"),
+                _stats_table,
+                mo.ui.table(_rows[:10], label="Sample rows"),
+            ],
+            gap=0.6,
+        )
 
-    _status
-    return (_status,)
+    _panel
+    return (_panel,)
 
 
 @app.cell
