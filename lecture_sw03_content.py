@@ -541,6 +541,13 @@ $$
 L = E - A
 $$
 
+Where:
+- $E$: expected final counter value  
+- $W$: number of concurrent workers  
+- $I$: increments per worker  
+- $A$: actual final counter value observed  
+- $L$: lost updates
+
 Databases coordinate concurrency, ensure isolation, and provide crash recovery.
         """
     ).callout(kind="neutral")
@@ -687,7 +694,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                         "expected": expected,
                         "actual": value,
                         "lost updates": expected - value,
-                        "duration": f"{_duration:.3f}s",
+                        "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
 
@@ -705,7 +712,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                         "expected": expected,
                         "actual": value,
                         "lost updates": expected - value,
-                        "duration": f"{_duration:.3f}s",
+                        "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
 
@@ -725,7 +732,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                         "expected": expected,
                         "actual": value,
                         "lost updates": expected - value,
-                        "duration": f"{_duration:.3f}s",
+                        "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
 
@@ -741,7 +748,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                         "expected": expected,
                         "actual": value,
                         "lost updates": expected - value,
-                        "duration": f"{_duration:.3f}s",
+                        "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
 
@@ -875,6 +882,11 @@ A transfer should preserve the total balance:
 $$
 B_{total} = B_{Alice} + B_{Bob}
 $$
+
+Where:
+- $B_{total}$: total money in the system  
+- $B_{Alice}$: Alice's balance  
+- $B_{Bob}$: Bob's balance
 
 Without transactions, a crash between **debit** and **credit** can violate this invariant.
 Databases roll back the partial work, so the total remains consistent.
@@ -1167,6 +1179,24 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _conclusion_concurrency = mo.md(
+        """
+<div class="section-card">
+  <h3>Chapter 1 Conclusion</h3>
+  <ul>
+    <li>Without proper synchronization, file updates lose increments under concurrency.</li>
+    <li>Atomicity + isolation are easier to enforce with database transactions than plain files.</li>
+    <li>Always track invariants (expected vs actual) to detect correctness issues early.</li>
+  </ul>
+</div>
+        """
+    ).callout(kind="success")
+    _conclusion_concurrency
+    return (_conclusion_concurrency,)
+
+
+@app.cell
+def _(mo):
     _transition = mo.md(
         "Next, we shift from **consistency under concurrency** to **how data is represented and moved**: serialization formats and their trade-offs."
     ).callout(kind="neutral")
@@ -1207,6 +1237,11 @@ $$
 \\qquad
 \\text{Latency} = \\text{write time} + \\text{read time}
 $$
+
+Where:
+- $\\text{bytes written}$: serialized output size on disk  
+- $\\text{write time}$: serialization time  
+- $\\text{Latency}$: total round-trip time (write + read)
 
 **Format cheat sheet:**  
 - **JSON/CSV**: human‑readable, row‑oriented  
@@ -1440,11 +1475,11 @@ def _(
             _display_rows.append(
                 {
                     "format": row["format"],
-                    "write": format_ms(row["write_s"]),
-                    "read": format_ms(row["read_s"]),
-                    "latency": format_ms(row["latency_s"]),
-                    "size": format_bytes(row["size_bytes"]),
-                    "write MB/s": f"{row['throughput_mbps']:.2f}",
+                    "write (ms)": round(row["write_s"] * 1000, 3),
+                    "read (ms)": round(row["read_s"] * 1000, 3),
+                    "latency (ms)": round(row["latency_s"] * 1000, 3),
+                    "size (bytes)": row["size_bytes"],
+                    "write (MB/s)": round(row["throughput_mbps"], 3),
                 }
             )
 
@@ -1597,6 +1632,24 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _conclusion_serialization = mo.md(
+        """
+<div class="section-card">
+  <h3>Chapter 2 Conclusion</h3>
+  <ul>
+    <li>Format choice is a trade-off between speed, size, interoperability, and safety.</li>
+    <li>Use benchmarks from your workload to compare latency and storage cost.</li>
+    <li>Pickle preserves Python types but should not be used for untrusted data.</li>
+  </ul>
+</div>
+        """
+    ).callout(kind="success")
+    _conclusion_serialization
+    return (_conclusion_serialization,)
+
+
+@app.cell
+def _(mo):
     _transition = mo.md(
         "With formats in mind, the next question is **layout**: row vs column storage and why columnar layouts power analytics."
     ).callout(kind="neutral")
@@ -1627,6 +1680,11 @@ IO_{row} \\approx N \\times C
 \\qquad
 IO_{col} \\approx N \\times k
 $$
+
+Where:
+- $N$: number of rows  
+- $C$: total columns in the dataset  
+- $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
 
 Below we simulate column selection and filtering to reveal the shape of the speed gap.
 
@@ -1694,18 +1752,18 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
         _results = [
             {
                 "operation": "Select column",
-                "Avro (row-based)": format_ms(row_select_time),
-                "Parquet (column-based)": format_ms(col_select_time),
+                "Avro row (ms)": round(row_select_time * 1000, 3),
+                "Parquet col (ms)": round(col_select_time * 1000, 3),
             },
             {
                 "operation": "Filter column > 0.75",
-                "Avro (row-based)": format_ms(row_filter_time),
-                "Parquet (column-based)": format_ms(col_filter_time),
+                "Avro row (ms)": round(row_filter_time * 1000, 3),
+                "Parquet col (ms)": round(col_filter_time * 1000, 3),
             },
             {
                 "operation": "Sum column",
-                "Avro (row-based)": format_ms(row_sum_time),
-                "Parquet (column-based)": format_ms(col_sum_time),
+                "Avro row (ms)": round(row_sum_time * 1000, 3),
+                "Parquet col (ms)": round(col_sum_time * 1000, 3),
             },
         ]
 
@@ -1750,6 +1808,24 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _conclusion_storage = mo.md(
+        """
+<div class="section-card">
+  <h3>Chapter 3 Conclusion</h3>
+  <ul>
+    <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
+    <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
+    <li>Compression gains depend on whether your bottleneck is disk I/O or CPU.</li>
+  </ul>
+</div>
+        """
+    ).callout(kind="success")
+    _conclusion_storage
+    return (_conclusion_storage,)
+
+
+@app.cell
+def _(mo):
     _transition = mo.md(
         "Columnar layouts pair naturally with compression. Next we quantify the size wins."
     ).callout(kind="neutral")
@@ -1780,6 +1856,12 @@ r = \\frac{\\text{compressed size}}{\\text{original size}}
 \\qquad
 \\text{Savings} = 1 - r
 $$
+
+Where:
+- $r$: compression ratio  
+- $\\text{compressed size}$: file size after compression  
+- $\\text{original size}$: baseline uncompressed file size  
+- $\\text{Savings}$: fraction of size removed by compression
 
 We compare JSON/CSV to gzip and Parquet with different codecs.
         """
@@ -1862,8 +1944,8 @@ def _(
                 _results.append(
                     {
                         "format": label,
-                        "size": format_bytes(size),
-                        "ratio_vs_json": f"{size / baseline:.2f}x",
+                        "size (bytes)": size,
+                        "ratio vs JSON": round(size / baseline, 4),
                     }
                 )
 
@@ -1875,8 +1957,8 @@ def _(
                 _results.append(
                     {
                         "format": label,
-                        "size": format_bytes(gz_path.stat().st_size),
-                        "ratio_vs_json": f"{gz_path.stat().st_size / baseline:.2f}x",
+                        "size (bytes)": gz_path.stat().st_size,
+                        "ratio vs JSON": round(gz_path.stat().st_size / baseline, 4),
                     }
                 )
 
@@ -1893,8 +1975,10 @@ def _(
                     _results.append(
                         {
                             "format": f"Parquet ({codec})",
-                            "size": format_bytes(parquet_path.stat().st_size),
-                            "ratio_vs_json": f"{parquet_path.stat().st_size / baseline:.2f}x",
+                            "size (bytes)": parquet_path.stat().st_size,
+                            "ratio vs JSON": round(
+                                parquet_path.stat().st_size / baseline, 4
+                            ),
                         }
                     )
 
@@ -1939,7 +2023,7 @@ def _(math, mo, random):
         },
         {
             "metric": "estimated ratio",
-            "value": f"{_estimated_ratio:.2f}x",
+            "value": round(_estimated_ratio, 4),
         },
     ]
 
@@ -2141,15 +2225,13 @@ def _(
                 _con.close()
 
                 _sizes = [
-                    {"file": "orders.csv", "size": format_bytes(_csv_path.stat().st_size)},
-                    {
-                        "file": "orders.parquet",
-                        "size": format_bytes(_parquet_path.stat().st_size)
-                        if _parquet_path
-                        else "n/a",
-                    },
-                    {"file": "analytics.duckdb", "size": format_bytes(_db_path.stat().st_size)},
+                    {"file": "orders.csv", "size (bytes)": _csv_path.stat().st_size},
+                    {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
                 ]
+                if _parquet_path:
+                    _sizes.append(
+                        {"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size}
+                    )
 
             _results_table = [
                 {
@@ -2277,12 +2359,8 @@ def _(
 
         _timing_table = mo.ui.table(
             [
-                {"mode": "full scan", "query_ms": f"{_scan_time*1000:.2f}"},
-                {"mode": "indexed", "query_ms": f"{_idx_time*1000:.2f}"},
-                {
-                    "mode": "speedup",
-                    "query_ms": f"{(_scan_time / _idx_time):.2f}x" if _idx_time else "n/a",
-                },
+                {"mode": "full scan", "query_ms": round(_scan_time * 1000, 3)},
+                {"mode": "indexed", "query_ms": round(_idx_time * 1000, 3)},
             ],
             label="Query timings",
         )
@@ -2307,12 +2385,16 @@ def _(
             label="Query results",
         )
 
+        _speedup = (_scan_time / _idx_time) if _idx_time else None
+        _speedup_note = mo.md(
+            f"Observed speedup: **{_speedup:.2f}x**" if _speedup else "Observed speedup: **n/a**"
+        ).callout(kind="info")
         _note = mo.md(
             "Look for the plan to switch from **SCAN** to **SEARCH** when the index is present."
         ).callout(kind="info")
 
         _output = mo.vstack(
-            [_timing_table, _plan_table, _result_table, _note],
+            [_timing_table, _plan_table, _result_table, _speedup_note, _note],
             gap=0.6,
         )
 
@@ -2565,17 +2647,27 @@ def _(
 
             _metrics_table = mo.ui.table(
                 [
-                    {"metric": "rows", "value": schema_rows.value},
-                    {"metric": "dirty rows", "value": _dirty_count},
-                    {"metric": "dirty rate", "value": f"{_dirty_pct:.1f}%"},
-                    {"metric": "amount inferred type", "value": _inferred_amount_type},
                     {
-                        "metric": "avg(amount) via TRY_CAST",
-                        "value": f"{_num_avg:.2f}" if _num_avg is not None else "n/a",
-                    },
-                    {"metric": "lexicographic MIN(amount)", "value": str(_lex_min)},
+                        "rows": schema_rows.value,
+                        "dirty_rows": _dirty_count,
+                        "dirty_rate_pct": round(_dirty_pct, 2),
+                        "inferred_non_numeric": _inferred_bad,
+                        "explicit_nulls": _explicit_nulls,
+                        "avg_amount_try_cast": round(_num_avg, 3)
+                        if _num_avg is not None
+                        else None,
+                    }
                 ],
-                label="Why schema choice matters",
+                label="Why schema choice matters (numeric)",
+            )
+            _types_table = mo.ui.table(
+                [
+                    {
+                        "amount_inferred_type": _inferred_amount_type,
+                        "lexicographic_min_amount": str(_lex_min),
+                    }
+                ],
+                label="Schema observations (text)",
             )
 
             _note = mo.md(
@@ -2589,6 +2681,7 @@ Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
                 [
                     _sample_table,
                     _metrics_table,
+                    _types_table,
                     _inferred_table,
                     _explicit_table,
                     _quality_table,
@@ -2624,6 +2717,24 @@ def _(mo):
     )
     _qa_block_duckdb
     return (_qa_block_duckdb,)
+
+
+@app.cell
+def _(mo):
+    _conclusion_duckdb = mo.md(
+        """
+<div class="section-card">
+  <h3>Chapter 5 Conclusion</h3>
+  <ul>
+    <li>DuckDB gives SQL analytics directly on files with strong performance for scans and aggregates.</li>
+    <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
+    <li>Track null rates and inferred types over time to detect data quality drift.</li>
+  </ul>
+</div>
+        """
+    ).callout(kind="success")
+    _conclusion_duckdb
+    return (_conclusion_duckdb,)
 
 
 @app.cell
@@ -2868,6 +2979,24 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _conclusion_api = mo.md(
+        """
+<div class="section-card">
+  <h3>Chapter 6 Conclusion</h3>
+  <ul>
+    <li>Use HTTP method semantics intentionally (GET/POST/PUT/DELETE) and design for retries.</li>
+    <li>Validation belongs on both client and server, with server validation as the final guard.</li>
+    <li>Backward-compatible evolution and explicit versioning reduce integration breakage.</li>
+  </ul>
+</div>
+        """
+    ).callout(kind="success")
+    _conclusion_api
+    return (_conclusion_api,)
+
+
+@app.cell
+def _(mo):
     _transition = mo.md(
         "APIs need clear, validated schemas. Next we use Pydantic to define data contracts."
     ).callout(kind="neutral")
@@ -2895,6 +3024,9 @@ Example constraint:
 $$
 0 \\leq \\text{gpa} \\leq 4
 $$
+
+Where:
+- $gpa$: grade-point average score constrained to the valid range
 
 Try editing the JSON below to trigger validation errors and see the message structure.
         """
@@ -3343,6 +3475,9 @@ A simple framing:
 $$
 \\text{Iteration Speed} \\uparrow \\quad \\Rightarrow \\quad \\text{UI Control} \\downarrow
 $$
+
+Interpretation:
+- faster iteration often comes with less low-level UI control; more control usually needs more engineering effort
         """
     ).callout(kind="neutral")
 
@@ -3448,8 +3583,8 @@ def _(
         [
             {
                 "metric": k,
-                "x": f"{_stats_x[k]:.3f}",
-                "y": f"{_stats_y[k]:.3f}",
+                "x": round(_stats_x[k], 3),
+                "y": round(_stats_y[k], 3),
             }
             for k in _stats_x.keys()
         ],
@@ -3501,7 +3636,7 @@ def _(
             _scatter_layers = _scatter + _reg_line
             _formula = mo.md(
                 f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
-                f"alpha (intercept) = `{_alpha:.3f}`, beta (slope) = `{_beta:.3f}`"
+                f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$"
             ).callout(kind="info")
         else:
             _formula = mo.md("Regression could not be computed for this sample.").callout(
