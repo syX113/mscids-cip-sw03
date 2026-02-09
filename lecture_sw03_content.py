@@ -323,6 +323,114 @@ def _(mo):
             transform: translateY(0px) rotate(45deg);
           }
 
+          .flow-card {
+            display: grid;
+            gap: 12px;
+          }
+
+          .flow-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+          }
+
+          .flow-box {
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(11, 18, 32, 0.14);
+            background: rgba(255, 255, 255, 0.8);
+            font-weight: 600;
+            text-align: center;
+            min-width: 150px;
+          }
+
+          .flow-arrow {
+            font-size: 1.4rem;
+            color: var(--muted);
+            line-height: 1;
+          }
+
+          .flow-note {
+            color: var(--muted);
+            font-size: 0.9rem;
+          }
+
+          .chart-grid {
+            display: grid;
+            gap: 14px;
+          }
+
+          .bar-chart {
+            display: grid;
+            gap: 10px;
+          }
+
+          .bar-row {
+            display: grid;
+            grid-template-columns: 140px 1fr 110px;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.92rem;
+          }
+
+          .bar-label {
+            font-weight: 600;
+            color: var(--ink);
+          }
+
+          .bar-track {
+            position: relative;
+            height: 10px;
+            background: rgba(11, 18, 32, 0.12);
+            border-radius: 999px;
+            overflow: hidden;
+          }
+
+          .bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(47, 111, 237, 0.9), rgba(20, 184, 166, 0.9));
+          }
+
+          .bar-fill.good {
+            background: linear-gradient(90deg, rgba(20, 184, 166, 0.9), rgba(47, 111, 237, 0.9));
+          }
+
+          .bar-fill.bad {
+            background: linear-gradient(90deg, rgba(249, 115, 22, 0.92), rgba(239, 68, 68, 0.92));
+          }
+
+          .bar-marker {
+            position: absolute;
+            top: -4px;
+            bottom: -4px;
+            width: 2px;
+            background: rgba(245, 158, 11, 0.9);
+            transform: translateX(-50%);
+            border-radius: 2px;
+          }
+
+          .bar-value {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: var(--ink-2);
+          }
+
+          .chart-note {
+            color: var(--muted);
+            font-size: 0.9rem;
+          }
+
+          .dirty-row td {
+            background: rgba(249, 115, 22, 0.12);
+          }
+
+          .dirty-row td.dirty-cell {
+            background: rgba(249, 115, 22, 0.22);
+            font-weight: 600;
+          }
+
           .mo-callout {
             border-radius: 16px;
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
@@ -760,6 +868,8 @@ def _(mo):
         """
 ### Atomicity Demo: Transfer With Failure
 
+Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
+
 A transfer should preserve the total balance:
 
 $$
@@ -769,12 +879,34 @@ $$
 Without transactions, a crash between **debit** and **credit** can violate this invariant.
 Databases roll back the partial work, so the total remains consistent.
 
+**What this demo highlights:**
+- The invariant you must preserve (total balance)
+- The failure point between steps (crash after debit)
+- The commit/rollback boundary that restores consistency
+- Atomicity is separate from isolation (we are not modeling concurrency here)
+
 **Try this:** run once with failure **on** (see the file total break),
 then run with failure **off** (both systems remain consistent).
         """
     ).callout(kind="neutral")
-    _atomic_intro
-    return (_atomic_intro,)
+    _atomic_flow = mo.Html(
+        """
+<div class="section-card flow-card">
+  <h3>Transaction Boundary</h3>
+  <div class="flow-diagram">
+    <div class="flow-box">Debit Alice</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Credit Bob</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Commit or Rollback</div>
+  </div>
+  <div class="flow-note">Atomicity means either all steps commit or none do.</div>
+</div>
+        """
+    )
+    _panel = mo.vstack([_atomic_intro, _atomic_flow], gap=0.6)
+    _panel
+    return (_panel,)
 
 
 @app.cell
@@ -943,6 +1075,32 @@ def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile)
         _file_kind = "success" if _file_ok else "danger"
         _db_kind = "success" if _db_ok else "danger"
 
+        def _total_bar(label, total, expected, bar_class):
+            pct = 0.0 if expected == 0 else min(100.0, (total / expected) * 100.0)
+            return f"""
+<div class="bar-row">
+  <div class="bar-label">{label}</div>
+  <div class="bar-track">
+    <div class="bar-fill {bar_class}" style="width: {pct:.1f}%"></div>
+    <div class="bar-marker" style="left: 100%"></div>
+  </div>
+  <div class="bar-value">{total:,} / {expected:,}</div>
+</div>
+            """
+
+        _total_chart = mo.Html(
+            f"""
+<div class="section-card">
+  <h3>Total Balance Snapshot</h3>
+  <div class="chart-note">Gold marker = expected total ({_expected_total:,}).</div>
+  <div class="bar-chart">
+    {_total_bar("File total", _file_total, _expected_total, "good" if _file_ok else "bad")}
+    {_total_bar("SQLite total", _db_total, _expected_total, "good" if _db_ok else "bad")}
+  </div>
+</div>
+            """
+        )
+
         _summary = mo.md(
             f"""
 **Scenario:** {_status}  
@@ -966,6 +1124,7 @@ while the database rolls back to the consistent total.
             [
                 _initial_table,
                 _timeline_table,
+                _total_chart,
                 _file_callout,
                 _file_table,
                 _db_callout,
@@ -986,19 +1145,18 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — Atomicity & Concurrency</h3>
   <details>
-    <summary><strong>Q1:</strong> If you were forced to use files, how would you implement an atomic transfer?</summary>
-    <p><strong>Answer:</strong> Consider a write‑ahead log, append‑only records, or a temp file + atomic rename.
-    Each approach trades simplicity for durability and complexity.</p>
+    <summary><strong>Q1:</strong> If you only had files (no database), how could you make a transfer all‑or‑nothing?</summary>
+    <p><strong>Answer:</strong> Write a small log entry first (write‑ahead log, or WAL), or write to a temp file and rename it (an atomic rename).
+    On restart, replay or roll back the log.</p>
   </details>
   <details>
-    <summary><strong>Q2:</strong> What invariants must always hold in your system?</summary>
-    <p><strong>Answer:</strong> Identify quantities that must never change (e.g., total balance), and design
-    tests that verify them under failures and retries.</p>
+    <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
+    <p><strong>Answer:</strong> The total balance should never change. Build checks/tests that verify this after crashes and retries (invariant checks).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> Would you prefer to fail fast or accept temporary inconsistency?</summary>
-    <p><strong>Answer:</strong> Depends on risk: finance typically fails fast; analytics can tolerate eventual repair.
-    The right choice follows the cost of bad data vs. downtime.</p>
+    <summary><strong>Q3:</strong> Would you rather stop on error or allow temporary mismatch?</summary>
+    <p><strong>Answer:</strong> Finance usually prefers fail‑fast; analytics may allow temporary inconsistency and repair later (eventual consistency).
+    Choose based on the cost of wrong data vs. downtime.</p>
   </details>
 </div>
         """
@@ -1018,14 +1176,19 @@ def _(mo):
 def _(mo):
     _explanation = mo.md(
         """
-### Serialization = Bytes on Disk
+### Serialization = Bytes on Disk (or Wire)
 
-Serialization transforms Python objects into bytes. Deserialization rebuilds objects from bytes.
-The format choice affects speed, file size, interoperability, and safety.
+Serialization transforms Python objects into bytes so they can be stored or sent.
+Deserialization rebuilds objects from bytes. The format choice affects speed, file size,
+interoperability, type fidelity, schema evolution, and safety.
+
+**Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
+**What to compare:** speed, size, interop, **type fidelity**, schema evolution, safety.
 
 - **Speed**: write + read throughput  
 - **Size**: how many bytes hit disk  
 - **Interop**: language/tool compatibility  
+- **Type fidelity**: do types round-trip cleanly?  
 - **Safety**: Pickle can execute arbitrary code
 
 A simple performance lens:
@@ -1036,33 +1199,56 @@ $$
 \\text{Latency} = \\text{write time} + \\text{read time}
 $$
 
-In practice, JSON is human‑readable, Pickle is Python‑specific, Arrow/Feather is columnar, and Avro is schema‑driven.
+**Format cheat sheet:**  
+- **JSON/CSV**: human‑readable, row‑oriented  
+- **Avro**: row‑oriented, schema‑driven events  
+- **Arrow/Feather**: columnar interchange (fast analytics)  
+- **Parquet**: columnar on‑disk analytics  
+- **Pickle**: Python‑specific (unsafe for untrusted data)
         """
     ).callout(kind="neutral")
-    _explanation
-    return (_explanation,)
+    _flow = mo.Html(
+        """
+<div class="section-card flow-card">
+  <h3>Serialization Pipeline</h3>
+  <div class="flow-diagram">
+    <div class="flow-box">Python object</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Bytes (disk / wire)</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Python object</div>
+  </div>
+  <div class="flow-note">Format choice drives speed, size, and safety.</div>
+</div>
+        """
+    )
+    _panel = mo.vstack([_explanation, _flow], gap=0.6)
+    _panel
+    return (_panel,)
 
 
 @app.cell
 def _(mo):
-    serial_rows = mo.ui.slider(200, 5000, step=200, value=1000, label="Rows")
-    serial_cols = mo.ui.slider(2, 10, value=6, label="Numeric columns")
+    serial_rows = mo.ui.slider(200, 3000, step=200, value=800, label="Rows")
+    serial_cols = mo.ui.slider(2, 8, value=5, label="Numeric columns")
     serial_seed = mo.ui.slider(1, 999, value=42, label="Seed")
-    include_optional = mo.ui.checkbox(value=True, label="Include optional formats")
     run_serial = mo.ui.button(label="Re-run serialization benchmark", value=1, kind="success")
+    _note = mo.md(
+        "Includes Arrow, Parquet, and Avro by default (requires `pyarrow` + `fastavro`)."
+    )
 
     _controls = mo.vstack(
         [
             mo.hstack([serial_rows, serial_cols], widths="equal"),
             serial_seed,
-            include_optional,
+            _note,
             run_serial,
         ],
         gap=0.6,
     ).callout(kind="neutral")
 
     _controls
-    return include_optional, run_serial, serial_cols, serial_rows, serial_seed
+    return run_serial, serial_cols, serial_rows, serial_seed
 
 
 @app.cell
@@ -1070,7 +1256,6 @@ def _(
     csv,
     format_bytes,
     format_ms,
-    include_optional,
     json,
     mo,
     optional_import,
@@ -1106,11 +1291,15 @@ def _(
         start = time.perf_counter()
         read_fn(path)
         read_time = time.perf_counter() - start
+        latency = write_time + read_time
+        throughput = 0.0 if write_time == 0 else size / write_time
         return {
             "format": label,
-            "write": format_ms(write_time),
-            "read": format_ms(read_time),
-            "size": format_bytes(size),
+            "write_s": write_time,
+            "read_s": read_time,
+            "latency_s": latency,
+            "size_bytes": size,
+            "throughput_mbps": throughput / (1024 * 1024),
         }
 
     if run_serial.value == 0:
@@ -1161,63 +1350,162 @@ def _(
 
             _results.append(bench("CSV", csv_write, csv_read, _tmpdir / "data.csv"))
 
-            if include_optional.value:
-                _pyarrow = optional_import("pyarrow")
-                _feather = optional_import("pyarrow.feather")
-                if _pyarrow and _feather:
+            _pyarrow = optional_import("pyarrow")
+            _feather = optional_import("pyarrow.feather")
+            _parquet = optional_import("pyarrow.parquet")
+            fastavro = optional_import("fastavro")
 
-                    def arrow_write(path):
-                        table = _pyarrow.Table.from_pylist(_records)
-                        _feather.write_feather(table, path)
+            _missing = []
+            if not (_pyarrow and _feather):
+                _missing.append("pyarrow.feather")
+            if not _parquet:
+                _missing.append("pyarrow.parquet")
+            if not fastavro:
+                _missing.append("fastavro")
 
-                    def arrow_read(path):
-                        _feather.read_table(path)
+            if _pyarrow and _feather:
 
-                    _results.append(
-                        bench(
-                            "Arrow/Feather",
-                            arrow_write,
-                            arrow_read,
-                            _tmpdir / "data.feather",
-                        )
+                def arrow_write(path):
+                    table = _pyarrow.Table.from_pylist(_records)
+                    _feather.write_feather(table, path)
+
+                def arrow_read(path):
+                    _feather.read_table(path)
+
+                _results.append(
+                    bench(
+                        "Arrow/Feather",
+                        arrow_write,
+                        arrow_read,
+                        _tmpdir / "data.feather",
                     )
+                )
 
-                fastavro = optional_import("fastavro")
-                if fastavro:
-                    schema = {
-                        "type": "record",
-                        "name": "Record",
-                        "fields": [
-                            {"name": "id", "type": "int"},
-                            {"name": "city", "type": "string"},
-                            {"name": "score", "type": "float"},
-                        ]
-                        + [
-                            {"name": f"metric_{c}", "type": "float"}
-                            for c in range(serial_cols.value)
-                        ],
-                    }
+            if _pyarrow and _parquet:
 
-                    def avro_write(path):
-                        with path.open("wb") as f:
-                            fastavro.writer(f, schema, _records)
+                def parquet_write(path):
+                    table = _pyarrow.Table.from_pylist(_records)
+                    _parquet.write_table(table, path)
 
-                    def avro_read(path):
-                        with path.open("rb") as f:
-                            list(fastavro.reader(f))
+                def parquet_read(path):
+                    _parquet.read_table(path)
 
-                    _results.append(
-                        bench("Avro", avro_write, avro_read, _tmpdir / "data.avro")
+                _results.append(
+                    bench(
+                        "Parquet",
+                        parquet_write,
+                        parquet_read,
+                        _tmpdir / "data.parquet",
                     )
+                )
 
-        results_table = mo.ui.table(_results, label="Serialization benchmark")
+            if fastavro:
+                schema = {
+                    "type": "record",
+                    "name": "Record",
+                    "fields": [
+                        {"name": "id", "type": "int"},
+                        {"name": "city", "type": "string"},
+                        {"name": "score", "type": "float"},
+                    ]
+                    + [
+                        {"name": f"metric_{c}", "type": "float"}
+                        for c in range(serial_cols.value)
+                    ],
+                }
+
+                def avro_write(path):
+                    with path.open("wb") as f:
+                        fastavro.writer(f, schema, _records)
+
+                def avro_read(path):
+                    with path.open("rb") as f:
+                        list(fastavro.reader(f))
+
+                _results.append(
+                    bench("Avro", avro_write, avro_read, _tmpdir / "data.avro")
+                )
+
+        _display_rows = []
+        for row in _results:
+            _display_rows.append(
+                {
+                    "format": row["format"],
+                    "write": format_ms(row["write_s"]),
+                    "read": format_ms(row["read_s"]),
+                    "latency": format_ms(row["latency_s"]),
+                    "size": format_bytes(row["size_bytes"]),
+                    "write MB/s": f"{row['throughput_mbps']:.2f}",
+                }
+            )
+
+        def _bar_chart(title, rows, value_key, formatter):
+            if not rows:
+                return None
+            max_val = max(row[value_key] for row in rows) or 1
+            _bars = []
+            for row in rows:
+                value = row[value_key]
+                pct = min(100.0, (value / max_val) * 100.0)
+                _bars.append(
+                    f"""
+<div class="bar-row">
+  <div class="bar-label">{row["format"]}</div>
+  <div class="bar-track">
+    <div class="bar-fill" style="width: {pct:.1f}%"></div>
+  </div>
+  <div class="bar-value">{formatter(value)}</div>
+</div>
+                    """
+                )
+            return mo.Html(
+                f"""
+<div class="section-card">
+  <h3>{title}</h3>
+  <div class="bar-chart">
+    {''.join(_bars)}
+  </div>
+  <div class="chart-note">Higher bars = larger values.</div>
+</div>
+                """
+            )
+
+        _size_chart = _bar_chart(
+            "File size (smaller is better)",
+            _results,
+            "size_bytes",
+            format_bytes,
+        )
+        _latency_chart = _bar_chart(
+            "Total latency (write + read)",
+            _results,
+            "latency_s",
+            format_ms,
+        )
+        _charts = mo.vstack([_size_chart, _latency_chart], gap=0.6)
+
+        _missing_note = None
+        if _missing:
+            _missing_note = mo.md(
+                "Missing libraries required for Arrow/Parquet/Avro: "
+                + ", ".join(f"`{name}`" for name in _missing)
+                + ". Install them to include these formats."
+            ).callout(kind="warn")
+
+        results_table = mo.ui.table(_display_rows, label="Serialization benchmark")
+        benchmark_note = mo.md(
+            "Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark."
+        ).callout(kind="info")
         warning = mo.md(
             """
 **Security note:** Pickle is not safe for untrusted data. Only load Pickle files you control.
             """
         ).callout(kind="warn")
 
-        _output = mo.vstack([sample, results_table, warning], gap=0.6)
+        _items = [sample, results_table, _charts, benchmark_note, warning]
+        if _missing_note:
+            _items.insert(1, _missing_note)
+        _output = mo.vstack(_items, gap=0.6)
 
     _output
     return (_output,)
@@ -1278,17 +1566,18 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — Serialization Choices</h3>
   <details>
-    <summary><strong>Q1:</strong> How do you choose between JSON, Avro, and Parquet for a new system?</summary>
-    <p><strong>Answer:</strong> Start with the workload. JSON for interoperability, Avro for schema‑evolving events,
-    Parquet for analytics and columnar scans.</p>
+    <summary><strong>Q1:</strong> How do you pick a format like JSON, Avro, or Parquet?</summary>
+    <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
+    Avro for event streams with changing schemas (schema evolution),
+    Parquet for analytics scans and compression (columnar).</p>
   </details>
   <details>
-    <summary><strong>Q2:</strong> What is your threat model for serialized data?</summary>
-    <p><strong>Answer:</strong> If data crosses trust boundaries, avoid unsafe formats like Pickle and validate strictly.</p>
+    <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
+    <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> Where would you measure size vs. speed trade‑offs in production?</summary>
-    <p><strong>Answer:</strong> Instrument write/read latency and storage costs; compare before/after in a canary pipeline.</p>
+    <summary><strong>Q3:</strong> Where do you measure size vs. speed trade‑offs?</summary>
+    <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline, then compare before/after.</p>
   </details>
 </div>
         """
@@ -1322,6 +1611,10 @@ IO_{col} \\approx N \\times k
 $$
 
 Below we simulate column selection and filtering to reveal the shape of the speed gap.
+
+**Format lens:** Avro is a row‑based, schema‑driven file format (great for event logs).
+Parquet is a column‑based file format (great for analytics and scans).
+Arrow is columnar in‑memory (fast interchange between systems).
         """
     ).callout(kind="neutral")
     _explanation
@@ -1383,25 +1676,26 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
         _results = [
             {
                 "operation": "Select column",
-                "row_store": format_ms(row_select_time),
-                "column_store": format_ms(col_select_time),
+                "Avro (row-based)": format_ms(row_select_time),
+                "Parquet (column-based)": format_ms(col_select_time),
             },
             {
                 "operation": "Filter column > 0.75",
-                "row_store": format_ms(row_filter_time),
-                "column_store": format_ms(col_filter_time),
+                "Avro (row-based)": format_ms(row_filter_time),
+                "Parquet (column-based)": format_ms(col_filter_time),
             },
             {
                 "operation": "Sum column",
-                "row_store": format_ms(row_sum_time),
-                "column_store": format_ms(col_sum_time),
+                "Avro (row-based)": format_ms(row_sum_time),
+                "Parquet (column-based)": format_ms(col_sum_time),
             },
         ]
 
         _table = mo.ui.table(_results, label="Row vs Column timing (Python simulation)")
         _note = mo.md(
             """
-**Discussion:** Real column stores show bigger wins because they avoid reading unused columns from disk.
+**Discussion:** These timings simulate access patterns (row‑style vs column‑style), not actual file I/O.
+Real column formats like Parquet show bigger wins because they avoid reading unused columns from disk.
             """
         ).callout(kind="info")
 
@@ -1418,16 +1712,16 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — Row vs Column Storage</h3>
   <details>
-    <summary><strong>Q1:</strong> Which workload patterns make a row store the better choice?</summary>
-    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions with full‑row access.</p>
+    <summary><strong>Q1:</strong> When is a row store a better choice?</summary>
+    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads).</p>
   </details>
   <details>
-    <summary><strong>Q2:</strong> How does projection pushdown change query cost?</summary>
-    <p><strong>Answer:</strong> Reading only required columns reduces I/O, especially when each column compresses well.</p>
+    <summary><strong>Q2:</strong> How does reading only needed columns help?</summary>
+    <p><strong>Answer:</strong> You skip unused columns, which reduces I/O and speeds up scans. This is called projection pushdown.</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> When can compression hurt performance?</summary>
-    <p><strong>Answer:</strong> For small datasets or CPU‑bound workloads, decompression overhead can dominate.</p>
+    <summary><strong>Q3:</strong> When can compression make things slower?</summary>
+    <p><strong>Answer:</strong> If data is small or the CPU is the bottleneck, decompression overhead can outweigh I/O savings (CPU‑bound).</p>
   </details>
 </div>
         """
@@ -2146,9 +2440,49 @@ def _(
                 for row in _sample_source[:6]
             ]
 
-            _sample_table = mo.ui.table(
-                _sample_rows, label="Sample rows (dirty values highlighted)"
-            )
+            def _render_sample_table(rows):
+                header = """
+<thead>
+  <tr>
+    <th>id</th>
+    <th>category</th>
+    <th>amount</th>
+    <th>dirty</th>
+    <th>day</th>
+  </tr>
+</thead>
+                """
+                body_rows = []
+                for row in rows:
+                    dirty = bool(row["dirty"])
+                    cls = "dirty-row" if dirty else ""
+                    amount_cell = f'<td class="dirty-cell">{row["amount"]}</td>' if dirty else f"<td>{row['amount']}</td>"
+                    body_rows.append(
+                        f"""
+  <tr class="{cls}">
+    <td>{row["id"]}</td>
+    <td>{row["category"]}</td>
+    {amount_cell}
+    <td>{str(row["dirty"]).lower()}</td>
+    <td>{row["day"]}</td>
+  </tr>
+                        """
+                    )
+                body = "<tbody>" + "".join(body_rows) + "</tbody>"
+                return mo.Html(
+                    f"""
+<div class="section-card">
+  <h3>Sample rows (dirty values highlighted)</h3>
+  <table>
+    {header}
+    {body}
+  </table>
+  <div class="chart-note">Rows with non-numeric amounts are shaded.</div>
+</div>
+                    """
+                )
+
+            _sample_table = _render_sample_table(_sample_rows)
 
             _inferred_table = mo.ui.table(
                 [
@@ -2217,17 +2551,16 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — DuckDB & Schema</h3>
   <details>
-    <summary><strong>Q1:</strong> When would you materialize data into DuckDB instead of scanning raw files?</summary>
-    <p><strong>Answer:</strong> When repeated queries or joins are common, materialization amortizes parsing and
-    enables columnar optimizations.</p>
+    <summary><strong>Q1:</strong> When would you load data into DuckDB instead of scanning files each time?</summary>
+    <p><strong>Answer:</strong> If you run the same queries or joins repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization).</p>
   </details>
   <details>
-    <summary><strong>Q2:</strong> What risks do you accept with schema‑on‑read?</summary>
-    <p><strong>Answer:</strong> Flexibility is high, but validation is deferred; silent `NULL`s can distort aggregates.</p>
+    <summary><strong>Q2:</strong> What risk do you take with schema‑on‑read?</summary>
+    <p><strong>Answer:</strong> Bad types can slip through; errors show up later as `NULL`s or wrong totals (schema‑on‑read).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> How would you detect data drift in a schema‑on‑read pipeline?</summary>
-    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions over time; alert on changes.</p>
+    <summary><strong>Q3:</strong> How would you detect data drift over time?</summary>
+    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift).</p>
   </details>
 </div>
         """
@@ -2448,17 +2781,17 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — APIs & Validation</h3>
   <details>
-    <summary><strong>Q1:</strong> When is a POST request idempotent, and why does it matter?</summary>
-    <p><strong>Answer:</strong> It’s idempotent if repeated calls yield the same result (e.g., client‑supplied IDs).
-    This matters for retries and reliability.</p>
+    <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
+    <p><strong>Answer:</strong> If repeating it produces the same result (e.g., client supplies a unique ID), then it’s idempotent.
+    This prevents duplicate records on retries.</p>
   </details>
   <details>
     <summary><strong>Q2:</strong> Where should validation happen: client, server, or both?</summary>
-    <p><strong>Answer:</strong> Both. Clients can provide fast feedback, but servers must enforce rules to protect data.</p>
+    <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server‑side validation).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> How would you evolve an API without breaking clients?</summary>
-    <p><strong>Answer:</strong> Version endpoints, keep backward compatibility, and deprecate gradually with clear docs.</p>
+    <summary><strong>Q3:</strong> How do you evolve an API without breaking clients?</summary>
+    <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
   </details>
 </div>
         """
