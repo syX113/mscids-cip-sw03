@@ -1,10 +1,8 @@
-# mscids-cip-sw03
+# CIP: Data Collection, Integration and Preprocessing - SW03
 
-Interactive SW03 course materials with Marimo notebooks plus a FastAPI demo service.
+Interactive SW03 course materials with Marimo notebooks.
 
-<details>
-<summary><strong>Table of Contents (click to expand)</strong></summary>
-
+**Table of Contents**
 - [Overview](#overview)
 - [Repository Layout](#repository-layout)
 - [Run Matrix](#run-matrix)
@@ -15,13 +13,9 @@ Interactive SW03 course materials with Marimo notebooks plus a FastAPI demo serv
 - [Run FastAPI Demo](#run-fastapi-demo)
 - [Troubleshooting](#troubleshooting)
 
-</details>
-
 ## Overview
 
-This repo is designed for live teaching and hands-on demos:
-
-- `lecture_sw03_content.py`: full lecture notebook (storage, serialization, DuckDB, REST, Pydantic, FastAPI, indexing, charts)
+- `lecture_sw03_content.py`: lecture notebook (storage, serialization, DuckDB, REST, Pydantic, FastAPI, etc.)
 - `lecture_sw03_demo.py`: compact Marimo demo notebook
 - `src/demo_api.py`: standalone FastAPI app used in the lecture API section
 
@@ -49,7 +43,7 @@ This repo is designed for live teaching and hands-on demos:
 | `lecture_sw03_demo.py` | Demo notebook in editor mode | `marimo edit lecture_sw03_demo.py` |
 | `src/demo_api.py` | FastAPI backend for API chapter | `uvicorn src.demo_api:app --reload` |
 
-## Setup
+## Setup to Run the Code
 
 ### Conda
 
@@ -72,14 +66,14 @@ pip install -r requirements.txt
 
 ## Run Notebook Apps
 
-Full lecture notebook:
+Lecture notebook:
 
 ```bash
 marimo edit lecture_sw03_content.py
 marimo run lecture_sw03_content.py
 ```
 
-Compact demo notebook:
+Marimo demo notebook:
 
 ```bash
 marimo edit lecture_sw03_demo.py
