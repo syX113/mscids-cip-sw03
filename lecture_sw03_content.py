@@ -496,7 +496,7 @@ def _(mo):
         <li>FastAPI demo + automatic documentation</li>
         <li>Indexing demo (SQLite) + query plans</li>
         <li>Frontend framework comparison (Streamlit, Dash, Flask, React, Marimo)</li>
-        <li>Marimo charts lab: scatter, line, box + statistics</li>
+        <li>Marimo charts lab: regression, category scatter, trend lines</li>
       </ul>
     </div>
   </div>
@@ -1167,6 +1167,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _transition = mo.md(
+        "Next, we shift from **consistency under concurrency** to **how data is represented and moved**: serialization formats and their trade-offs."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 2. Serialization & Deserialization Benchmarks")
     _section
     return (_section,)
@@ -1588,6 +1597,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _transition = mo.md(
+        "With formats in mind, the next question is **layout**: row vs column storage and why columnar layouts power analytics."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 3. Column-Based vs Row-Based Storage")
     _section
     return (_section,)
@@ -1728,6 +1746,15 @@ def _(mo):
     )
     _qa_block_storage
     return (_qa_block_storage,)
+
+
+@app.cell
+def _(mo):
+    _transition = mo.md(
+        "Columnar layouts pair naturally with compression. Next we quantify the size wins."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
 
 
 @app.cell
@@ -1924,6 +1951,15 @@ def _(math, mo, random):
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
     return (_panel,)
+
+
+@app.cell
+def _(mo):
+    _transition = mo.md(
+        "Compression and encoding make files smaller, but we still need fast queries. Next: DuckDB as a SQL engine on files."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
 
 
 @app.cell
@@ -2428,7 +2464,28 @@ def _(
             _dirty_pct = (_dirty_count / schema_rows.value * 100) if schema_rows.value else 0
 
             _dirty_rows = [row for row in _rows if isinstance(row["amount"], str)]
-            _sample_source = _dirty_rows if _dirty_rows else _rows
+            _clean_rows = [row for row in _rows if not isinstance(row["amount"], str)]
+            _sample_size = 12
+            _sample_dirty = []
+            _sample_clean = []
+            if _dirty_rows:
+                _target_dirty = min(len(_dirty_rows), max(1, _sample_size // 2))
+                _sample_dirty = _rng.sample(_dirty_rows, _target_dirty)
+            if _clean_rows:
+                _target_clean = _sample_size - len(_sample_dirty)
+                if _target_clean == 0:
+                    _target_clean = 1
+                    _sample_dirty = _sample_dirty[: max(1, _sample_size - 1)]
+                _sample_clean = _rng.sample(
+                    _clean_rows, min(len(_clean_rows), _target_clean)
+                )
+
+            _sample_source = sorted(
+                _sample_dirty + _sample_clean, key=lambda row: row["id"]
+            )
+            if not _sample_source:
+                _sample_source = _rows[:_sample_size]
+
             _sample_rows = [
                 {
                     "id": row["id"],
@@ -2437,7 +2494,7 @@ def _(
                     "dirty": isinstance(row["amount"], str),
                     "day": row["day"],
                 }
-                for row in _sample_source[:6]
+                for row in _sample_source
             ]
 
             def _render_sample_table(rows):
@@ -2567,6 +2624,15 @@ def _(mo):
     )
     _qa_block_duckdb
     return (_qa_block_duckdb,)
+
+
+@app.cell
+def _(mo):
+    _transition = mo.md(
+        "Now that we can store and query data efficiently, we’ll expose it via APIs."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
 
 
 @app.cell
@@ -2802,6 +2868,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _transition = mo.md(
+        "APIs need clear, validated schemas. Next we use Pydantic to define data contracts."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 7. Pydantic Models")
     _section
     return (_section,)
@@ -2895,6 +2970,15 @@ Validation error:
 
     _output
     return (_output,)
+
+
+@app.cell
+def _(mo):
+    _transition = mo.md(
+        "With models in place, FastAPI can turn them into endpoints and documentation automatically."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
 
 
 @app.cell
@@ -3199,6 +3283,15 @@ Error:
 
 @app.cell
 def _(mo):
+    _transition = mo.md(
+        "With an API running, the next step is choosing a frontend to present and interact with it."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 9. Frontend Framework Comparison")
     _section
     return (_section,)
@@ -3261,6 +3354,15 @@ $$
 
 @app.cell
 def _(mo):
+    _transition = mo.md(
+        "To close, we’ll use charts to explore data and communicate insights."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 10. Marimo Charts Lab")
     _section
     return (_section,)
@@ -3272,7 +3374,12 @@ def _(mo):
         """
 ### Marimo Charts Lab
 
-Use the controls below to generate a dataset and explore it with **scatter**, **line + optional regression**, and **box** plots.  
+Use the controls below to generate a dataset and explore it with:
+
+- **XY scatter + linear regression** (equation updates automatically)  
+- **2D scatter by category** (four colors)  
+- **Two trend lines** to compare upward trajectories
+
 We also compute summary statistics to make the patterns quantitative.
         """
     ).callout(kind="neutral")
@@ -3282,29 +3389,26 @@ We also compute summary statistics to make the patterns quantitative.
 
 @app.cell
 def _(mo):
-    chart_rows = mo.ui.slider(200, 4000, step=200, value=1200, label="Rows")
+    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows (max 1000)")
     chart_seed = mo.ui.slider(1, 999, value=21, label="Seed")
     chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="Trend slope")
     chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level")
-    chart_regression = mo.ui.switch(value=True, label="Show regression line")
 
     _controls = mo.vstack(
         [
             mo.hstack([chart_rows, chart_seed], widths="equal"),
             mo.hstack([chart_slope, chart_noise], widths="equal"),
-            chart_regression,
         ],
         gap=0.6,
     ).callout(kind="neutral")
 
     _controls
-    return chart_noise, chart_regression, chart_rows, chart_seed, chart_slope
+    return chart_noise, chart_rows, chart_seed, chart_slope
 
 
 @app.cell
 def _(
     chart_noise,
-    chart_regression,
     chart_rows,
     chart_seed,
     chart_slope,
@@ -3342,10 +3446,14 @@ def _(
     _stats_y = _stats(_y_vals)
     _stats_table = mo.ui.table(
         [
-            {"metric": k, "x": f"{_stats_x[k]:.3f}", "y": f"{_stats_y[k]:.3f}"}
+            {
+                "metric": k,
+                "x": f"{_stats_x[k]:.3f}",
+                "y": f"{_stats_y[k]:.3f}",
+            }
             for k in _stats_x.keys()
         ],
-        label="Summary statistics",
+        label="Summary statistics (x, y)",
     )
 
     _pd = optional_import("pandas")
@@ -3366,86 +3474,107 @@ def _(
             _intercept = _mean_y - _slope * _mean_x
             return _slope, _intercept
 
-        _scatter = _alt.Chart(_df).mark_circle(size=60, opacity=0.6).encode(
+        _scatter = _alt.Chart(_df).mark_circle(size=60, opacity=0.6, color="#2f6fed").encode(
             x=_alt.X("x:Q"),
             y=_alt.Y("y:Q"),
-            color=_alt.Color("category:N"),
             tooltip=[
                 _alt.Tooltip("x:Q"),
                 _alt.Tooltip("y:Q"),
-                _alt.Tooltip("category:N"),
             ],
         )
         _scatter_layers = _scatter
-        if chart_regression.value:
-            _lr = _linear_regression(_x_vals, _y_vals)
-            if _lr:
-                _slope, _intercept = _lr
-                _x_min = min(_x_vals)
-                _x_max = max(_x_vals)
-                _reg_df = _pd.DataFrame(
-                    {
-                        "x": [_x_min, _x_max],
-                        "y": [_slope * _x_min + _intercept, _slope * _x_max + _intercept],
-                    }
-                )
-                _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(
-                    x=_alt.X("x:Q"), y=_alt.Y("y:Q")
-                )
-                _scatter_layers = _scatter + _reg_line
-        _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=260))
+        _formula = None
+        _lr = _linear_regression(_x_vals, _y_vals)
+        if _lr:
+            _beta, _alpha = _lr[0], _lr[1]
+            _x_min = min(_x_vals)
+            _x_max = max(_x_vals)
+            _reg_df = _pd.DataFrame(
+                {
+                    "x": [_x_min, _x_max],
+                    "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
+                }
+            )
+            _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(
+                x=_alt.X("x:Q"), y=_alt.Y("y:Q")
+            )
+            _scatter_layers = _scatter + _reg_line
+            _formula = mo.md(
+                f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
+                f"alpha (intercept) = `{_alpha:.3f}`, beta (slope) = `{_beta:.3f}`"
+            ).callout(kind="info")
+        else:
+            _formula = mo.md("Regression could not be computed for this sample.").callout(
+                kind="warn"
+            )
 
-        _line = (
+        _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
+
+        _scatter_cat = (
             _alt.Chart(_df)
-            .mark_line(opacity=0.6)
+            .mark_circle(opacity=0.6)
             .encode(
-                x=_alt.X("idx:Q"),
+                x=_alt.X("x:Q"),
                 y=_alt.Y("y:Q"),
                 color=_alt.Color("category:N"),
                 tooltip=[
-                    _alt.Tooltip("idx:Q"),
+                    _alt.Tooltip("x:Q"),
                     _alt.Tooltip("y:Q"),
                     _alt.Tooltip("category:N"),
                 ],
             )
-            .properties(height=260)
+            .properties(height=280)
         )
-        _line_layers = _line
-        if chart_regression.value:
-            _lr_idx = _linear_regression([row["idx"] for row in _rows], _y_vals)
-            if _lr_idx:
-                _slope, _intercept = _lr_idx
-                _i_min = min(row["idx"] for row in _rows)
-                _i_max = max(row["idx"] for row in _rows)
-                _line_df = _pd.DataFrame(
-                    {
-                        "idx": [_i_min, _i_max],
-                        "y": [_slope * _i_min + _intercept, _slope * _i_max + _intercept],
-                    }
-                )
-                _line_reg = _alt.Chart(_line_df).mark_line(color="#0f766e").encode(
-                    x=_alt.X("idx:Q"), y=_alt.Y("y:Q")
-                )
-                _line_layers = _line + _line_reg
-        _line_chart = mo.ui.altair_chart(_line_layers)
+        _scatter_cat_chart = mo.ui.altair_chart(_scatter_cat)
 
-        _box = (
-            _alt.Chart(_df)
-            .mark_boxplot()
+        _line_len = min(chart_rows.value, 200)
+        _line_rows = []
+        _base_slope = abs(chart_slope.value) * 0.05 + 0.02
+        _slope_a = _base_slope
+        _slope_b = _base_slope + 0.015
+        _noise_scale = chart_noise.value * 0.2
+        for _i in range(_line_len):
+            _line_rows.append(
+                {
+                    "idx": _i,
+                    "series": "Trend A",
+                    "y": _slope_a * _i + _rng.gauss(0, _noise_scale),
+                }
+            )
+            _line_rows.append(
+                {
+                    "idx": _i,
+                    "series": "Trend B",
+                    "y": _slope_b * _i + 0.6 + _rng.gauss(0, _noise_scale),
+                }
+            )
+
+        _line_df = _pd.DataFrame(_line_rows)
+        _line_chart = mo.ui.altair_chart(
+            _alt.Chart(_line_df)
+            .mark_line(opacity=0.8)
             .encode(
-                x=_alt.X("category:N"),
-                y=_alt.Y("y:Q"),
-                color=_alt.Color("category:N"),
+                x=_alt.X("idx:Q", title="index"),
+                y=_alt.Y("y:Q", title="value"),
+                color=_alt.Color("series:N"),
+                tooltip=[
+                    _alt.Tooltip("idx:Q"),
+                    _alt.Tooltip("y:Q"),
+                    _alt.Tooltip("series:N"),
+                ],
             )
             .properties(height=260)
         )
-        _box_chart = mo.ui.altair_chart(_box)
 
         _panel = mo.vstack(
             [
+                _formula,
+                mo.md("#### XY scatter + regression"),
                 _scatter_chart,
+                mo.md("#### 2D scatter by category"),
+                _scatter_cat_chart,
+                mo.md("#### Two upward trends"),
                 _line_chart,
-                _box_chart,
                 _stats_table,
             ],
             gap=0.8,
@@ -3462,6 +3591,15 @@ def _(
 
     _panel
     return (_panel,)
+
+
+@app.cell
+def _(mo):
+    _transition = mo.md(
+        "Wrap-up: you moved from storage fundamentals to APIs and frontends. The links below are good starting points for deeper dives."
+    ).callout(kind="neutral")
+    _transition
+    return (_transition,)
 
 
 @app.cell
