@@ -1,5 +1,6 @@
 import marimo
 
+__generated_with = "0.19.8"
 app = marimo.App()
 
 
@@ -386,7 +387,7 @@ def _(mo):
         <li>Pydantic models for validation</li>
         <li>FastAPI demo + automatic documentation</li>
         <li>Indexing demo (SQLite) + query plans</li>
-        <li>Frontend framework comparison (Dash, Flask, React, Marimo)</li>
+        <li>Frontend framework comparison (Streamlit, Dash, Flask, React, Marimo)</li>
         <li>Marimo charts lab: scatter, line, box + statistics</li>
       </ul>
     </div>
@@ -2598,6 +2599,7 @@ def _(mo):
     fastapi_code = mo.md(
         """
 ```python
+# file: src/demo_api.py
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -2620,11 +2622,15 @@ def create_item(item: Item):
     return item
 ```
 
-Run with:
+This repo includes the code above in `src/demo_api.py`.
+
+Run from the project root with:
 
 ```
-uvicorn lecture_api:app --reload
+uvicorn src.demo_api:app --reload
 ```
+
+Then open `http://127.0.0.1:8000/docs`.
         """
     )
     fastapi_code
@@ -2633,65 +2639,226 @@ uvicorn lecture_api:app --reload
 
 @app.cell
 def _(mo):
-    run_fastapi = mo.ui.button(label="Run FastAPI test client", value=1, kind="success")
-    run_fastapi
-    return (run_fastapi,)
+    _workflow = mo.md(
+        """
+### Live API Workflow
+
+1. Start the API in a terminal:
+
+   ```bash
+   uvicorn src.demo_api:app --reload
+   ```
+
+2. Click **1) Check API status** to verify the server is reachable.  
+3. Edit the JSON payload and click **2) POST /items**.  
+4. Choose an item id and click **3) GET /items/{id}** to compare results.
+        """
+    ).callout(kind="info")
+    _workflow
+    return (_workflow,)
 
 
 @app.cell
-def _(json, mo, optional_import, run_fastapi):
-    if run_fastapi.value == 0:
-        _output = mo.md("Click **Run FastAPI test client** to execute.").callout(
-            kind="neutral"
-        )
+def _(mo):
+    fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
+    fastapi_check = mo.ui.button(label="1) Check API status", kind="neutral")
+    fastapi_payload = mo.ui.text_area(
+        value='{"id": 1, "name": "Notebook", "price": 9.9}',
+        label="POST /items payload (JSON)",
+    )
+    fastapi_post = mo.ui.button(label="2) POST /items", kind="success")
+    fastapi_item_id = mo.ui.text(value="1", label="Item id for GET /items/{id}")
+    fastapi_get = mo.ui.button(label="3) GET /items/{id}", kind="neutral")
+
+    _controls = mo.vstack(
+        [
+            mo.hstack([fastapi_base_url, fastapi_check], widths="equal"),
+            fastapi_payload,
+            mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], widths="equal"),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+
+    _controls
+    return (
+        fastapi_base_url,
+        fastapi_check,
+        fastapi_get,
+        fastapi_item_id,
+        fastapi_payload,
+        fastapi_post,
+    )
+
+
+@app.cell
+def _(fastapi_base_url, fastapi_check, json, mo, url_request):
+    if fastapi_check.value == 0:
+        _output = mo.md(
+            "Click **1) Check API status** after starting `uvicorn src.demo_api:app --reload`."
+        ).callout(kind="neutral")
     else:
-        fastapi = optional_import("fastapi")
-        if not fastapi:
+        _url = fastapi_base_url.value.rstrip("/") + "/openapi.json"
+        _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
+
+        try:
+            with url_request.urlopen(_request, timeout=3) as _response:
+                _status = _response.status
+                _body = _response.read().decode("utf-8", errors="replace")
+        except Exception as exc:
             _output = mo.md(
-                "FastAPI is not installed. Install with `pip install fastapi uvicorn`."
-            ).callout(kind="warn")
+                f"""
+API check failed for `{_url}`.
+
+Error:
+
+```
+{exc}
+```
+                """
+            ).callout(kind="danger")
         else:
-            from fastapi import FastAPI
-            from pydantic import BaseModel as _FastapiBaseModel
+            try:
+                _schema = json.loads(_body)
+            except json.JSONDecodeError:
+                _schema = {}
 
-            app = FastAPI()
+            _paths = sorted(_schema.get("paths", {}).keys())
+            _preview = json.dumps(_paths[:6], indent=2)
+            _title = _schema.get("info", {}).get("title", "unknown")
 
-            class Item(_FastapiBaseModel):
-                id: int
-                name: str
-                price: float
+            _output = mo.md(
+                f"""
+API is running.
 
-            items = {}
+- Status: `{_status}`
+- Title: `{_title}`
+- Docs: `{fastapi_base_url.value.rstrip('/')}/docs`
 
-            @app.post("/items")
-            def create_item(item: Item):
-                items[item.id] = item
-                return item
+Known routes (preview):
 
-            @app.get("/items/{item_id}")
-            def read_item(item_id: int):
-                return items.get(item_id, {"error": "not found"})
+```json
+{_preview}
+```
+                """
+            ).callout(kind="success")
+
+    _output
+    return (_output,)
+
+
+@app.cell
+def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_request):
+    if fastapi_post.value == 0:
+        _output = mo.md(
+            "Edit the payload, then click **2) POST /items**."
+        ).callout(kind="neutral")
+    else:
+        _url = fastapi_base_url.value.rstrip("/") + "/items"
+        try:
+            _payload_obj = json.loads(fastapi_payload.value)
+        except json.JSONDecodeError as exc:
+            _output = mo.md(f"Invalid JSON payload: `{exc}`").callout(kind="danger")
+        else:
+            _data_bytes = json.dumps(_payload_obj).encode("utf-8")
+            _request = url_request.Request(
+                _url,
+                data=_data_bytes,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
 
             try:
-                from fastapi.testclient import TestClient
+                with url_request.urlopen(_request, timeout=5) as _response:
+                    _status = _response.status
+                    _body = _response.read().decode("utf-8", errors="replace")
+            except url_error.HTTPError as exc:
+                _status = exc.code
+                _body = exc.read().decode("utf-8", errors="replace")
             except Exception as exc:
                 _output = mo.md(
-                    f"FastAPI TestClient unavailable: `{exc}`"
-                ).callout(kind="warn")
+                    f"""
+POST request failed for `{_url}`.
+
+Error:
+
+```
+{exc}
+```
+                    """
+                ).callout(kind="danger")
             else:
-                client = TestClient(app)
-                client.post("/items", json={"id": 1, "name": "Notebook", "price": 9.9})
-                _response = client.get("/items/1")
+                try:
+                    _parsed = json.loads(_body)
+                    _preview = json.dumps(_parsed, indent=2)
+                except json.JSONDecodeError:
+                    _preview = _body
 
                 _output = mo.md(
                     f"""
-**TestClient response:**
+`POST /items` returned status `{_status}`.
 
 ```json
-{json.dumps(_response.json(), indent=2)}
+{_preview}
 ```
                     """
-                ).callout(kind="success")
+                ).callout(kind="success" if _status < 400 else "danger")
+
+    _output
+    return (_output,)
+
+
+@app.cell
+def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_request):
+    if fastapi_get.value == 0:
+        _output = mo.md("Click **3) GET /items/{id}** to fetch an item.").callout(
+            kind="neutral"
+        )
+    else:
+        try:
+            _item_id = int(fastapi_item_id.value.strip())
+        except ValueError:
+            _output = mo.md("Item id must be an integer.").callout(kind="danger")
+        else:
+            _url = fastapi_base_url.value.rstrip("/") + f"/items/{_item_id}"
+            _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
+            try:
+                with url_request.urlopen(_request, timeout=5) as _response:
+                    _status = _response.status
+                    _body = _response.read().decode("utf-8", errors="replace")
+            except url_error.HTTPError as exc:
+                _status = exc.code
+                _body = exc.read().decode("utf-8", errors="replace")
+            except Exception as exc:
+                _output = mo.md(
+                    f"""
+GET request failed for `{_url}`.
+
+Error:
+
+```
+{exc}
+```
+                    """
+                ).callout(kind="danger")
+            else:
+                try:
+                    _parsed = json.loads(_body)
+                    _preview = json.dumps(_parsed, indent=2)
+                except json.JSONDecodeError:
+                    _preview = _body
+
+                _output = mo.md(
+                    f"""
+`GET /items/{_item_id}` returned status `{_status}`.
+
+```json
+{_preview}
+```
+                    """
+                ).callout(kind="success" if _status < 400 else "danger")
 
     _output
     return (_output,)
@@ -2718,6 +2885,12 @@ def _(mo):
             "strengths": "Plotly integration, component ecosystem",
             "tradeoffs": "Callback complexity for large apps",
             "use_case": "Interactive analytics",
+        },
+        {
+            "framework": "Streamlit",
+            "strengths": "Very fast Python app prototyping, simple widget model",
+            "tradeoffs": "Less layout/state control for complex multi-page apps",
+            "use_case": "Data apps, dashboards, quick internal tools",
         },
         {
             "framework": "Flask",
@@ -2979,6 +3152,7 @@ def _(mo):
     <li>Apache Arrow: <code>https://arrow.apache.org</code></li>
     <li>Apache Avro: <code>https://avro.apache.org</code></li>
     <li>FastAPI documentation: <code>https://fastapi.tiangolo.com</code></li>
+    <li>Streamlit documentation: <code>https://docs.streamlit.io</code></li>
     <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
     <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
     <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>

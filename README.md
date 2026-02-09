@@ -1,37 +1,68 @@
 # mscids-cip-sw03
 
-A course repo with two Marimo notebooks: a visual demo and a full lecture notebook on data storage, serialization, databases, and APIs.
+Interactive SW03 course materials with Marimo notebooks plus a FastAPI demo service.
 
-## Table of Contents
+<details>
+<summary><strong>Table of Contents (click to expand)</strong></summary>
 
-1. Overview
-2. Notebooks
-3. Installation with Conda
-4. Installation with Pip
-5. Optional Extras
-6. Run Notebooks
+- [Overview](#overview)
+- [Repository Layout](#repository-layout)
+- [Run Matrix](#run-matrix)
+- [Setup](#setup)
+  - [Conda](#conda)
+  - [Pip (venv)](#pip-venv)
+- [Run Notebook Apps](#run-notebook-apps)
+- [Run FastAPI Demo](#run-fastapi-demo)
+- [Troubleshooting](#troubleshooting)
+
+</details>
 
 ## Overview
 
-This repository contains interactive Marimo notebooks for SW03. The lecture notebook is designed for live teaching with demos, controls, and discussion prompts.
+This repo is designed for live teaching and hands-on demos:
 
-## Notebooks
+- `lecture_sw03_content.py`: full lecture notebook (storage, serialization, DuckDB, REST, Pydantic, FastAPI, indexing, charts)
+- `lecture_sw03_demo.py`: compact Marimo demo notebook
+- `src/demo_api.py`: standalone FastAPI app used in the lecture API section
 
-- `marimo_demo.py` — a compact UI/UX demo showing Marimo layouts, reactive elements, and charts.
-- `lecture_sw03.py` — the main lecture notebook covering ACID, serialization, columnar storage, compression, DuckDB, REST, Pydantic, FastAPI, indexing, and charts.
+## Repository Layout
 
-## Installation with Conda
+```text
+.
+├── lecture_sw03_content.py
+├── lecture_sw03_demo.py
+├── src/
+│   ├── __init__.py
+│   └── demo_api.py
+├── env.yaml
+├── requirements.txt
+└── README.md
+```
 
-Uses `env.yaml`.
+## Run Matrix
+
+| Component | Purpose | Command |
+| --- | --- | --- |
+| `lecture_sw03_content.py` | Full lecture notebook in app mode | `marimo run lecture_sw03_content.py` |
+| `lecture_sw03_content.py` | Full lecture notebook in editor mode | `marimo edit lecture_sw03_content.py` |
+| `lecture_sw03_demo.py` | Demo notebook in app mode | `marimo run lecture_sw03_demo.py` |
+| `lecture_sw03_demo.py` | Demo notebook in editor mode | `marimo edit lecture_sw03_demo.py` |
+| `src/demo_api.py` | FastAPI backend for API chapter | `uvicorn src.demo_api:app --reload` |
+
+## Setup
+
+### Conda
+
+Use `env.yaml`:
 
 ```bash
 conda env create -f env.yaml
 conda activate mscids-cip-sw03
 ```
 
-## Installation with Pip
+### Pip (venv)
 
-Uses `requirements.txt`.
+Use `requirements.txt`:
 
 ```bash
 python -m venv .venv
@@ -39,34 +70,37 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Optional Extras
+## Run Notebook Apps
 
-Some sections use optional packages. Install them if you want every demo to run.
-
-```bash
-pip install fastavro requests uvicorn dash flask
-```
-
-## Run Notebooks
-
-Open in the Marimo editor (recommended for live teaching):
+Full lecture notebook:
 
 ```bash
-marimo edit lecture_sw03.py
+marimo edit lecture_sw03_content.py
+marimo run lecture_sw03_content.py
 ```
 
-Run in app mode:
+Compact demo notebook:
 
 ```bash
-marimo run lecture_sw03.py
+marimo edit lecture_sw03_demo.py
+marimo run lecture_sw03_demo.py
 ```
 
-Run the demo notebook:
+## Run FastAPI Demo
+
+From the project root:
 
 ```bash
-marimo edit marimo_demo.py
+uvicorn src.demo_api:app --reload
 ```
 
-```bash
-marimo run marimo_demo.py
-```
+Then open:
+
+- API docs: `http://127.0.0.1:8000/docs`
+- OpenAPI schema: `http://127.0.0.1:8000/openapi.json`
+
+## Troubleshooting
+
+- `Error loading ASGI app`: run from project root and use `uvicorn src.demo_api:app --reload`.
+- Missing package errors: confirm the active environment and reinstall with `pip install -r requirements.txt` (or recreate conda env).
+- Marimo startup warnings: update marimo in your env and re-run.
