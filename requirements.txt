@@ -10,3 +10,5 @@ requests
 uvicorn
 dash
 flask
+streamlit>=1.41,<2
+protobuf>=4.25,<6
