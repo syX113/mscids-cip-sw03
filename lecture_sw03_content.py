@@ -519,7 +519,7 @@ def _(mo):
     <div class="hero-title">Storage, Serialization, APIs & Apps</div>
     <div class="hero-subtitle">
       A hands‑on notebook to demonstrate:
-      race conditions, serialization trade‑offs, columnar analytics, API design, and
+      race conditions, serialization trade‑offs (balancing size/speed/safety), columnar analytics, API design, and
       rapid app prototyping.
     </div>
     <div class="hero-pills">
@@ -584,7 +584,7 @@ def _(mo):
   <div class="focus-grid">
     <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
     <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
-    <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs.</div>
+    <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs (explicit design compromises).</div>
   </div>
 </div>
         """
@@ -705,7 +705,7 @@ def _(mo):
         """
 `Expected counter = workers x iterations per worker`
 
-Enter the **actual value** you observed after a run.  
+Enter the **actual value** observed after a run.  
 If observed < expected, those are lost updates.
         """
     ).callout(kind="info")
@@ -762,7 +762,7 @@ def _(mo):
     _term_note = mo.md(
         """
 **Strategy notes**
-- `no_lock`: plain file writes, race conditions likely
+- `no_lock`: plain file writes, race conditions likely (overlapping unsynchronized updates)
 - `thread_lock`: Python lock in one process
 - `file_lock`: OS file lock around write
 - `sqlite`: transactional database updates (ACID behavior)
@@ -962,9 +962,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
             """
 **How to read the table**
 
-- **No lock**: often fastest, but can be incorrect (lost updates).
-- **File lock**: usually correct, but can be slower (serializes access).
-- **SQLite**: transactional and usually correct; performance can be competitive.
+- **No lock**: often lowest wall-clock runtime, but can be incorrect (lost updates).
+- **File lock**: usually correct, but can be higher latency (serializes access).
+- **SQLite**: transactional and usually correct; runtime can remain competitive.
             """
         ).callout(kind="info")
 
@@ -987,7 +987,7 @@ The file counter uses a **read → modify → write** sequence. Without a lock, 
 3. Worker A writes 1  
 4. Worker B writes 1  ← lost update (A’s increment disappears)
 
-The simulator below shuffles these steps to make the race condition visible.
+The simulator below shuffles these steps to make the race condition visible (non-deterministic interleaving of operations).
         """
     ).callout(kind="neutral")
     _interleave_intro
@@ -1097,7 +1097,7 @@ Without transactions, a crash between **debit** and **credit** can violate this 
 Databases roll back the partial work, so the total remains consistent.
 
 **What this demo highlights:**
-- The invariant you must preserve (total balance)
+- The invariant to preserve (total balance)
 - The failure point between steps (crash after debit)
 - The commit/rollback boundary that restores consistency
 - Atomicity is separate from isolation (we are not modeling concurrency here)
@@ -1362,7 +1362,7 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — Atomicity & Concurrency</h3>
   <details>
-    <summary><strong>Q1:</strong> If you only had files (no database), how could you make a transfer all‑or‑nothing?</summary>
+    <summary><strong>Q1:</strong> If only files were available (no database), how can a transfer be made all‑or‑nothing?</summary>
     <p><strong>Answer:</strong> Write a small log entry first (write‑ahead log, or WAL), or write to a temp file and rename it (an atomic rename).
     On restart, replay or roll back the log.</p>
   </details>
@@ -1371,8 +1371,8 @@ def _(mo):
     <p><strong>Answer:</strong> The total balance should never change. Build checks/tests that verify this after crashes and retries (invariant checks).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> Would you rather stop on error or allow temporary mismatch?</summary>
-    <p><strong>Answer:</strong> Finance usually prefers fail‑fast; analytics may allow temporary inconsistency and repair later (eventual consistency).
+    <summary><strong>Q3:</strong> Should a system stop on error or allow temporary mismatch?</summary>
+    <p><strong>Answer:</strong> Finance usually prefers fail‑fast (abort immediately on error); analytics may allow temporary inconsistency and repair later (eventual consistency: convergence to a correct state after delay).
     Choose based on the cost of wrong data vs. downtime.</p>
   </details>
 </div>
@@ -1406,8 +1406,8 @@ def _(mo):
         """
 ### Bridge to Next Chapter
 
-You just saw a **correctness** problem: many writers can break data if updates are not coordinated.
-Now we switch to a **packaging** problem: once data is correct, what format should we store/send it in?
+The previous section showed a **correctness** problem: many writers can break data if updates are not coordinated.
+Now we switch to a **data representation** problem (serialization format choice): once data is correct, which format should be used to store/send it?
 
 Simple idea:
 
@@ -1435,10 +1435,10 @@ def _(mo):
         """
 ### Chapter 2 Introduction
 
-> **Key Question:** Which format gives the best trade-off for your workload?
+> **Key Question:** Which format gives the best trade-off for the workload (actual data + query pattern)?
 
 Serialization is packaging data for storage or transfer.
-Different packages have different trade-offs:
+Different packages have different trade-offs (explicit compromises between competing goals):
 
 - readable vs compact
 - Python-specific vs cross-language
@@ -1474,7 +1474,7 @@ interoperability, type fidelity, schema evolution, and safety.
 - **Type fidelity**: do types round-trip cleanly?  
 - **Safety**: Pickle can execute arbitrary code
 
-A simple performance lens:
+A simple performance model (quantitative summary):
 
 $$
 \\text{Throughput} = \\frac{\\text{bytes written}}{\\text{write time}}
@@ -1487,7 +1487,7 @@ Where:
 - $\\text{write time}$: serialization time  
 - $\\text{Latency}$: total round-trip time (write + read)
 
-**Format cheat sheet:**  
+**Format quick reference:**  
 - **JSON/CSV**: human‑readable, row‑oriented  
 - **Avro**: row‑oriented, schema‑driven events  
 - **Arrow/Feather**: columnar interchange (fast analytics)  
@@ -1506,7 +1506,7 @@ Where:
     <div class="flow-arrow">&rarr;</div>
     <div class="flow-box">Python object</div>
   </div>
-  <div class="flow-note">Format choice drives speed, size, and safety.</div>
+  <div class="flow-note">Format choice determines runtime, file size, interoperability, and safety risk.</div>
 </div>
         """
     )
@@ -1570,7 +1570,7 @@ def _(format_priority, format_use_case, mo):
     choice = recommendations.get(key, "JSON")
     _text = mo.md(
         f"Recommended starting point: **{choice}**\n\n"
-        "Treat this as a default, then benchmark on your real workload."
+        "Treat this as a default, then benchmark on the real workload (actual data + query pattern)."
     ).callout(kind="info")
     _text
     return (_text,)
@@ -1847,7 +1847,7 @@ def _(
         ).callout(kind="info")
         warning = mo.md(
             """
-**Security note:** Pickle is not safe for untrusted data. Only load Pickle files you control.
+**Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources.
             """
         ).callout(kind="warn")
 
@@ -1915,7 +1915,7 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — Serialization Choices</h3>
   <details>
-    <summary><strong>Q1:</strong> How do you pick a format like JSON, Avro, or Parquet?</summary>
+    <summary><strong>Q1:</strong> How is a format selected among JSON, Avro, or Parquet?</summary>
     <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
     Avro for event streams with changing schemas (schema evolution),
     Parquet for analytics scans and compression (columnar).</p>
@@ -1925,8 +1925,8 @@ def _(mo):
     <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> Where do you measure size vs. speed trade‑offs?</summary>
-    <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline, then compare before/after.</p>
+    <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
+    <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline (test environment with production-like traffic), then compare before/after.</p>
   </details>
 </div>
         """
@@ -1942,8 +1942,8 @@ def _(mo):
 <div class="section-card">
   <h3>Chapter 2 Conclusion</h3>
   <ul>
-    <li>Format choice is a trade-off between speed, size, interoperability, and safety.</li>
-    <li>Use benchmarks from your workload to compare latency and storage cost.</li>
+    <li>Format choice is a trade-off (explicit compromise) between speed, size, interoperability, and safety.</li>
+    <li>Use benchmarks from a representative workload (actual data + query pattern) to compare latency and storage cost.</li>
     <li>Pickle preserves Python types but should not be used for untrusted data.</li>
   </ul>
 </div>
@@ -1961,8 +1961,8 @@ def _(mo):
 
 Now that we know how to serialize data, the next question is **how to lay it out** on disk.
 
-- Row layout: good when you read one full record at a time.
-- Column layout: good when you scan a few columns across many rows.
+- Row layout: good when queries read one full record at a time.
+- Column layout: good when queries scan a few columns across many rows.
 
 Rule of thumb:
 
@@ -1988,12 +1988,12 @@ def _(mo):
         """
 ### Chapter 3 Introduction
 
-> **Key Question:** Are you paying to read data your query does not need?
+> **Key Question:** Is read work spent on data that queries do not need?
 
-Storage layout decides what you pay for when reading:
+Storage layout determines read cost:
 
-- Row store: pay to read whole rows
-- Column store: pay mostly for selected columns
+- Row store: incurs read cost (I/O + CPU) for whole rows
+- Column store: incurs read cost mainly for selected columns
 
 Quick mental model:
 
@@ -2001,7 +2001,7 @@ $$
 \\text{cost ratio} \\approx \\frac{C}{k}
 $$
 
-If your query needs only $k$ of $C$ columns, columnar can reduce read work a lot.
+If a query needs only $k$ of $C$ columns, columnar layout can reduce read work substantially.
         """
     ).callout(kind="neutral")
     _chapter3_guide
@@ -2014,10 +2014,10 @@ def _(mo):
         """
 ### Row Store vs Column Store
 
-**Row stores** keep full records together. Great for OLTP and point lookups.  
+**Row stores** keep full records together. Great for OLTP (Online Transaction Processing) and point lookups.  
 **Column stores** group values by column. Great for scans, aggregates, and compression.
 
-If you scan only *k* columns out of *C*, the I/O pattern changes:
+If a query scans only *k* columns out of *C*, the I/O pattern changes:
 
 $$
 IO_{row} \\approx N \\times C
@@ -2030,9 +2030,9 @@ Where:
 - $C$: total columns in the dataset  
 - $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
 
-Below we simulate column selection and filtering to reveal the shape of the speed gap.
+Below we simulate column selection and filtering to reveal the runtime difference (execution-time gap).
 
-**Format lens:** Avro is a row‑based, schema‑driven file format (great for event logs).
+**Format perspective:** Avro is a row‑based, schema‑driven file format (great for event logs).
 Parquet is a column‑based file format (great for analytics and scans).
 Arrow is columnar in‑memory (fast interchange between systems).
         """
@@ -2213,15 +2213,15 @@ def _(mo):
   <h3>Discussion — Row vs Column Storage</h3>
   <details>
     <summary><strong>Q1:</strong> When is a row store a better choice?</summary>
-    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads).</p>
+    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads = Online Transaction Processing).</p>
   </details>
   <details>
     <summary><strong>Q2:</strong> How does reading only needed columns help?</summary>
-    <p><strong>Answer:</strong> You skip unused columns, which reduces I/O and speeds up scans. This is called projection pushdown.</p>
+    <p><strong>Answer:</strong> Unused columns are skipped, which reduces I/O and speeds up scans. This is called projection pushdown (applying column selection early in query execution).</p>
   </details>
   <details>
     <summary><strong>Q3:</strong> When can compression make things slower?</summary>
-    <p><strong>Answer:</strong> If data is small or the CPU is the bottleneck, decompression overhead can outweigh I/O savings (CPU‑bound).</p>
+    <p><strong>Answer:</strong> If data is small or CPU is the dominant limiting resource (bottleneck), decompression overhead can outweigh I/O savings (CPU‑bound).</p>
   </details>
 </div>
         """
@@ -2239,7 +2239,7 @@ def _(mo):
   <ul>
     <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
     <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
-    <li>Compression gains depend on whether your bottleneck is disk I/O or CPU.</li>
+    <li>Compression gains depend on which resource is the dominant limiting factor (bottleneck): disk I/O or CPU.</li>
   </ul>
 </div>
         """
@@ -2279,14 +2279,14 @@ def _(mo):
         """
 ### Chapter 4 Introduction
 
-> **Key Question:** Will compression reduce your total query time, not just file size?
+> **Key Question:** Will compression reduce total query time, not only file size?
 
 Compression is not just about saving disk space.
 It usually also reduces how much data must travel from disk to CPU.
 
 Two quick checks:
 
-- Is your workload I/O-bound? Compression helps more.
+- Is the workload I/O-bound (limited by data transfer from storage)? Compression helps more.
 - Is CPU already saturated? Heavy codecs can hurt latency.
 
 Quick timing model:
@@ -2336,7 +2336,7 @@ def _(mo):
     budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio")
     budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day")
     _note = mo.md(
-        "Set your estimated compression ratio and scan frequency to quantify daily I/O savings."
+        "Set the estimated compression ratio and scan frequency to quantify daily I/O savings (reduced bytes read/written)."
     ).callout(kind="info")
     _panel = mo.vstack(
         [
@@ -2796,7 +2796,7 @@ def _(
         _table = mo.ui.table(_results, label="Compression ratios (baseline: JSON size)")
         _note = mo.md(
             """
-**Discussion:** Columnar + compression reduces IO, especially for analytics workloads.
+**Discussion:** Columnar + compression reduces I/O, especially for analytics workloads (scan-heavy query patterns).
             """
         ).callout(kind="info")
 
@@ -2854,14 +2854,14 @@ def _(mo):
         """
 ### Bridge to Next Chapter
 
-Smaller files help, but analytics speed is not only about file size.
+Smaller files help, but analytics runtime is not only about file size.
 We also need a query engine that avoids unnecessary work.
 
 $$
 \\text{query time} \\approx \\text{I/O time} + \\text{compute time}
 $$
 
-DuckDB helps reduce both parts for many analytical workloads.
+DuckDB helps reduce both parts for many analytical workloads (query/data access patterns).
         """
     ).callout(kind="neutral")
     _transition
@@ -2881,10 +2881,10 @@ def _(mo):
         """
 ### Chapter 5 Introduction
 
-> **Key Question:** How much work can the engine skip before processing?
+> **Key Question:** How much work can the engine skip (prune: avoid reading/processing) before processing?
 
-DuckDB gives you SQL analytics without running a database server.
-It helps because query planning decides what data can be skipped early.
+DuckDB provides SQL analytics without running a database server.
+It helps because query planning decides what data can be skipped early (predicate/projection pruning).
 
 Main idea:
 
@@ -2908,7 +2908,7 @@ def _(mo):
 DuckDB is an **embedded analytical database**. It can scan CSV/Parquet files with SQL,
 perform vectorized execution, and apply *predicate + projection pushdown*.
 
-Why it often beats “pure files” for analytics:
+Why it often outperforms direct plain-file scans for analytics (lower query runtime):
 
 - Query optimizer + execution engine  
 - Columnar reads and filter pushdown  
@@ -3310,7 +3310,7 @@ def _(mo):
 def _(mo):
     _schema_expl = mo.md(
         """
-DuckDB can **infer** types when reading files (schema‑on‑read), or you can **enforce** types
+DuckDB can **infer** types when reading files (schema‑on‑read), or **enforce** types
 when loading data (schema‑on‑write). With messy data, these choices change:
 
 - the inferred column types  
@@ -3598,16 +3598,16 @@ def _(mo):
 <div class="section-card">
   <h3>Discussion — DuckDB & Schema</h3>
   <details>
-    <summary><strong>Q1:</strong> When would you load data into DuckDB instead of scanning files each time?</summary>
-    <p><strong>Answer:</strong> If you run the same queries or joins repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization).</p>
+    <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
+    <p><strong>Answer:</strong> If the same queries or joins run repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization = storing structured intermediate data for reuse).</p>
   </details>
   <details>
-    <summary><strong>Q2:</strong> What risk do you take with schema‑on‑read?</summary>
+    <summary><strong>Q2:</strong> What risk appears with schema‑on‑read?</summary>
     <p><strong>Answer:</strong> Bad types can slip through; errors show up later as `NULL`s or wrong totals (schema‑on‑read).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> How would you detect data drift over time?</summary>
-    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift).</p>
+    <summary><strong>Q3:</strong> How can data drift be detected over time?</summary>
+    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
   </details>
 </div>
         """
@@ -3625,7 +3625,7 @@ def _(mo):
   <ul>
     <li>DuckDB gives SQL analytics directly on files with strong performance for scans and aggregates.</li>
     <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
-    <li>Track null rates and inferred types over time to detect data quality drift.</li>
+    <li>Track null rates and inferred types over time to detect data quality drift (distribution/type changes in incoming data).</li>
   </ul>
 </div>
         """
@@ -3643,9 +3643,9 @@ def _(mo):
 So far, we worked locally with files and SQL.
 Now we expose data to other programs through APIs.
 
-Think of an API like a waiter:
-- request = order
-- response = delivered dish
+API exchange model:
+- request = client-sent input message
+- response = server-returned output message
 
 $$
 \\text{API latency} = \\text{network} + \\text{server processing}
@@ -3672,7 +3672,7 @@ def _(mo):
 > **Key Question:** Did the client and server agree on the same contract?
 
 An API is a contract between systems.
-Most API bugs are contract bugs: wrong path, wrong payload shape, wrong status handling.
+Most API bugs are contract mismatches (interface mismatches): wrong path, wrong payload shape, or wrong status handling.
 
 Keep this mapping in mind:
 
@@ -3770,7 +3770,7 @@ def _(http_code, http_method_hint, mo):
     retry_note = (
         "Safe retries are easiest for idempotent methods like GET/PUT/DELETE."
         if http_method_hint.value in {"GET", "PUT", "DELETE"}
-        else "POST may create duplicates unless you design idempotency keys."
+        else "POST may create duplicates unless idempotency keys are used."
     )
     _msg = mo.md(
         f"Status **{code}** belongs to **{family}**.\n\n{retry_note}"
@@ -3964,7 +3964,7 @@ def _(mo):
     <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server‑side validation).</p>
   </details>
   <details>
-    <summary><strong>Q3:</strong> How do you evolve an API without breaking clients?</summary>
+    <summary><strong>Q3:</strong> How can an API evolve without breaking clients?</summary>
     <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
   </details>
 </div>
@@ -3999,7 +3999,7 @@ def _(mo):
 ### Bridge to Next Chapter
 
 APIs fail when input data shape is wrong.
-Pydantic is our gatekeeper: it checks required fields and types before logic runs.
+Pydantic acts as an input-validation checkpoint: required fields and types are checked before business logic runs.
 
 $$
 \\text{valid request} \\Rightarrow \\text{schema checks pass}
@@ -4023,12 +4023,12 @@ def _(mo):
         """
 ### Chapter 7 Introduction
 
-> **Key Question:** Which inputs are allowed into your trusted system boundary?
+> **Key Question:** Which inputs are allowed into the trusted system boundary?
 
-Validation is your system's front door policy.
-If you validate early, downstream code is simpler and safer.
+Validation is the system's input acceptance policy (formal schema enforcement rules).
+With early validation, downstream code becomes simpler and safer.
 
-Think of it as:
+Formal model:
 
 $$
 \\text{trusted internal data} = \\text{untrusted input} + \\text{validation rules}
@@ -4584,7 +4584,7 @@ def _(mo):
 ### Bridge to Next Chapter
 
 Backend answers are useful, but users still need a clear interface.
-Now we compare frontend options and their trade-offs.
+Now we compare frontend options and their trade-offs (explicit compromises between speed, control, and complexity).
 
 $$
 \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
@@ -4668,7 +4668,7 @@ def _(mo):
         """
 ### Choosing a Frontend Stack
 
-Think in terms of trade‑offs: speed vs. control, Python‑native vs. JS ecosystems, and how far you need to scale.
+Think in terms of trade‑offs (explicit engineering compromises): speed vs. control, Python‑native vs. JS ecosystems, and expected scale.
 
 A simple framing:
 
@@ -4694,7 +4694,7 @@ def _(mo):
     fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength")
     _note = mo.md(
         """
-Higher scores are teaching heuristics only. Validate with your team's real constraints.
+Higher scores are teaching heuristics only. Validate against real team constraints.
 
 $$
 \\text{fit} = w_s s + w_c c + w_j j
@@ -5047,9 +5047,9 @@ def _(
 def _(mo):
     _transition = mo.md(
         """
-### Wrap-up in Easy Words
+### Wrap-up
 
-You moved through one full data product path:
+The notebook covered one full data-product workflow sequence (ordered implementation stages):
 
 1. Keep writes correct under concurrency
 2. Choose efficient serialization formats
