@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.19.8"
-app = marimo.App()
+app = marimo.App(width="medium")
 
 
 @app.cell
@@ -101,6 +101,8 @@ def _(mo):
             --accent-2: #14b8a6;
             --accent-3: #f59e0b;
             --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            --content-width: min(80vw, 1150px);
+            --content-width-medium: min(80vw, 1150px);
           }
 
           body {
@@ -123,6 +125,10 @@ def _(mo):
 
           h1, h2, h3 {
             color: var(--ink);
+          }
+
+          p {
+            line-height: 1.6;
           }
 
           h2 {
@@ -160,6 +166,63 @@ def _(mo):
             padding: 12px 14px;
           }
 
+          .mo-md strong {
+            background: linear-gradient(180deg, rgba(245, 158, 11, 0.16), rgba(245, 158, 11, 0.22));
+            border-radius: 6px;
+            padding: 0 4px;
+          }
+
+          .mo-md blockquote {
+            margin: 0.8rem 0;
+            padding: 10px 14px;
+            border-left: 4px solid rgba(47, 111, 237, 0.6);
+            background: rgba(47, 111, 237, 0.08);
+            border-radius: 10px;
+            color: var(--ink-2);
+          }
+
+          .mo-md mjx-container[display="true"] {
+            display: block;
+            margin: 0.85rem 0;
+            padding: 10px 14px;
+            background: linear-gradient(
+              90deg,
+              rgba(47, 111, 237, 0.09),
+              rgba(20, 184, 166, 0.07)
+            );
+            border: 1px solid rgba(47, 111, 237, 0.24);
+            border-radius: 12px;
+            overflow-x: auto;
+          }
+
+          .key-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(47, 111, 237, 0.28);
+            background: rgba(47, 111, 237, 0.14);
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+          }
+
+          .focus-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+          }
+
+          .focus-item {
+            border: 1px solid rgba(11, 18, 32, 0.12);
+            background: rgba(255, 255, 255, 0.75);
+            border-radius: 12px;
+            padding: 10px 12px;
+          }
+
           table {
             width: 100%;
             border-collapse: collapse;
@@ -172,6 +235,10 @@ def _(mo):
           th, td {
             padding: 10px 12px;
             border-bottom: 1px solid rgba(11, 18, 32, 0.08);
+          }
+
+          tbody tr:nth-child(even) td {
+            background: rgba(248, 250, 252, 0.7);
           }
 
           thead th {
@@ -509,9 +576,53 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    _legend = mo.md(
+        """
+<div class="section-card">
+  <h3>How to Read This Notebook</h3>
+  <p><span class="key-chip">Key idea</span> appears where a core concept is introduced.</p>
+  <div class="focus-grid">
+    <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
+    <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
+    <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs.</div>
+  </div>
+</div>
+        """
+    )
+    _legend
+    return (_legend,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 1. File Locks vs Databases (ACID)")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter1_guide = mo.md(
+        """
+### Chapter 1 Introduction
+
+> **Key Question:** When many users update shared data at the same time, do we preserve correctness?
+
+- **Atomicity:** all-or-nothing updates
+- **Isolation:** one write should not corrupt another
+- **Durability:** committed data survives crashes
+
+Practical signal to watch:
+
+$$
+\\text{lost update rate} = \\frac{E - A}{E}
+$$
+
+Higher values indicate that concurrent writes are interfering.
+        """
+    ).callout(kind="neutral")
+    _chapter1_guide
+    return (_chapter1_guide,)
 
 
 @app.cell
@@ -557,6 +668,86 @@ Databases coordinate concurrency, ensure isolation, and provide crash recovery.
 
 @app.cell
 def _(mo):
+    _lost_update_diagram = mo.md(
+        """
+<div class="section-card flow-card">
+  <h3>Visual: How a Lost Update Happens</h3>
+  <div class="flow-diagram">
+    <div class="flow-box">Worker A reads counter = 41</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Worker B reads counter = 41</div>
+  </div>
+  <div class="flow-diagram">
+    <div class="flow-box">A writes 42</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">B also writes 42</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Expected 43, observed 42</div>
+  </div>
+  <div class="flow-note">Both workers used stale state. One increment is overwritten and effectively lost.</div>
+</div>
+        """
+    )
+    _lost_update_diagram
+    return (_lost_update_diagram,)
+
+
+@app.cell
+def _(mo):
+    lu_workers = mo.ui.slider(1, 20, value=5, label="Workers (concurrent updaters)")
+    lu_iterations = mo.ui.slider(
+        10, 2000, step=10, value=400, label="Iterations per worker"
+    )
+    lu_observed = mo.ui.number(
+        value=1800, label="Observed final counter (actual result)"
+    )
+    _lu_note = mo.md(
+        """
+`Expected counter = workers x iterations per worker`
+
+Enter the **actual value** you observed after a run.  
+If observed < expected, those are lost updates.
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Lost Update Sanity Check"),
+            mo.hstack([lu_workers, lu_iterations], widths="equal"),
+            lu_observed,
+            _lu_note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return lu_iterations, lu_observed, lu_workers
+
+
+@app.cell
+def _(lu_iterations, lu_observed, lu_workers, mo):
+    _expected_value = lu_workers.value * lu_iterations.value
+    _observed_value = int(lu_observed.value or 0)
+    _observed_value = max(0, min(_observed_value, _expected_value))
+    _lost_value = _expected_value - _observed_value
+    _lost_rate = (_lost_value / _expected_value) if _expected_value else 0.0
+    _summary = mo.ui.table(
+        [
+            {"metric": "expected", "value": _expected_value},
+            {"metric": "observed", "value": _observed_value},
+            {"metric": "lost updates", "value": _lost_value},
+            {"metric": "lost update rate", "value": round(_lost_rate * 100, 2)},
+        ],
+        label="Consistency check",
+    )
+    _interpretation = mo.md(
+        "High lost-update rate means writes are racing. Add locking or transactional updates."
+    ).callout(kind="info" if _lost_value > 0 else "success")
+    _panel = mo.vstack([_summary, _interpretation], gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
+def _(mo):
     strategies = mo.ui.multiselect(
         options=["no_lock", "thread_lock", "file_lock", "sqlite"],
         value=["no_lock", "file_lock", "sqlite"],
@@ -564,8 +755,21 @@ def _(mo):
     )
     workers = mo.ui.slider(2, 12, value=4, label="Concurrent workers")
     iterations = mo.ui.slider(50, 2000, step=50, value=300, label="Increments per worker")
-    jitter = mo.ui.slider(0, 5, value=1, step=1, label="Artificial jitter (ms)")
+    jitter = mo.ui.slider(
+        0, 5, value=1, step=1, label="Artificial jitter (ms) per update"
+    )
     run_race = mo.ui.button(label="Re-run counter experiment", value=1, kind="success")
+    _term_note = mo.md(
+        """
+**Strategy notes**
+- `no_lock`: plain file writes, race conditions likely
+- `thread_lock`: Python lock in one process
+- `file_lock`: OS file lock around write
+- `sqlite`: transactional database updates (ACID behavior)
+
+**Jitter (ms)** adds delay to each update, which increases overlap between workers.
+        """
+    ).callout(kind="info")
 
     _controls = mo.vstack(
         [
@@ -574,6 +778,7 @@ def _(mo):
             jitter,
             strategies,
             run_race,
+            _term_note,
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -674,7 +879,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
             "Click **Run counter experiment** to simulate concurrent writes."
         ).callout(kind="neutral")
     else:
-        expected = workers.value * iterations.value
+        _expected_counter = workers.value * iterations.value
         jitter_s = jitter.value / 1000
 
         race_rows = []
@@ -691,9 +896,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                 race_rows.append(
                     {
                         "strategy": "file (no lock)",
-                        "expected": expected,
+                        "expected": _expected_counter,
                         "actual": value,
-                        "lost updates": expected - value,
+                        "lost updates": _expected_counter - value,
                         "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
@@ -709,9 +914,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                 race_rows.append(
                     {
                         "strategy": "file (thread lock)",
-                        "expected": expected,
+                        "expected": _expected_counter,
                         "actual": value,
-                        "lost updates": expected - value,
+                        "lost updates": _expected_counter - value,
                         "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
@@ -729,9 +934,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                         "strategy": "file (fcntl lock)"
                         if supported
                         else "file (lock unsupported)",
-                        "expected": expected,
+                        "expected": _expected_counter,
                         "actual": value,
-                        "lost updates": expected - value,
+                        "lost updates": _expected_counter - value,
                         "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
@@ -745,9 +950,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                 race_rows.append(
                     {
                         "strategy": "sqlite transaction",
-                        "expected": expected,
+                        "expected": _expected_counter,
                         "actual": value,
-                        "lost updates": expected - value,
+                        "lost updates": _expected_counter - value,
                         "duration (ms)": round(_duration * 1000, 2),
                     }
                 )
@@ -757,9 +962,9 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
             """
 **How to read the table**
 
-- **No lock**: fastest but incorrect (lost updates).
-- **File lock**: correct but slower (serializes access).
-- **SQLite**: correct *and* often fast because the database manages concurrency.
+- **No lock**: often fastest, but can be incorrect (lost updates).
+- **File lock**: usually correct, but can be slower (serializes access).
+- **SQLite**: transactional and usually correct; performance can be competitive.
             """
         ).callout(kind="info")
 
@@ -1198,7 +1403,20 @@ def _(mo):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "Next, we shift from **consistency under concurrency** to **how data is represented and moved**: serialization formats and their trade-offs."
+        """
+### Bridge to Next Chapter
+
+You just saw a **correctness** problem: many writers can break data if updates are not coordinated.
+Now we switch to a **packaging** problem: once data is correct, what format should we store/send it in?
+
+Simple idea:
+
+$$
+\\text{transfer time} \\approx \\frac{\\text{bytes}}{\\text{throughput}}
+$$
+
+So better formats can reduce waiting by shrinking bytes or speeding parsing.
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -1209,6 +1427,32 @@ def _(mo):
     _section = mo.md("## 2. Serialization & Deserialization Benchmarks")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter2_guide = mo.md(
+        """
+### Chapter 2 Introduction
+
+> **Key Question:** Which format gives the best trade-off for your workload?
+
+Serialization is packaging data for storage or transfer.
+Different packages have different trade-offs:
+
+- readable vs compact
+- Python-specific vs cross-language
+- fast writes vs fast reads
+
+Rule of thumb:
+
+$$
+\\text{end-to-end cost} \\approx \\text{write time} + \\text{read time} + \\text{bytes moved cost}
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter2_guide
+    return (_chapter2_guide,)
 
 
 @app.cell
@@ -1269,6 +1513,67 @@ Where:
     _panel = mo.vstack([_explanation, _flow], gap=0.6)
     _panel
     return (_panel,)
+
+
+@app.cell
+def _(mo):
+    format_use_case = mo.ui.dropdown(
+        options=[
+            "Public API payload",
+            "Internal Python checkpoint",
+            "Analytics table",
+            "Streaming event log",
+        ],
+        value="Public API payload",
+        label="Use case",
+    )
+    format_priority = mo.ui.dropdown(
+        options=["Interoperability", "Speed", "Small size", "Safety"],
+        value="Interoperability",
+        label="Priority",
+    )
+    _note = mo.md(
+        """
+Pick a context and goal, then compare the recommendation with the benchmark table below.
+This is a starting heuristic, not a final rule.
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [mo.md("### Mini-lab: Format Decision Assistant"), format_use_case, format_priority, _note],
+        gap=0.5,
+    ).callout(kind="neutral")
+    _panel
+    return format_priority, format_use_case
+
+
+@app.cell
+def _(format_priority, format_use_case, mo):
+    key = (format_use_case.value, format_priority.value)
+    recommendations = {
+        ("Public API payload", "Interoperability"): "JSON",
+        ("Public API payload", "Speed"): "JSON (or MessagePack if both sides support it)",
+        ("Public API payload", "Small size"): "Compressed JSON or binary protocol",
+        ("Public API payload", "Safety"): "JSON with strict schema validation",
+        ("Internal Python checkpoint", "Interoperability"): "Parquet/Arrow",
+        ("Internal Python checkpoint", "Speed"): "Pickle (trusted data only)",
+        ("Internal Python checkpoint", "Small size"): "Parquet or compressed pickle",
+        ("Internal Python checkpoint", "Safety"): "Parquet/JSON, avoid untrusted pickle",
+        ("Analytics table", "Interoperability"): "Parquet",
+        ("Analytics table", "Speed"): "Parquet or Arrow",
+        ("Analytics table", "Small size"): "Parquet + zstd/snappy",
+        ("Analytics table", "Safety"): "Parquet with schema checks",
+        ("Streaming event log", "Interoperability"): "Avro/JSON",
+        ("Streaming event log", "Speed"): "Avro",
+        ("Streaming event log", "Small size"): "Avro with compression",
+        ("Streaming event log", "Safety"): "Avro + schema registry",
+    }
+    choice = recommendations.get(key, "JSON")
+    _text = mo.md(
+        f"Recommended starting point: **{choice}**\n\n"
+        "Treat this as a default, then benchmark on your real workload."
+    ).callout(kind="info")
+    _text
+    return (_text,)
 
 
 @app.cell
@@ -1651,7 +1956,20 @@ def _(mo):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "With formats in mind, the next question is **layout**: row vs column storage and why columnar layouts power analytics."
+        """
+### Bridge to Next Chapter
+
+Now that we know how to serialize data, the next question is **how to lay it out** on disk.
+
+- Row layout: good when you read one full record at a time.
+- Column layout: good when you scan a few columns across many rows.
+
+Rule of thumb:
+
+$$
+\\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -1662,6 +1980,32 @@ def _(mo):
     _section = mo.md("## 3. Column-Based vs Row-Based Storage")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter3_guide = mo.md(
+        """
+### Chapter 3 Introduction
+
+> **Key Question:** Are you paying to read data your query does not need?
+
+Storage layout decides what you pay for when reading:
+
+- Row store: pay to read whole rows
+- Column store: pay mostly for selected columns
+
+Quick mental model:
+
+$$
+\\text{cost ratio} \\approx \\frac{C}{k}
+$$
+
+If your query needs only $k$ of $C$ columns, columnar can reduce read work a lot.
+        """
+    ).callout(kind="neutral")
+    _chapter3_guide
+    return (_chapter3_guide,)
 
 
 @app.cell
@@ -1695,6 +2039,86 @@ Arrow is columnar in‑memory (fast interchange between systems).
     ).callout(kind="neutral")
     _explanation
     return (_explanation,)
+
+
+@app.cell
+def _(mo):
+    _layout_diagram = mo.md(
+        """
+<div class="section-card flow-card">
+  <h3>Visual: Same Table, Two Physical Layouts</h3>
+  <div class="grid-2">
+    <div>
+      <h4>Row layout (record-oriented)</h4>
+      <pre><code>row1: [id, city, sales, qty]
+row2: [id, city, sales, qty]
+row3: [id, city, sales, qty]</code></pre>
+      <div class="flow-note">Good when each request needs most fields of one row.</div>
+    </div>
+    <div>
+      <h4>Column layout (analytics-oriented)</h4>
+      <pre><code>id:   [id1, id2, id3, ...]
+city: [c1,  c2,  c3,  ...]
+sales:[s1,  s2,  s3,  ...]
+qty:  [q1,  q2,  q3,  ...]</code></pre>
+      <div class="flow-note">Good when queries touch a few columns across many rows.</div>
+    </div>
+  </div>
+</div>
+        """
+    )
+    _layout_diagram
+    return (_layout_diagram,)
+
+
+@app.cell
+def _(mo):
+    io_total_cols = mo.ui.slider(2, 30, value=12, label="Total columns (C)")
+    io_needed_cols = mo.ui.slider(1, 12, value=3, label="Columns needed (k)")
+    io_rows = mo.ui.slider(1_000, 1_000_000, step=1_000, value=100_000, label="Rows (N)")
+    _io_note = mo.md(
+        """
+I/O = **Input/Output**, meaning data moved between storage and compute.
+
+This estimator uses simple "work units" (rows x columns touched) to explain why columnar
+layout helps when queries use only a few columns.
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: I/O (Input/Output) Work Estimator"),
+            mo.hstack([io_total_cols, io_needed_cols], widths="equal"),
+            io_rows,
+            _io_note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return io_needed_cols, io_rows, io_total_cols
+
+
+@app.cell
+def _(io_needed_cols, io_rows, io_total_cols, mo):
+    c = io_total_cols.value
+    k = min(io_needed_cols.value, c)
+    n = io_rows.value
+    io_row = n * c
+    io_col = n * k
+    _row_col_ratio = io_row / max(1, io_col)
+    _table = mo.ui.table(
+        [
+            {"metric": "row-store work units", "value": io_row},
+            {"metric": "column-store work units", "value": io_col},
+            {"metric": "row/column ratio", "value": round(_row_col_ratio, 2)},
+        ],
+        label="Estimated read effort",
+    )
+    _note = mo.md(
+        "As k gets much smaller than C, columnar advantage increases."
+    ).callout(kind="info")
+    _panel = mo.vstack([_table, _note], gap=0.6)
+    _panel
+    return (_panel,)
 
 
 @app.cell
@@ -1827,7 +2251,16 @@ def _(mo):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "Columnar layouts pair naturally with compression. Next we quantify the size wins."
+        """
+### Bridge to Next Chapter
+
+Columnar data puts similar values together, and similar values are easier to compress.
+Next we measure how much size reduction we can actually get.
+
+$$
+\\text{savings} = 1 - \\frac{\\text{compressed size}}{\\text{original size}}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -1838,6 +2271,33 @@ def _(mo):
     _section = mo.md("## 4. Compression & Encoding (Parquet, Gzip)")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter4_guide = mo.md(
+        """
+### Chapter 4 Introduction
+
+> **Key Question:** Will compression reduce your total query time, not just file size?
+
+Compression is not just about saving disk space.
+It usually also reduces how much data must travel from disk to CPU.
+
+Two quick checks:
+
+- Is your workload I/O-bound? Compression helps more.
+- Is CPU already saturated? Heavy codecs can hurt latency.
+
+Quick timing model:
+
+$$
+T_{total} \\approx T_{io} + T_{decompress} + T_{compute}
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter4_guide
+    return (_chapter4_guide,)
 
 
 @app.cell
@@ -1868,6 +2328,357 @@ We compare JSON/CSV to gzip and Parquet with different codecs.
     ).callout(kind="neutral")
     _explanation
     return (_explanation,)
+
+
+@app.cell
+def _(mo):
+    budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)")
+    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio")
+    budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day")
+    _note = mo.md(
+        "Set your estimated compression ratio and scan frequency to quantify daily I/O savings."
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Compression Cost Impact"),
+            mo.hstack([budget_size_gb, budget_ratio], widths="equal"),
+            budget_scans_day,
+            _note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return budget_ratio, budget_scans_day, budget_size_gb
+
+
+@app.cell
+def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
+    raw_gb = budget_size_gb.value
+    _compression_ratio = budget_ratio.value
+    comp_gb = raw_gb * _compression_ratio
+    saved_gb = raw_gb - comp_gb
+    daily_io_saved = saved_gb * budget_scans_day.value
+    _table = mo.ui.table(
+        [
+            {"metric": "compressed size (GB)", "value": round(comp_gb, 2)},
+            {"metric": "saved size per scan (GB)", "value": round(saved_gb, 2)},
+            {"metric": "daily I/O saved (GB)", "value": round(daily_io_saved, 2)},
+        ],
+        label="Compression budget impact",
+    )
+    _note = mo.md(
+        "Use this as a first-order estimate before deeper benchmarking."
+    ).callout(kind="info")
+    _panel = mo.vstack([_table, _note], gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
+def _(mo):
+    image_demo_rank = mo.ui.slider(
+        4, 90, value=26, step=2, label="PCA components (rank k)"
+    )
+    image_demo_width = mo.ui.slider(
+        200, 360, value=280, step=20, label="Image width (px)"
+    )
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
+            mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
+            mo.md(
+                "Left is the reference cat image. Right is reconstructed from only `k` PCA components per color channel."
+            ).callout(kind="info"),
+            mo.md(
+                "Further Details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)"
+            ).callout(kind="neutral"),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return image_demo_rank, image_demo_width
+
+
+@app.cell
+def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
+    _pil_image = optional_import("PIL.Image")
+    _pil_draw = optional_import("PIL.ImageDraw")
+    _np = optional_import("numpy")
+
+    if not (_pil_image and _pil_draw and _np):
+        _output = mo.md(
+            "Install `Pillow` and `numpy` to run the PCA image compression lab (`pip install pillow numpy`)."
+        ).callout(kind="warn")
+    else:
+        _width = image_demo_width.value
+        _height = int(_width * 0.74)
+        _img = _pil_image.new("RGB", (_width, _height), color=(238, 242, 248))
+        _draw = _pil_draw.Draw(_img)
+
+        # Soft gradient background.
+        for _y in range(_height):
+            _r = int(218 + 18 * (_y / max(1, _height - 1)))
+            _g = int(229 + 14 * (_y / max(1, _height - 1)))
+            _b = int(242 + 10 * (_y / max(1, _height - 1)))
+            _draw.line([(0, _y), (_width, _y)], fill=(_r, _g, _b))
+
+        # Add a deterministic checker texture to reveal compression artifacts.
+        _step = max(6, _width // 45)
+        for _x in range(0, _width, _step):
+            for _y in range(0, _height, _step):
+                if ((_x // _step) + (_y // _step)) % 2 == 0:
+                    _draw.rectangle(
+                        [_x, _y, min(_width - 1, _x + _step), min(_height - 1, _y + _step)],
+                        outline=None,
+                        fill=(225, 232, 245),
+                    )
+
+        # Draw a cute cat face as the source image.
+        _cx = _width // 2
+        _cy = int(_height * 0.56)
+        _r = int(min(_width, _height) * 0.24)
+        _fur = (220, 192, 158)
+        _fur_dark = (96, 74, 56)
+        _ear_inner = (246, 186, 198)
+
+        _draw.polygon(
+            [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)),
+             (_cx - int(0.40 * _r), _cy - int(1.35 * _r)),
+             (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
+            fill=_fur,
+            outline=_fur_dark,
+            width=3,
+        )
+        _draw.polygon(
+            [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)),
+             (_cx + int(0.40 * _r), _cy - int(1.35 * _r)),
+             (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
+            fill=_fur,
+            outline=_fur_dark,
+            width=3,
+        )
+        _draw.polygon(
+            [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)),
+             (_cx - int(0.40 * _r), _cy - int(1.16 * _r)),
+             (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
+            fill=_ear_inner,
+            outline=None,
+        )
+        _draw.polygon(
+            [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)),
+             (_cx + int(0.40 * _r), _cy - int(1.16 * _r)),
+             (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
+            fill=_ear_inner,
+            outline=None,
+        )
+
+        _draw.ellipse(
+            [(_cx - _r), (_cy - _r), (_cx + _r), (_cy + _r)],
+            fill=_fur,
+            outline=_fur_dark,
+            width=3,
+        )
+        _draw.ellipse(
+            [(_cx - int(0.45 * _r)), (_cy + int(0.05 * _r)), (_cx + int(0.45 * _r)), (_cy + int(0.62 * _r))],
+            fill=(236, 214, 190),
+            outline=None,
+        )
+
+        _eye_w = int(0.25 * _r)
+        _eye_h = int(0.18 * _r)
+        _eye_y = _cy - int(0.14 * _r)
+        _left_eye_x = _cx - int(0.50 * _r)
+        _right_eye_x = _cx + int(0.50 * _r)
+        _draw.ellipse(
+            [(_left_eye_x - _eye_w, _eye_y - _eye_h), (_left_eye_x + _eye_w, _eye_y + _eye_h)],
+            fill=(143, 198, 128),
+            outline=(40, 40, 40),
+            width=2,
+        )
+        _draw.ellipse(
+            [(_right_eye_x - _eye_w, _eye_y - _eye_h), (_right_eye_x + _eye_w, _eye_y + _eye_h)],
+            fill=(143, 198, 128),
+            outline=(40, 40, 40),
+            width=2,
+        )
+        _pupil_w = max(4, int(0.08 * _r))
+        _pupil_h = max(7, int(0.20 * _r))
+        _draw.ellipse(
+            [(_left_eye_x - _pupil_w, _eye_y - _pupil_h), (_left_eye_x + _pupil_w, _eye_y + _pupil_h)],
+            fill=(18, 22, 20),
+        )
+        _draw.ellipse(
+            [(_right_eye_x - _pupil_w, _eye_y - _pupil_h), (_right_eye_x + _pupil_w, _eye_y + _pupil_h)],
+            fill=(18, 22, 20),
+        )
+        _spark = max(3, int(0.05 * _r))
+        _draw.ellipse(
+            [(_left_eye_x - _spark, _eye_y - _spark), (_left_eye_x + _spark, _eye_y + _spark)],
+            fill=(255, 255, 255),
+        )
+        _draw.ellipse(
+            [(_right_eye_x - _spark, _eye_y - _spark), (_right_eye_x + _spark, _eye_y + _spark)],
+            fill=(255, 255, 255),
+        )
+
+        _nose_y = _cy + int(0.13 * _r)
+        _draw.polygon(
+            [(_cx, _nose_y),
+             (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)),
+             (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
+            fill=(234, 150, 165),
+            outline=(120, 74, 86),
+        )
+        _draw.line(
+            [(_cx, _nose_y + int(0.15 * _r)), (_cx, _cy + int(0.48 * _r))],
+            fill=(88, 67, 54),
+            width=2,
+        )
+        _draw.arc(
+            [(_cx - int(0.24 * _r), _cy + int(0.38 * _r)), (_cx, _cy + int(0.62 * _r))],
+            start=200,
+            end=340,
+            fill=(88, 67, 54),
+            width=2,
+        )
+        _draw.arc(
+            [(_cx, _cy + int(0.38 * _r)), (_cx + int(0.24 * _r), _cy + int(0.62 * _r))],
+            start=200,
+            end=340,
+            fill=(88, 67, 54),
+            width=2,
+        )
+        _draw.ellipse(
+            [(_cx - int(0.70 * _r), _cy + int(0.16 * _r)), (_cx - int(0.44 * _r), _cy + int(0.36 * _r))],
+            fill=(247, 178, 186),
+            outline=None,
+        )
+        _draw.ellipse(
+            [(_cx + int(0.44 * _r), _cy + int(0.16 * _r)), (_cx + int(0.70 * _r), _cy + int(0.36 * _r))],
+            fill=(247, 178, 186),
+            outline=None,
+        )
+        _draw.line(
+            [(_cx, _cy - int(0.34 * _r)), (_cx - int(0.11 * _r), _cy - int(0.48 * _r))],
+            fill=(187, 151, 118),
+            width=2,
+        )
+        _draw.line(
+            [(_cx, _cy - int(0.34 * _r)), (_cx + int(0.11 * _r), _cy - int(0.48 * _r))],
+            fill=(187, 151, 118),
+            width=2,
+        )
+
+        for _offset in [-1, 0, 1]:
+            _dy = _offset * int(0.13 * _r)
+            _draw.line(
+                [(_cx - int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx - int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
+                fill=(88, 67, 54),
+                width=2,
+            )
+            _draw.line(
+                [(_cx + int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
+                fill=(88, 67, 54),
+                width=2,
+            )
+
+        _arr = _np.asarray(_img, dtype=_np.float32) / 255.0
+        _rank = int(min(image_demo_rank.value, _arr.shape[0], _arr.shape[1]))
+        _reconstructed = _np.zeros_like(_arr)
+        _factors = []
+
+        for _channel_idx in range(3):
+            _channel = _arr[:, :, _channel_idx]
+            _u, _s, _vt = _np.linalg.svd(_channel, full_matrices=False)
+            _ur = _u[:, :_rank]
+            _sr = _s[:_rank]
+            _vtr = _vt[:_rank, :]
+            _reconstructed[:, :, _channel_idx] = (_ur * _sr) @ _vtr
+            _factors.append((_ur.astype(_np.float32), _sr.astype(_np.float32), _vtr.astype(_np.float32)))
+
+        _reconstructed = _np.clip(_reconstructed, 0.0, 1.0)
+        _mse = float(_np.mean((_arr - _reconstructed) ** 2))
+        _psnr = float("inf") if _mse <= 1e-12 else 10.0 * math.log10(1.0 / _mse)
+
+        _ref_uint8 = (_arr * 255.0).astype(_np.uint8)
+        _rec_uint8 = (_reconstructed * 255.0).astype(_np.uint8)
+        _ref_img = _pil_image.fromarray(_ref_uint8)
+        _rec_img = _pil_image.fromarray(_rec_uint8)
+
+        _ref_buf = io.BytesIO()
+        _ref_img.save(_ref_buf, format="PNG", optimize=True)
+        _ref_bytes = _ref_buf.getvalue()
+
+        _rec_buf = io.BytesIO()
+        _rec_img.save(_rec_buf, format="PNG", optimize=True)
+        _rec_bytes = _rec_buf.getvalue()
+
+        _raw_rgb_bytes = _arr.shape[0] * _arr.shape[1] * 3
+
+        _comparison_images = mo.hstack(
+            [
+                mo.image(
+                    src=_ref_bytes,
+                    width="100%",
+                    caption="Reference cat image (display preview)",
+                ),
+                mo.image(
+                    src=_rec_bytes,
+                    width="100%",
+                    caption=(
+                        f"PCA reconstruction (k={_rank}, display preview)"
+                    ),
+                ),
+            ],
+            widths="equal",
+            gap=0.8,
+        )
+        _payload16 = {}
+        for _channel_idx, (_ur, _sr, _vtr) in enumerate(_factors):
+            _payload16[f"u{_channel_idx}"] = _ur.astype(_np.float16)
+            _payload16[f"s{_channel_idx}"] = _sr.astype(_np.float16)
+            _payload16[f"vt{_channel_idx}"] = _vtr.astype(_np.float16)
+
+        _npz16_buf = io.BytesIO()
+        _np.savez_compressed(_npz16_buf, **_payload16)
+        _pca_npz16_bytes = len(_npz16_buf.getvalue())
+        _pca_ratio = _pca_npz16_bytes / max(1, _raw_rgb_bytes)
+        _psnr_display = "infinite" if _psnr == float("inf") else round(_psnr, 2)
+
+        _comparison_table = mo.ui.table(
+            [
+                {"metric": "PCA components kept (k)", "value": _rank},
+                {"metric": "raw image bytes (RGB matrix)", "value": _raw_rgb_bytes},
+                {"metric": "compressed PCA payload bytes", "value": _pca_npz16_bytes},
+                {"metric": "compression ratio (compressed/raw)", "value": round(_pca_ratio, 4)},
+                {"metric": "quality (PSNR, dB)", "value": _psnr_display},
+            ],
+            label="Image compression summary",
+        )
+        _comparison_note = mo.md(
+            "Lower rank keeps fewer principal components, so storage drops but detail also drops.\n\n"
+            "Summary compares **raw RGB data** vs **PCA payload**. Preview PNG sizes are not used as compression metrics."
+        ).callout(kind="info")
+        _pipeline = mo.md(
+            """
+<div class="section-card flow-card">
+  <div class="flow-diagram">
+    <div class="flow-box">Reference image matrix</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Keep top-k PCA components</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-box">Reconstructed image</div>
+  </div>
+</div>
+            """
+        )
+
+        _output = mo.vstack(
+            [_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6
+        )
+
+    _output
+    return (_output,)
 
 
 @app.cell
@@ -2040,7 +2851,18 @@ def _(math, mo, random):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "Compression and encoding make files smaller, but we still need fast queries. Next: DuckDB as a SQL engine on files."
+        """
+### Bridge to Next Chapter
+
+Smaller files help, but analytics speed is not only about file size.
+We also need a query engine that avoids unnecessary work.
+
+$$
+\\text{query time} \\approx \\text{I/O time} + \\text{compute time}
+$$
+
+DuckDB helps reduce both parts for many analytical workloads.
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -2051,6 +2873,30 @@ def _(mo):
     _section = mo.md("## 5. DuckDB Example (SQL on Files)")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter5_guide = mo.md(
+        """
+### Chapter 5 Introduction
+
+> **Key Question:** How much work can the engine skip before processing?
+
+DuckDB gives you SQL analytics without running a database server.
+It helps because query planning decides what data can be skipped early.
+
+Main idea:
+
+$$
+\\text{effective rows processed} = N \\times \\text{selectivity}
+$$
+
+Lower selectivity means more benefit from predicate pushdown.
+        """
+    ).callout(kind="neutral")
+    _chapter5_guide
+    return (_chapter5_guide,)
 
 
 @app.cell
@@ -2073,6 +2919,57 @@ The demo below runs a GROUP BY directly on a CSV file to show the experience.
     ).callout(kind="neutral")
     _explanation
     return (_explanation,)
+
+
+@app.cell
+def _(mo):
+    push_rows = mo.ui.slider(10_000, 5_000_000, step=10_000, value=400_000, label="Rows (N)")
+    push_selectivity = mo.ui.slider(
+        0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction kept)"
+    )
+    push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns")
+    push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query")
+    _push_note = mo.md(
+        "Selectivity 0.08 means about 8% of rows pass the filter."
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Pushdown Intuition"),
+            mo.hstack([push_rows, push_selectivity], widths="equal"),
+            mo.hstack([push_cols_total, push_cols_needed], widths="equal"),
+            _push_note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return push_cols_needed, push_cols_total, push_rows, push_selectivity
+
+
+@app.cell
+def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
+    total_cols = push_cols_total.value
+    needed_cols = min(push_cols_needed.value, total_cols)
+    rows = push_rows.value
+    sel = push_selectivity.value
+
+    no_push = rows * total_cols
+    with_push = rows * sel * needed_cols
+    gain = no_push / max(with_push, 1)
+
+    _table = mo.ui.table(
+        [
+            {"metric": "work without pushdown", "value": int(no_push)},
+            {"metric": "work with pushdown", "value": int(with_push)},
+            {"metric": "estimated reduction factor", "value": round(gain, 2)},
+        ],
+        label="Predicate + projection pushdown estimate",
+    )
+    _panel = mo.vstack(
+        [_table, mo.md("Higher reduction factors usually mean larger query speedups.").callout(kind="info")],
+        gap=0.6,
+    )
+    _panel
+    return (_panel,)
 
 
 @app.cell
@@ -2740,7 +3637,20 @@ def _(mo):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "Now that we can store and query data efficiently, we’ll expose it via APIs."
+        """
+### Bridge to Next Chapter
+
+So far, we worked locally with files and SQL.
+Now we expose data to other programs through APIs.
+
+Think of an API like a waiter:
+- request = order
+- response = delivered dish
+
+$$
+\\text{API latency} = \\text{network} + \\text{server processing}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -2751,6 +3661,34 @@ def _(mo):
     _section = mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter6_guide = mo.md(
+        """
+### Chapter 6 Introduction
+
+> **Key Question:** Did the client and server agree on the same contract?
+
+An API is a contract between systems.
+Most API bugs are contract bugs: wrong path, wrong payload shape, wrong status handling.
+
+Keep this mapping in mind:
+
+- 2xx: success
+- 4xx: client-side issue
+- 5xx: server-side issue
+
+Status family is computed from the code:
+
+$$
+\\text{family} = \\left\\lfloor \\frac{\\text{status code}}{100} \\right\\rfloor
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter6_guide
+    return (_chapter6_guide,)
 
 
 @app.cell
@@ -2780,6 +3718,65 @@ $$
     ).callout(kind="neutral")
     rest
     return (rest,)
+
+
+@app.cell
+def _(mo):
+    http_code = mo.ui.number(value=201, label="HTTP status code")
+    http_method_hint = mo.ui.dropdown(
+        options=["GET", "POST", "PUT", "DELETE"],
+        value="POST",
+        label="Method context",
+    )
+    _note = mo.md(
+        """
+Try `200`, `201`, `404`, `409`, and `500` to see how client behavior should change.
+
+$$
+\\text{status family} = \\left\\lfloor \\frac{\\text{code}}{100} \\right\\rfloor
+$$
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [mo.md("### Mini-lab: HTTP Status Interpreter"), http_code, http_method_hint, _note],
+        gap=0.5,
+    ).callout(kind="neutral")
+    _panel
+    return http_code, http_method_hint
+
+
+@app.cell
+def _(http_code, http_method_hint, mo):
+    code = int(http_code.value or 0)
+    if 100 <= code < 200:
+        family = "Informational"
+        kind = "info"
+    elif 200 <= code < 300:
+        family = "Success"
+        kind = "success"
+    elif 300 <= code < 400:
+        family = "Redirection"
+        kind = "info"
+    elif 400 <= code < 500:
+        family = "Client error"
+        kind = "warn"
+    elif 500 <= code < 600:
+        family = "Server error"
+        kind = "danger"
+    else:
+        family = "Invalid/unknown"
+        kind = "warn"
+
+    retry_note = (
+        "Safe retries are easiest for idempotent methods like GET/PUT/DELETE."
+        if http_method_hint.value in {"GET", "PUT", "DELETE"}
+        else "POST may create duplicates unless you design idempotency keys."
+    )
+    _msg = mo.md(
+        f"Status **{code}** belongs to **{family}**.\n\n{retry_note}"
+    ).callout(kind=kind)
+    _msg
+    return (_msg,)
 
 
 @app.cell
@@ -2998,7 +3995,16 @@ def _(mo):
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "APIs need clear, validated schemas. Next we use Pydantic to define data contracts."
+        """
+### Bridge to Next Chapter
+
+APIs fail when input data shape is wrong.
+Pydantic is our gatekeeper: it checks required fields and types before logic runs.
+
+$$
+\\text{valid request} \\Rightarrow \\text{schema checks pass}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -3009,6 +4015,28 @@ def _(mo):
     _section = mo.md("## 7. Pydantic Models")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter7_guide = mo.md(
+        """
+### Chapter 7 Introduction
+
+> **Key Question:** Which inputs are allowed into your trusted system boundary?
+
+Validation is your system's front door policy.
+If you validate early, downstream code is simpler and safer.
+
+Think of it as:
+
+$$
+\\text{trusted internal data} = \\text{untrusted input} + \\text{validation rules}
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter7_guide
+    return (_chapter7_guide,)
 
 
 @app.cell
@@ -3033,6 +4061,50 @@ Try editing the JSON below to trigger validation errors and see the message stru
     ).callout(kind="neutral")
     _explanation
     return (_explanation,)
+
+
+@app.cell
+def _(mo):
+    req_id = mo.ui.switch(value=True, label="Require id")
+    req_name = mo.ui.switch(value=True, label="Require name")
+    req_email = mo.ui.switch(value=True, label="Require email")
+    req_gpa = mo.ui.switch(value=True, label="Require gpa in [0,4]")
+    _note = mo.md(
+        "Turn rules on/off to see how stricter schemas reject more malformed input."
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Validation Rule Builder"),
+            mo.hstack([req_id, req_name], widths="equal"),
+            mo.hstack([req_email, req_gpa], widths="equal"),
+            _note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return req_email, req_gpa, req_id, req_name
+
+
+@app.cell
+def _(mo, req_email, req_gpa, req_id, req_name):
+    checks = [
+        ("id present", req_id.value),
+        ("name present", req_name.value),
+        ("email present", req_email.value),
+        ("gpa bounded", req_gpa.value),
+    ]
+    strictness = sum(1 for _, ok in checks if ok)
+    _table = mo.ui.table(
+        [{"rule": name, "enabled": ok} for name, ok in checks],
+        label="Active schema rules",
+    )
+    _msg = mo.md(
+        f"Current strictness score: **{strictness}/4**. "
+        "Higher strictness catches more bad input, but can reject more requests."
+    ).callout(kind="info")
+    _panel = mo.vstack([_table, _msg], gap=0.6)
+    _panel
+    return (_panel,)
 
 
 @app.cell
@@ -3107,7 +4179,18 @@ Validation error:
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "With models in place, FastAPI can turn them into endpoints and documentation automatically."
+        """
+### Bridge to Next Chapter
+
+Once models are defined, FastAPI can use them to:
+- validate inputs,
+- power endpoints,
+- generate docs automatically.
+
+$$
+\\text{Python types + models} \\rightarrow \\text{OpenAPI schema} \\rightarrow \\text{interactive docs}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -3118,6 +4201,33 @@ def _(mo):
     _section = mo.md("## 8. FastAPI Demo + Automatic Docs")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter8_guide = mo.md(
+        """
+### Chapter 8 Introduction
+
+> **Key Question:** How do we keep implementation and API documentation in sync?
+
+FastAPI turns validated models into executable API endpoints plus shared docs.
+This reduces mismatch between implementation and documentation.
+
+Lifecycle:
+
+1. Define model
+2. Attach model to endpoint
+3. FastAPI emits OpenAPI
+4. Tools consume docs automatically
+
+$$
+\\text{Type Hints} + \\text{Validation Models} \\rightarrow \\text{Machine-readable API contract}
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter8_guide
+    return (_chapter8_guide,)
 
 
 @app.cell
@@ -3209,6 +4319,53 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    fa_network_ms = mo.ui.slider(5, 300, value=40, label="Network latency (ms)")
+    fa_validation_ms = mo.ui.slider(1, 100, value=8, label="Validation cost (ms)")
+    fa_logic_ms = mo.ui.slider(1, 500, value=25, label="Business logic (ms)")
+    _note = mo.md(
+        """
+Change one component at a time to see which part dominates end-to-end latency.
+
+$$
+T_{endpoint} \\approx T_{network} + T_{validation} + T_{logic}
+$$
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Endpoint Latency Budget"),
+            mo.hstack([fa_network_ms, fa_validation_ms], widths="equal"),
+            fa_logic_ms,
+            _note,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return fa_logic_ms, fa_network_ms, fa_validation_ms
+
+
+@app.cell
+def _(fa_logic_ms, fa_network_ms, fa_validation_ms, mo):
+    total = fa_network_ms.value + fa_validation_ms.value + fa_logic_ms.value
+    _table = mo.ui.table(
+        [
+            {"component": "network", "ms": fa_network_ms.value},
+            {"component": "validation", "ms": fa_validation_ms.value},
+            {"component": "logic", "ms": fa_logic_ms.value},
+            {"component": "total", "ms": total},
+        ],
+        label="Estimated latency budget",
+    )
+    _msg = mo.md("Use this to decide whether to optimize code, validation, or infrastructure first.").callout(
+        kind="info"
+    )
+    _panel = mo.vstack([_table, _msg], gap=0.6)
+    _panel
+    return (_panel,)
+
+
+@app.cell
+def _(mo):
     fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
     fastapi_check = mo.ui.button(label="1) Check API status", kind="neutral")
     fastapi_payload = mo.ui.text_area(
@@ -3241,6 +4398,7 @@ def _(mo):
 
 @app.cell
 def _(fastapi_base_url, fastapi_check, json, mo, url_request):
+    _output = mo.md("Waiting for API status check...").callout(kind="neutral")
     if fastapi_check.value == 0:
         _output = mo.md(
             "Click **1) Check API status** after starting `uvicorn src.demo_api:app --reload`."
@@ -3297,6 +4455,7 @@ Known routes (preview):
 
 @app.cell
 def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_request):
+    _output = mo.md("Waiting for POST request...").callout(kind="neutral")
     if fastapi_post.value == 0:
         _output = mo.md(
             "Edit the payload, then click **2) POST /items**."
@@ -3363,6 +4522,7 @@ Error:
 
 @app.cell
 def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_request):
+    _output = mo.md("Waiting for GET request...").callout(kind="neutral")
     if fastapi_get.value == 0:
         _output = mo.md("Click **3) GET /items/{id}** to fetch an item.").callout(
             kind="neutral"
@@ -3420,7 +4580,16 @@ Error:
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "With an API running, the next step is choosing a frontend to present and interact with it."
+        """
+### Bridge to Next Chapter
+
+Backend answers are useful, but users still need a clear interface.
+Now we compare frontend options and their trade-offs.
+
+$$
+\\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -3431,6 +4600,33 @@ def _(mo):
     _section = mo.md("## 9. Frontend Framework Comparison")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter9_guide = mo.md(
+        """
+### Chapter 9 Introduction
+
+> **Key Question:** Which frontend maximizes delivery speed without exceeding complexity?
+
+Framework choice is a product decision, not only a technical preference.
+Pick the tool that best matches team skill and delivery constraints.
+
+Common axes:
+- speed of iteration
+- UI control depth
+- long-term maintainability
+
+Heuristic framing:
+
+$$
+\\text{fit score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{control} + w_j \\cdot \\text{team JS readiness}
+$$
+        """
+    ).callout(kind="neutral")
+    _chapter9_guide
+    return (_chapter9_guide,)
 
 
 @app.cell
@@ -3493,8 +4689,66 @@ Interpretation:
 
 @app.cell
 def _(mo):
+    fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration")
+    fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control")
+    fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength")
+    _note = mo.md(
+        """
+Higher scores are teaching heuristics only. Validate with your team's real constraints.
+
+$$
+\\text{fit} = w_s s + w_c c + w_j j
+$$
+        """
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [mo.md("### Mini-lab: Framework Fit Assistant"), fw_speed, fw_control, fw_js, _note],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return fw_control, fw_js, fw_speed
+
+
+@app.cell
+def _(fw_control, fw_js, fw_speed, mo):
+    # Simple weighted scoring for teaching, not a strict recommendation engine.
+    _framework_scores = {
+        "Marimo": fw_speed.value * 1.2 + (6 - fw_js.value) * 0.8 + fw_control.value * 0.6,
+        "Streamlit": fw_speed.value * 1.3 + (6 - fw_js.value) * 0.7 + fw_control.value * 0.5,
+        "Dash": fw_speed.value * 0.9 + fw_js.value * 0.4 + fw_control.value * 0.8,
+        "Flask": fw_speed.value * 0.6 + fw_js.value * 0.5 + fw_control.value * 1.2,
+        "React": fw_speed.value * 0.5 + fw_js.value * 1.4 + fw_control.value * 1.3,
+    }
+    _ranked_frameworks = sorted(
+        _framework_scores.items(), key=lambda x: x[1], reverse=True
+    )
+    _fit_table = mo.ui.table(
+        [{"framework": name, "score": round(score, 2)} for name, score in _ranked_frameworks],
+        label="Teaching score (higher = better fit)",
+    )
+    _fit_message = mo.md(
+        f"Current top fit: **{_ranked_frameworks[0][0]}**"
+    ).callout(kind="info")
+    _fit_panel = mo.vstack([_fit_table, _fit_message], gap=0.6)
+    _fit_panel
+    return (_fit_panel,)
+
+
+@app.cell
+def _(mo):
     _transition = mo.md(
-        "To close, we’ll use charts to explore data and communicate insights."
+        """
+### Bridge to Next Chapter
+
+Tables show exact values; charts show patterns faster.
+We close with visual analysis so trends and relationships are easier to explain.
+
+A key model we will visualize:
+
+$$
+y = \\alpha + \\beta x
+$$
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
@@ -3505,6 +4759,29 @@ def _(mo):
     _section = mo.md("## 10. Marimo Charts Lab")
     _section
     return (_section,)
+
+
+@app.cell
+def _(mo):
+    _chapter10_guide = mo.md(
+        """
+### Chapter 10 Introduction
+
+> **Key Question:** Which pattern is signal, and which is noise?
+
+Charts help humans detect patterns quickly.
+Regression summarizes trend direction with two numbers:
+
+$$
+y = \\alpha + \\beta x
+$$
+
+- $\\alpha$: baseline level
+- $\\beta$: change in y for one unit change in x
+        """
+    ).callout(kind="neutral")
+    _chapter10_guide
+    return (_chapter10_guide,)
 
 
 @app.cell
@@ -3524,6 +4801,40 @@ We also compute summary statistics to make the patterns quantitative.
     ).callout(kind="neutral")
     _explanation
     return (_explanation,)
+
+
+@app.cell
+def _(mo):
+    reg_alpha = mo.ui.slider(-5.0, 5.0, step=0.1, value=0.5, label="Intercept (alpha)")
+    reg_beta = mo.ui.slider(-4.0, 4.0, step=0.1, value=1.4, label="Slope (beta)")
+    reg_x = mo.ui.slider(-10.0, 10.0, step=0.5, value=2.0, label="Input x")
+    _panel = mo.vstack(
+        [mo.md("### Mini-lab: Regression Predictor"), reg_alpha, reg_beta, reg_x],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return reg_alpha, reg_beta, reg_x
+
+
+@app.cell
+def _(mo, reg_alpha, reg_beta, reg_x):
+    _y_hat = reg_alpha.value + reg_beta.value * reg_x.value
+    _regression_table = mo.ui.table(
+        [
+            {"symbol": "alpha", "value": reg_alpha.value},
+            {"symbol": "beta", "value": reg_beta.value},
+            {"symbol": "x", "value": reg_x.value},
+            {"symbol": "predicted y", "value": round(_y_hat, 4)},
+        ],
+        label="Linear prediction snapshot",
+    )
+    _regression_note = mo.md(
+        "Adjust beta and observe how quickly y changes. "
+        "Large |beta| means stronger trend sensitivity."
+    ).callout(kind="info")
+    _regression_panel = mo.vstack([_regression_table, _regression_note], gap=0.6)
+    _regression_panel
+    return (_regression_panel,)
 
 
 @app.cell
@@ -3735,7 +5046,21 @@ def _(
 @app.cell
 def _(mo):
     _transition = mo.md(
-        "Wrap-up: you moved from storage fundamentals to APIs and frontends. The links below are good starting points for deeper dives."
+        """
+### Wrap-up in Easy Words
+
+You moved through one full data product path:
+
+1. Keep writes correct under concurrency
+2. Choose efficient serialization formats
+3. Use columnar layout and compression for analytics
+4. Query files with DuckDB
+5. Expose data through REST APIs
+6. Validate contracts with Pydantic and FastAPI
+7. Present results in frontends and charts
+
+If students remember one thing: correctness first, then performance, then usability.
+        """
     ).callout(kind="neutral")
     _transition
     return (_transition,)
