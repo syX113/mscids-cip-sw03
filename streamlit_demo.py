@@ -547,7 +547,10 @@ def _request_json(
 
     if not response.content:
         return None
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        return response.text
 
 
 def _safe_get(api_base: str, path: str, params: list[tuple[str, Any]] | None = None) -> Any:
@@ -567,7 +570,13 @@ def _freeze_params(params: list[tuple[str, Any]]) -> tuple[tuple[str, str], ...]
 
 
 def clear_data_caches() -> None:
-    st.cache_data.clear()
+    # Invalidate only this app's data caches to keep refreshes fast and predictable.
+    fetch_meta_options.clear()
+    fetch_regions.clear()
+    fetch_countries.clear()
+    fetch_categories.clear()
+    fetch_products.clear()
+    fetch_sales.clear()
 
 
 @st.cache_data(show_spinner=False, ttl=META_CACHE_TTL_SECONDS)
@@ -865,7 +874,10 @@ def build_regression_chart(reg_df: pd.DataFrame, x_column: str, x_title: str) ->
     x = plot_df[x_column].astype(float).to_numpy()
     y = plot_df["avg_rating"].astype(float).to_numpy()
 
-    slope, intercept = np.polyfit(x, y, 1)
+    try:
+        slope, intercept = np.polyfit(x, y, 1)
+    except np.linalg.LinAlgError:
+        return None, None, None, None
     y_pred = slope * x + intercept
     ss_tot = np.sum((y - np.mean(y)) ** 2)
     ss_res = np.sum((y - y_pred) ** 2)
