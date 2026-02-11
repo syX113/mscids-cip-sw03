@@ -3319,6 +3319,8 @@ def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_
                 method="POST",
             )
 
+            _status = None
+            _body = ""
             try:
                 with url_request.urlopen(_request, timeout=5) as _response:
                     _status = _response.status
@@ -3338,7 +3340,7 @@ Error:
 ```
                     """
                 ).callout(kind="danger")
-            else:
+            if _status is not None:
                 try:
                     _parsed = json.loads(_body)
                     _preview = json.dumps(_parsed, indent=2)
@@ -3373,6 +3375,8 @@ def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_r
         else:
             _url = fastapi_base_url.value.rstrip("/") + f"/items/{_item_id}"
             _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
+            _status = None
+            _body = ""
             try:
                 with url_request.urlopen(_request, timeout=5) as _response:
                     _status = _response.status
@@ -3392,7 +3396,7 @@ Error:
 ```
                     """
                 ).callout(kind="danger")
-            else:
+            if _status is not None:
                 try:
                     _parsed = json.loads(_body)
                     _preview = json.dumps(_parsed, indent=2)
