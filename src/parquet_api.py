@@ -23,6 +23,8 @@ TABLE_PATHS = {
     "products": DATA_DIR / "products.parquet",
     "sales": DATA_DIR / "sales.parquet",
 }
+SEED_VERSION = "2026-02-11-regression-v2"
+SEED_VERSION_PATH = DATA_DIR / ".seed_version"
 
 
 def _model_dump(model: BaseModel, **kwargs: Any) -> dict[str, Any]:
@@ -151,6 +153,21 @@ class SalesRepository:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         if not self._is_store_valid():
             self._seed_store()
+            return
+        if self._read_seed_version() != SEED_VERSION:
+            self._seed_store()
+
+    def _read_seed_version(self) -> str:
+        if not SEED_VERSION_PATH.exists():
+            return ""
+        try:
+            return SEED_VERSION_PATH.read_text(encoding="utf-8").strip()
+        except Exception:
+            return ""
+
+    def _write_seed_version(self) -> None:
+        SEED_VERSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SEED_VERSION_PATH.write_text(SEED_VERSION, encoding="utf-8")
 
     def _is_store_valid(self) -> bool:
         required_columns = {
@@ -214,7 +231,6 @@ class SalesRepository:
                 {"category_id": 1, "name": "Hardware", "description": "Physical devices and components"},
                 {"category_id": 2, "name": "Software", "description": "Licenses and digital subscriptions"},
                 {"category_id": 3, "name": "Services", "description": "Consulting and managed services"},
-                {"category_id": 4, "name": "Accessories", "description": "Add-ons and peripherals"},
             ]
         )
 
@@ -222,16 +238,12 @@ class SalesRepository:
             [
                 {"country_id": 1, "name": "United States", "region_id": 1},
                 {"country_id": 2, "name": "Canada", "region_id": 1},
-                {"country_id": 3, "name": "Mexico", "region_id": 1},
-                {"country_id": 4, "name": "Germany", "region_id": 2},
-                {"country_id": 5, "name": "France", "region_id": 2},
-                {"country_id": 6, "name": "United Kingdom", "region_id": 2},
-                {"country_id": 7, "name": "Japan", "region_id": 3},
-                {"country_id": 8, "name": "India", "region_id": 3},
-                {"country_id": 9, "name": "Singapore", "region_id": 3},
-                {"country_id": 10, "name": "South Africa", "region_id": 4},
-                {"country_id": 11, "name": "Kenya", "region_id": 4},
-                {"country_id": 12, "name": "Egypt", "region_id": 4},
+                {"country_id": 3, "name": "Germany", "region_id": 2},
+                {"country_id": 4, "name": "United Kingdom", "region_id": 2},
+                {"country_id": 5, "name": "Japan", "region_id": 3},
+                {"country_id": 6, "name": "India", "region_id": 3},
+                {"country_id": 7, "name": "South Africa", "region_id": 4},
+                {"country_id": 8, "name": "Kenya", "region_id": 4},
             ]
         )
 
@@ -281,17 +293,10 @@ class SalesRepository:
                 },
                 {
                     "product_id": 7,
-                    "name": "Field Kit",
-                    "price": 58.0,
-                    "description": "Portable accessory bundle for field teams",
-                    "category_id": 4,
-                },
-                {
-                    "product_id": 8,
-                    "name": "Extended Warranty",
-                    "price": 35.0,
-                    "description": "Protection extension for hardware units",
-                    "category_id": 4,
+                    "name": "Customer Care Pack",
+                    "price": 980.0,
+                    "description": "Lightweight managed care service add-on",
+                    "category_id": 3,
                 },
             ]
         )
@@ -303,6 +308,7 @@ class SalesRepository:
         self._write("categories", categories)
         self._write("products", products)
         self._write("sales", sales)
+        self._write_seed_version()
 
     def _seed_sales(
         self,
@@ -318,76 +324,109 @@ class SalesRepository:
             month = month_index % 12 + 1
             return date(year, month, 1)
 
-        region_factor = {
-            "US": 1.18,
-            "Europe": 1.08,
-            "Asia": 1.02,
-            "Africa": 0.88,
-        }
-        category_factor = {
-            "Hardware": 1.12,
-            "Software": 1.04,
-            "Services": 1.36,
-            "Accessories": 0.85,
+        region_revenue_factor = {"US": 1.17, "Europe": 1.09, "Asia": 1.01, "Africa": 0.92}
+        region_units_factor = {"US": 1.16, "Europe": 1.08, "Asia": 1.0, "Africa": 0.94}
+        region_rating_offset = {"US": 0.22, "Europe": 0.12, "Asia": 0.05, "Africa": -0.18}
+        category_revenue_factor = {"Hardware": 1.16, "Software": 1.05, "Services": 1.34}
+        category_units_factor = {"Hardware": 1.12, "Software": 1.03, "Services": 0.78}
+        category_rating_base = {"Hardware": 3.35, "Software": 3.62, "Services": 3.98}
+        country_rating_offset = {
+            "United States": 0.20,
+            "Canada": 0.08,
+            "Germany": 0.12,
+            "United Kingdom": 0.06,
+            "Japan": 0.10,
+            "India": -0.04,
+            "South Africa": -0.12,
+            "Kenya": -0.08,
         }
 
         products_lookup = products.set_index("product_id").to_dict(orient="index")
-        countries_lookup = countries.set_index("country_id").to_dict(orient="index")
         region_name_by_id = regions.set_index("region_id")["name"].to_dict()
+        country_name_by_id = countries.set_index("country_id")["name"].to_dict()
         category_name_by_id = categories.set_index("category_id")["name"].to_dict()
 
         rows: list[dict[str, Any]] = []
         sale_id = 1
         anchor = date.today().replace(day=1)
-        start_month = _add_months(anchor, -17)
+        start_month = _add_months(anchor, -23)
 
-        for month_idx in range(18):
+        for month_idx in range(24):
             month_start = _add_months(start_month, month_idx)
             month = month_start.month
-            seasonal_factor = 1.14 if month in (10, 11, 12) else 1.06 if month in (4, 5, 6) else 0.94
+            seasonal_revenue_factor = 1.16 if month in (10, 11, 12) else 1.07 if month in (4, 5, 6) else 0.93
+            seasonal_rating_offset = 0.18 if month in (11, 12) else 0.06 if month in (6, 7) else -0.03 if month in (1, 2) else 0.0
 
             for country_row in countries.itertuples(index=False):
                 country_id = int(country_row.country_id)
                 region_id = int(country_row.region_id)
                 region_name = region_name_by_id[region_id]
-                country_wave = 1.0 + (((country_id + month_idx) % 5) - 2) * 0.03
+                country_name = country_name_by_id[country_id]
+                country_wave = 1.0 + (((country_id + month_idx) % 5) - 2) * 0.028
 
                 for product_row in products.itertuples(index=False):
                     product_id = int(product_row.product_id)
                     category_id = int(product_row.category_id)
                     category_name = category_name_by_id[category_id]
 
-                    if (product_id + country_id + month_idx) % 4 == 0:
-                        continue
+                    order_count = 2 + ((month_idx + country_id + product_id) % 2)
+                    for order_idx in range(order_count):
+                        base_units = 6 + ((month_idx * 4 + country_id * 3 + product_id * 5 + order_idx * 7) % 44)
+                        units_sold = max(
+                            2,
+                            int(
+                                round(
+                                    base_units
+                                    * region_units_factor[region_name]
+                                    * category_units_factor[category_name]
+                                )
+                            ),
+                        )
+                        day_offset = (2 + product_id * 3 + country_id + month_idx + order_idx * 6) % 27
+                        sale_date = month_start + timedelta(days=day_offset)
 
-                    units_sold = 8 + ((month_idx * 5 + product_id * 3 + country_id) % 32)
-                    day_offset = (2 + product_id * 3 + country_id + month_idx) % 25
-                    sale_date = month_start + timedelta(days=day_offset)
+                        base_price = float(products_lookup[product_id]["price"])
+                        pricing_wave = 1.0 + ((((month_idx + product_id + order_idx) % 7) - 3) * 0.013)
+                        discount = 0.02 + (((month_idx + country_id + order_idx) % 7) * 0.018)
+                        if region_name == "Africa":
+                            discount += 0.015
+                        discount = min(discount, 0.23)
 
-                    base_price = float(products_lookup[product_id]["price"])
-                    pricing_wave = 1.0 + (((month_idx + product_id) % 6) - 2) * 0.015
-                    effective_price = base_price * seasonal_factor * region_factor[region_name] * category_factor[category_name] * country_wave * pricing_wave
-                    total_price = round(max(1.0, units_sold * effective_price), 2)
+                        effective_unit_price = (
+                            base_price
+                            * seasonal_revenue_factor
+                            * region_revenue_factor[region_name]
+                            * category_revenue_factor[category_name]
+                            * country_wave
+                            * pricing_wave
+                            * (1 - discount)
+                        )
+                        total_price = round(max(1.0, units_sold * effective_unit_price), 2)
 
-                    rating_raw = 3.2 + ((month_idx + product_id + country_id) % 4) * 0.28
-                    if category_name == "Services":
-                        rating_raw += 0.2
-                    if region_name == "Africa":
-                        rating_raw -= 0.12
-                    customer_rating = int(max(1, min(5, round(rating_raw))))
+                        noise = (((month_idx * 7 + country_id * 11 + product_id * 13 + order_idx * 17) % 100) / 100.0 - 0.5) * 0.55
+                        rating_raw = (
+                            category_rating_base[category_name]
+                            + region_rating_offset[region_name]
+                            + country_rating_offset[country_name]
+                            + (discount * 1.35)
+                            - (units_sold * 0.011)
+                            + seasonal_rating_offset
+                            + noise
+                        )
+                        customer_rating = int(max(1, min(5, round(rating_raw))))
 
-                    rows.append(
-                        {
-                            "sale_id": sale_id,
-                            "sale_date": sale_date,
-                            "product_id": product_id,
-                            "country_id": country_id,
-                            "units_sold": units_sold,
-                            "total_price": total_price,
-                            "customer_rating": customer_rating,
-                        }
-                    )
-                    sale_id += 1
+                        rows.append(
+                            {
+                                "sale_id": sale_id,
+                                "sale_date": sale_date,
+                                "product_id": product_id,
+                                "country_id": country_id,
+                                "units_sold": units_sold,
+                                "total_price": total_price,
+                                "customer_rating": customer_rating,
+                            }
+                        )
+                        sale_id += 1
 
         df = pd.DataFrame(rows)
         df["sale_date"] = pd.to_datetime(df["sale_date"])
@@ -1139,4 +1178,3 @@ def update_sale(sale_id: int, payload: SaleUpdate) -> Sale:
     if updated is None:
         raise HTTPException(status_code=404, detail="Sale not found")
     return Sale(**updated)
-

@@ -21,7 +21,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Sales Analysis Dashboard",
-    page_icon="SA",
+    page_icon="📊",
     layout="wide",
 )
 
@@ -787,9 +787,13 @@ def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
             ]
         ]
 
-    if level == "Product":
+    base = df.copy()
+    base["month"] = base["sale_date"].dt.to_period("M").dt.to_timestamp()
+    base["month_label"] = base["month"].dt.strftime("%Y-%m")
+
+    if level in ("Product", "Product (monthly)"):
         grouped = (
-            df.groupby(["product_name", "category_name"], as_index=False)
+            base.groupby(["product_name", "category_name", "month", "month_label"], as_index=False)
             .agg(
                 avg_rating=("customer_rating", "mean"),
                 avg_order_value=("total_price", "mean"),
@@ -797,14 +801,15 @@ def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
                 total_sales=("total_price", "sum"),
                 total_units_sold=("units_sold", "sum"),
             )
-            .rename(columns={"product_name": "entity"})
+            .rename(columns={"product_name": "base_entity"})
         )
+        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
         grouped["color_group"] = grouped["category_name"].astype(str)
         return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
 
-    if level == "Category":
+    if level in ("Category", "Category (monthly)"):
         grouped = (
-            df.groupby(["category_name"], as_index=False)
+            base.groupby(["category_name", "month", "month_label"], as_index=False)
             .agg(
                 avg_rating=("customer_rating", "mean"),
                 avg_order_value=("total_price", "mean"),
@@ -812,14 +817,15 @@ def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
                 total_sales=("total_price", "sum"),
                 total_units_sold=("units_sold", "sum"),
             )
-            .rename(columns={"category_name": "entity"})
+            .rename(columns={"category_name": "base_entity"})
         )
-        grouped["color_group"] = grouped["entity"].astype(str)
+        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
+        grouped["color_group"] = grouped["base_entity"].astype(str)
         return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
 
-    if level == "Country":
+    if level in ("Country", "Country (monthly)"):
         grouped = (
-            df.groupby(["country_name", "region_name"], as_index=False)
+            base.groupby(["country_name", "region_name", "month", "month_label"], as_index=False)
             .agg(
                 avg_rating=("customer_rating", "mean"),
                 avg_order_value=("total_price", "mean"),
@@ -827,13 +833,14 @@ def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
                 total_sales=("total_price", "sum"),
                 total_units_sold=("units_sold", "sum"),
             )
-            .rename(columns={"country_name": "entity"})
+            .rename(columns={"country_name": "base_entity"})
         )
+        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
         grouped["color_group"] = grouped["region_name"].astype(str)
         return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
 
     grouped = (
-        df.groupby(["region_name"], as_index=False)
+        base.groupby(["region_name", "month", "month_label"], as_index=False)
         .agg(
             avg_rating=("customer_rating", "mean"),
             avg_order_value=("total_price", "mean"),
@@ -841,9 +848,10 @@ def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
             total_sales=("total_price", "sum"),
             total_units_sold=("units_sold", "sum"),
         )
-        .rename(columns={"region_name": "entity"})
+        .rename(columns={"region_name": "base_entity"})
     )
-    grouped["color_group"] = grouped["entity"].astype(str)
+    grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
+    grouped["color_group"] = grouped["base_entity"].astype(str)
     return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
 
 
@@ -1046,7 +1054,7 @@ with dashboard_tab:
             compare_title=compare_title,
             split_by_category=split_by_category,
         )
-        st.altair_chart(line_chart, use_container_width=True)
+        st.altair_chart(line_chart, width="stretch")
 
         st.markdown("### 2) Sales Heatmap")
         hc1, hc2, hc3 = st.columns(3)
@@ -1067,11 +1075,16 @@ with dashboard_tab:
             col_title=col_title,
             metric_label=heat_metric,
         )
-        st.altair_chart(heatmap_chart, use_container_width=True)
+        st.altair_chart(heatmap_chart, width="stretch")
 
         st.markdown("### 3) Interactive Regression")
         rc1, rc2 = st.columns(2)
-        regression_level = rc1.selectbox("Aggregation level", ["Product", "Country", "Category", "Sales Region", "Sale"], index=0)
+        regression_level = rc1.selectbox(
+            "Aggregation level",
+            ["Product (monthly)", "Country (monthly)", "Category (monthly)", "Sales Region (monthly)", "Sale"],
+            index=0,
+        )
+        rc1.caption("Monthly levels create denser regression points while preserving grouping context.")
         regression_x = rc2.selectbox(
             "Predictor (X)",
             ["Average Order Value", "Average Units Sold", "Total Sales", "Total Units Sold"],
@@ -1091,7 +1104,7 @@ with dashboard_tab:
         if regression_chart is None:
             st.info("Not enough variability in the current filtered data to fit a regression line.")
         else:
-            st.altair_chart(regression_chart, use_container_width=True)
+            st.altair_chart(regression_chart, width="stretch")
             st.caption(
                 f"Model: rating = {slope:.4f} x {x_title.lower()} + {intercept:.4f} | R² = {r_squared:.4f}"
             )
@@ -1110,7 +1123,7 @@ with dashboard_tab:
             ]
             table_df = sales_df[table_columns].sort_values("sale_date", ascending=False).copy()
             table_df["sale_date"] = table_df["sale_date"].dt.date
-            st.dataframe(table_df, use_container_width=True, hide_index=True)
+            st.dataframe(table_df, width="stretch", hide_index=True)
 
 with records_tab:
     try:
@@ -1198,7 +1211,7 @@ with records_tab:
                     st.error(f"Update region failed: {exc}")
 
         if regions:
-            st.dataframe(pd.DataFrame(regions).sort_values("region_id"), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(regions).sort_values("region_id"), width="stretch", hide_index=True)
         else:
             st.info("No regions found.")
 
@@ -1261,7 +1274,7 @@ with records_tab:
                     st.error(f"Update country failed: {exc}")
 
         if countries:
-            st.dataframe(pd.DataFrame(countries).sort_values("country_id"), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(countries).sort_values("country_id"), width="stretch", hide_index=True)
         else:
             st.info("No countries found.")
 
@@ -1317,7 +1330,7 @@ with records_tab:
                     st.error(f"Update category failed: {exc}")
 
         if categories:
-            st.dataframe(pd.DataFrame(categories).sort_values("category_id"), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(categories).sort_values("category_id"), width="stretch", hide_index=True)
         else:
             st.info("No categories found.")
 
@@ -1398,7 +1411,7 @@ with records_tab:
                     st.error(f"Update product failed: {exc}")
 
         if products:
-            st.dataframe(pd.DataFrame(products).sort_values("product_id"), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(products).sort_values("product_id"), width="stretch", hide_index=True)
         else:
             st.info("No products found.")
 
@@ -1561,4 +1574,4 @@ with records_tab:
             ]
             preview_sales = sales_for_records[preview_cols].sort_values("sale_date", ascending=False).copy()
             preview_sales["sale_date"] = pd.to_datetime(preview_sales["sale_date"]).dt.date
-            st.dataframe(preview_sales.head(250), use_container_width=True, hide_index=True)
+            st.dataframe(preview_sales.head(250), width="stretch", hide_index=True)
