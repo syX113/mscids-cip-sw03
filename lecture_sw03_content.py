@@ -17,7 +17,6 @@ def _():
     import sqlite3
     import statistics
     import tempfile
-    import textwrap
     import threading
     import time
     import urllib.error as url_error
@@ -50,7 +49,6 @@ def _():
         sqlite3,
         statistics,
         tempfile,
-        textwrap,
         threading,
         time,
         url_error,
