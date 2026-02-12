@@ -46,7 +46,7 @@ def _(mo):
     Recommended command:
 
     ```bash
-    marimo edit lecture_sw03_exercises.py
+    marimo edit sw03_lecture_exercises.py
     ```
     """)
     return

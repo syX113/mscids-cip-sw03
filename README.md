@@ -7,7 +7,7 @@ Interactive course materials for SW03 using Marimo notebooks, FastAPI, and Parqu
 - [Prerequisites](#prerequisites)
 - [Environment setup](#environment-setup)
 - [Run the Marimo notebooks](#run-the-marimo-notebooks)
-- [Start the Parquet API](#start-the-parquet-api)
+- [Start the Demo API](#start-the-demo-api)
 - [Optional: Streamlit dashboard](#optional-streamlit-dashboard)
 - [Troubleshooting](#troubleshooting)
 
@@ -15,10 +15,10 @@ Interactive course materials for SW03 using Marimo notebooks, FastAPI, and Parqu
 
 ```text
 .
-├── lecture_sw03_content.py      # main lecture notebook
-├── lecture_sw03_exercises.py    # exercises notebook
-├── parquet_api.py               # FastAPI service backed by Parquet files
-├── streamlit_demo.py            # frontend demo app
+├── sw03_lecture_content.py      # main lecture notebook
+├── sw03_lecture_exercises.py    # exercises notebook
+├── sw03_demo_api.py             # FastAPI service backed by Parquet files
+├── sw03_demo_streamlit.py       # frontend demo app
 ├── data/                        # parquet datasets
 ├── env.yaml                     # conda environment definition
 ├── requirements.txt             # pip dependencies
@@ -85,25 +85,25 @@ Open two terminals (with the same activated environment):
 1. **Content notebook in app mode**
 
 ```bash
-marimo run lecture_sw03_content.py
+marimo run sw03_lecture_content.py
 ```
 
 2. **Exercises notebook in edit mode**
 
 ```bash
-marimo edit lecture_sw03_exercises.py
+marimo edit sw03_lecture_exercises.py
 ```
 
 Typical local URLs:
 - App mode: `http://127.0.0.1:2718`
 - Edit mode: `http://127.0.0.1:2719` (or next available port)
 
-## Start the Parquet API
+## Start the Demo API
 
 From the repository root:
 
 ```bash
-uvicorn parquet_api:app --reload
+uvicorn sw03_demo_api:app --reload
 ```
 
 Then open:
@@ -117,7 +117,7 @@ Then open:
 If you want to run the frontend demo:
 
 ```bash
-streamlit run streamlit_demo.py
+streamlit run sw03_demo_streamlit.py
 ```
 
 In the sidebar, use API base URL:
@@ -129,10 +129,10 @@ http://127.0.0.1:8000
 ## Troubleshooting
 
 - `Error loading ASGI app`:
-  - Run from repo root and use `uvicorn parquet_api:app --reload`.
+  - Run from repo root and use `uvicorn sw03_demo_api:app --reload`.
 - `ModuleNotFoundError` or missing packages:
   - Confirm the active environment, then reinstall with `pip install -r requirements.txt`.
 - Streamlit cannot connect to API:
-  - Make sure `uvicorn parquet_api:app --reload` is running and health endpoint returns `{"status":"ok"}`.
+  - Make sure `uvicorn sw03_demo_api:app --reload` is running and health endpoint returns `{"status":"ok"}`.
 - Marimo command not found:
   - Reinstall dependencies in the active environment.

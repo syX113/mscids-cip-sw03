@@ -1,7 +1,7 @@
 """Streamlit UI for the normalized Sales Analysis dashboard.
 
 Run with:
-    streamlit run streamlit_demo.py
+    streamlit run sw03_demo_streamlit.py
 """
 
 from __future__ import annotations
@@ -954,7 +954,7 @@ with st.sidebar:
         st.session_state.api_base_url = cleaned
         clear_data_caches()
 
-    st.caption("Backend command: `uvicorn parquet_api:app --reload`")
+    st.caption("Backend command: `uvicorn sw03_demo_api:app --reload`")
 
 api_base_url = str(st.session_state.api_base_url)
 

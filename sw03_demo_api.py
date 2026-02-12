@@ -1,7 +1,7 @@
 """FastAPI app that persists normalized sales data to Parquet files.
 
 Run with:
-    uvicorn parquet_api:app --reload
+    uvicorn sw03_demo_api:app --reload
 """
 
 from __future__ import annotations

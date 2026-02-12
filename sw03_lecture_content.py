@@ -4256,7 +4256,7 @@ def _(mo):
     fastapi_code = mo.md(
         """
 ```python
-# file: parquet_api.py
+# file: sw03_demo_api.py
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -4270,7 +4270,7 @@ class ProductCreate(BaseModel):
 
 @app.get("/products/{product_id}")
 def get_product(product_id: int):
-    # simplified snippet: full implementation is in parquet_api.py
+    # simplified snippet: full implementation is in sw03_demo_api.py
     ...
 
 @app.post("/products", status_code=201)
@@ -4278,12 +4278,12 @@ def create_product(payload: ProductCreate):
     ...
 ```
 
-This repo includes the full implementation in `parquet_api.py`.
+This repo includes the full implementation in `sw03_demo_api.py`.
 
 Run from the project root with:
 
 ```
-uvicorn parquet_api:app --reload
+uvicorn sw03_demo_api:app --reload
 ```
 
 Then open `http://127.0.0.1:8000/docs`.
@@ -4302,7 +4302,7 @@ def _(mo):
 1. Start the API in a terminal:
 
    ```bash
-   uvicorn parquet_api:app --reload
+   uvicorn sw03_demo_api:app --reload
    ```
 
 2. Click **1) Check API status** to verify the server is reachable.  
@@ -4398,7 +4398,7 @@ def _(fastapi_base_url, fastapi_check, json, mo, url_request):
     _output = mo.md("Waiting for API status check...").callout(kind="neutral")
     if fastapi_check.value == 0:
         _output = mo.md(
-            "Click **1) Check API status** after starting `uvicorn parquet_api:app --reload`."
+            "Click **1) Check API status** after starting `uvicorn sw03_demo_api:app --reload`."
         ).callout(kind="neutral")
     else:
         _url = fastapi_base_url.value.rstrip("/") + "/openapi.json"
