@@ -1,7 +1,7 @@
 """FastAPI app that persists normalized sales data to Parquet files.
 
 Run with:
-    uvicorn src.parquet_api:app --reload
+    uvicorn parquet_api:app --reload
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 TABLE_PATHS = {
     "regions": DATA_DIR / "sales_regions.parquet",
     "countries": DATA_DIR / "countries.parquet",

@@ -954,7 +954,7 @@ with st.sidebar:
         st.session_state.api_base_url = cleaned
         clear_data_caches()
 
-    st.caption("Backend command: `uvicorn src.parquet_api:app --reload`")
+    st.caption("Backend command: `uvicorn parquet_api:app --reload`")
 
 api_base_url = str(st.session_state.api_base_url)
 

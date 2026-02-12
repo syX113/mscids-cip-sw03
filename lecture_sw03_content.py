@@ -4256,35 +4256,34 @@ def _(mo):
     fastapi_code = mo.md(
         """
 ```python
-# file: src/demo_api.py
+# file: parquet_api.py
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-app = FastAPI(title="Lecture API")
+app = FastAPI(title="Sales Analysis API", version="2.0.0")
 
-class Item(BaseModel):
-    id: int
-    name: str
-    price: float
+class ProductCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    price: float = Field(gt=0)
+    description: str = Field(min_length=1, max_length=300)
+    category_id: int = Field(ge=1)
 
-items = {}
+@app.get("/products/{product_id}")
+def get_product(product_id: int):
+    # simplified snippet: full implementation is in parquet_api.py
+    ...
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int):
-    return items.get(item_id, {"error": "not found"})
-
-@app.post("/items")
-def create_item(item: Item):
-    items[item.id] = item
-    return item
+@app.post("/products", status_code=201)
+def create_product(payload: ProductCreate):
+    ...
 ```
 
-This repo includes the code above in `src/demo_api.py`.
+This repo includes the full implementation in `parquet_api.py`.
 
 Run from the project root with:
 
 ```
-uvicorn src.demo_api:app --reload
+uvicorn parquet_api:app --reload
 ```
 
 Then open `http://127.0.0.1:8000/docs`.
@@ -4303,12 +4302,12 @@ def _(mo):
 1. Start the API in a terminal:
 
    ```bash
-   uvicorn src.demo_api:app --reload
+   uvicorn parquet_api:app --reload
    ```
 
 2. Click **1) Check API status** to verify the server is reachable.  
-3. Edit the JSON payload and click **2) POST /items**.  
-4. Choose an item id and click **3) GET /items/{id}** to compare results.
+3. Edit the JSON payload and click **2) POST /products**.  
+4. Choose a product id and click **3) GET /products/{id}** to compare results.
         """
     ).callout(kind="info")
     _workflow
@@ -4367,12 +4366,12 @@ def _(mo):
     fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
     fastapi_check = mo.ui.button(label="1) Check API status", kind="neutral")
     fastapi_payload = mo.ui.text_area(
-        value='{"id": 1, "name": "Notebook", "price": 9.9}',
-        label="POST /items payload (JSON)",
+        value='{"name": "Notebook Pro", "price": 99.9, "description": "Lecture demo product", "category_id": 1}',
+        label="POST /products payload (JSON)",
     )
-    fastapi_post = mo.ui.button(label="2) POST /items", kind="success")
-    fastapi_item_id = mo.ui.text(value="1", label="Item id for GET /items/{id}")
-    fastapi_get = mo.ui.button(label="3) GET /items/{id}", kind="neutral")
+    fastapi_post = mo.ui.button(label="2) POST /products", kind="success")
+    fastapi_item_id = mo.ui.text(value="1", label="Product id for GET /products/{id}")
+    fastapi_get = mo.ui.button(label="3) GET /products/{id}", kind="neutral")
 
     _controls = mo.vstack(
         [
@@ -4399,7 +4398,7 @@ def _(fastapi_base_url, fastapi_check, json, mo, url_request):
     _output = mo.md("Waiting for API status check...").callout(kind="neutral")
     if fastapi_check.value == 0:
         _output = mo.md(
-            "Click **1) Check API status** after starting `uvicorn src.demo_api:app --reload`."
+            "Click **1) Check API status** after starting `uvicorn parquet_api:app --reload`."
         ).callout(kind="neutral")
     else:
         _url = fastapi_base_url.value.rstrip("/") + "/openapi.json"
@@ -4456,10 +4455,10 @@ def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_
     _output = mo.md("Waiting for POST request...").callout(kind="neutral")
     if fastapi_post.value == 0:
         _output = mo.md(
-            "Edit the payload, then click **2) POST /items**."
+            "Edit the payload, then click **2) POST /products**."
         ).callout(kind="neutral")
     else:
-        _url = fastapi_base_url.value.rstrip("/") + "/items"
+        _url = fastapi_base_url.value.rstrip("/") + "/products"
         try:
             _payload_obj = json.loads(fastapi_payload.value)
         except json.JSONDecodeError as exc:
@@ -4506,7 +4505,7 @@ Error:
 
                 _output = mo.md(
                     f"""
-`POST /items` returned status `{_status}`.
+`POST /products` returned status `{_status}`.
 
 ```json
 {_preview}
@@ -4522,16 +4521,16 @@ Error:
 def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_request):
     _output = mo.md("Waiting for GET request...").callout(kind="neutral")
     if fastapi_get.value == 0:
-        _output = mo.md("Click **3) GET /items/{id}** to fetch an item.").callout(
+        _output = mo.md("Click **3) GET /products/{id}** to fetch a product.").callout(
             kind="neutral"
         )
     else:
         try:
             _item_id = int(fastapi_item_id.value.strip())
         except ValueError:
-            _output = mo.md("Item id must be an integer.").callout(kind="danger")
+            _output = mo.md("Product id must be an integer.").callout(kind="danger")
         else:
-            _url = fastapi_base_url.value.rstrip("/") + f"/items/{_item_id}"
+            _url = fastapi_base_url.value.rstrip("/") + f"/products/{_item_id}"
             _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
             _status = None
             _body = ""
@@ -4563,7 +4562,7 @@ Error:
 
                 _output = mo.md(
                     f"""
-`GET /items/{_item_id}` returned status `{_status}`.
+`GET /products/{_item_id}` returned status `{_status}`.
 
 ```json
 {_preview}
