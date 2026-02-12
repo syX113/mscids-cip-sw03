@@ -7,13 +7,10 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import csv
-    import gzip
     import importlib
     import json
     import tempfile
-    import time
     from pathlib import Path
-    from urllib import request as urllib_request
 
     import marimo as mo
 
@@ -110,13 +107,11 @@ def _(mo):
     mo.md(r"""
     ## Exercise 1: Write a Parquet File
 
-    Complete `write_parquet_file(rows, file_path)`.
+    `write_parquet_file(rows, file_path)`
 
     Expected behavior:
     - return `-1` if pyarrow is missing
     - otherwise write file and return positive file size
-
-    TODO count: **1 line**
     """)
     return
 
@@ -133,9 +128,7 @@ def _(Path, optional_import, sample_rows, tempfile):
         _path.parent.mkdir(parents=True, exist_ok=True)
         _table = pa.Table.from_pylist(rows)
 
-        # TODO: write parquet file here.
-        # Example: pq.write_table(_table, _path.as_posix())
-        pass
+        pq.write_table(_table, _path.as_posix())
 
         if not _path.exists():
             return 0
@@ -158,14 +151,12 @@ def _(mo):
     mo.md(r"""
     ## Exercise 2: Read a Parquet File
 
-    Complete `read_parquet_count(file_path)`.
+    `read_parquet_count(file_path)`
 
     Expected behavior:
     - return `-1` if pyarrow is missing
     - return `0` if file does not exist
     - return row count when file exists
-
-    TODO count: **1 line**
     """)
     return
 
@@ -182,9 +173,8 @@ def _(Path, optional_import, sample_rows, tempfile):
         if not _path.exists():
             return 0
 
-        # TODO: read parquet and return number of rows.
-        # Example: _table = pq.read_table(_path.as_posix())
-        return 0
+        _table = pq.read_table(_path.as_posix())
+        return int(_table.num_rows)
 
     _pyarrow_ready = optional_import("pyarrow") is not None and optional_import(
         "pyarrow.parquet"
@@ -210,13 +200,11 @@ def _(mo):
     mo.md(r"""
     ## Exercise 3: Write a CSV File
 
-    Complete `write_csv_file(rows, file_path)`.
+    `write_csv_file(rows, file_path)`
 
     Expected behavior:
     - write header and rows
     - return file size in bytes
-
-    TODO count: **1 line**
     """)
     return
 
@@ -231,8 +219,7 @@ def _(Path, csv, sample_rows, tempfile):
         with _path.open("w", newline="", encoding="utf-8") as _f:
             _writer = csv.DictWriter(_f, fieldnames=_fieldnames)
             _writer.writeheader()
-            # TODO: write all rows.
-            pass
+            _writer.writerows(rows)
 
         return int(_path.stat().st_size) if _path.exists() else 0
 
@@ -249,13 +236,11 @@ def _(mo):
     mo.md(r"""
     ## Exercise 4: Read a CSV File
 
-    Complete `read_csv_count(file_path)`.
+    `read_csv_count(file_path)`
 
     Expected behavior:
     - return `0` for missing file
     - return row count for existing file
-
-    TODO count: **1 line**
     """)
     return
 
@@ -268,8 +253,8 @@ def _(Path, csv, sample_rows, tempfile):
             return 0
 
         with _path.open("r", newline="", encoding="utf-8") as _f:
-            # TODO: read rows and return len(...)
-            return 0
+            _reader = csv.DictReader(_f)
+            return len(list(_reader))
 
     with tempfile.TemporaryDirectory() as _tmp:
         _path = Path(_tmp) / "ex4.csv"
@@ -289,14 +274,12 @@ def _(mo):
     mo.md(r"""
     ## Exercise 5: Compare CSV and Parquet Size
 
-    Complete `compare_csv_parquet_sizes(rows)`.
+    `compare_csv_parquet_sizes(rows)`
 
     Return dictionary with keys:
     - `csv_bytes`
     - `parquet_bytes` (`-1` if parquet unavailable)
     - `delta_bytes` (`parquet_bytes - csv_bytes`, or `None` if unavailable)
-
-    TODO count: **1 line**
     """)
     return
 
@@ -328,8 +311,7 @@ def _(Path, csv, optional_import, sample_rows, tempfile):
             pq.write_table(_table, _parquet_path.as_posix())
             _parquet_bytes = int(_parquet_path.stat().st_size)
 
-            # TODO: parquet minus csv
-            _delta = 0
+            _delta = _parquet_bytes - _csv_bytes
 
             return {
                 "csv_bytes": _csv_bytes,
@@ -358,14 +340,12 @@ def _(mo):
     mo.md(r"""
     ## Exercise 6: Simple gzip Compression Report
 
-    Complete `gzip_report(text_payload, level=6)`.
+    `gzip_report(text_payload, level=6)`
 
     Return dictionary with:
     - `raw_bytes`
     - `compressed_bytes`
     - `ratio`
-
-    TODO count: **1 line**
     """)
     return
 
@@ -373,12 +353,13 @@ def _(mo):
 @app.cell
 def _(sample_text):
     def gzip_report(text_payload, level=6):
+        import gzip
+
         _payload_bytes = str(text_payload).encode("utf-8")
         _raw = len(_payload_bytes)
         _level = min(9, max(1, int(level)))
 
-        # TODO: compress payload bytes.
-        _compressed = b""
+        _compressed = gzip.compress(_payload_bytes, compresslevel=_level)
 
         _compressed_bytes = len(_compressed)
         _ratio = (_compressed_bytes / _raw) if _raw else 0.0
@@ -404,14 +385,12 @@ def _(mo):
     mo.md(r"""
     ## Exercise 7: Create a Simple API
 
-    Complete `create_hello_api()`.
+    `create_hello_api()`
 
     Expected behavior:
     - return `None` if FastAPI missing
     - otherwise create endpoint `GET /hello`
     - endpoint response: `{"message": "hello from api"}`
-
-    TODO count: **1 line**
     """)
     return
 
@@ -428,8 +407,7 @@ def _(optional_import):
 
         @_app.get("/hello")
         def hello():
-            # TODO: return hello payload.
-            return {}
+            return {"message": "hello from api"}
 
         return _app
 
@@ -457,14 +435,12 @@ def _(mo):
     mo.md(r"""
     ## Exercise 8: Call API from Python
 
-    Complete `call_hello_with_python(base_url, urlopen_fn)`.
+    `call_hello_with_python(base_url, urlopen_fn)`
 
     Expected behavior:
     - call `/hello`
     - parse JSON
     - return dictionary with keys: `ok`, `url`, `status`, `payload`
-
-    TODO count: **2 lines**
     """)
     return
 
@@ -474,11 +450,9 @@ def _(json):
     def call_hello_with_python(base_url, urlopen_fn):
         _url = f"{str(base_url).rstrip('/')}/hello"
         try:
-            # TODO 1: open URL with timeout=2
-            _response = None
+            _response = urlopen_fn(_url, timeout=2)
 
-            # TODO 2: parse response JSON bytes
-            _payload = None
+            _payload = json.loads(_response.read().decode("utf-8"))
 
             _status = getattr(_response, "status", None) if _response is not None else None
             return {
@@ -523,7 +497,7 @@ def _(mo):
     mo.md(r"""
     ## Exercise 9: Row vs Column I/O Estimate
 
-    Complete `estimate_io_bytes(num_rows, total_columns, selected_columns, bytes_per_value=8)`.
+    `estimate_io_bytes(num_rows, total_columns, selected_columns, bytes_per_value=8)`
 
     Formulas:
 
@@ -535,7 +509,6 @@ def _(mo):
     \text{column\_bytes} = N \times C_{selected} \times B
     $$
 
-    TODO count: **2 lines**
     """)
     return
 
@@ -548,11 +521,9 @@ def _():
         _c_sel = min(_c_total, max(0, int(selected_columns)))
         _b = max(1, int(bytes_per_value))
 
-        # TODO: full row-store bytes
-        _row_bytes = 0
+        _row_bytes = _n * _c_total * _b
 
-        # TODO: selected column-store bytes
-        _col_bytes = 0
+        _col_bytes = _n * _c_sel * _b
 
         _ratio = (_col_bytes / _row_bytes) if _row_bytes else 0.0
         return {
@@ -586,7 +557,7 @@ def _(mo):
 
     @app.get("/hello")
     def hello():
-    return {"message": "hello from api"}
+        return {"message": "hello from api"}
     ```
 
     Start server:
@@ -599,11 +570,6 @@ def _(mo):
     - `http://127.0.0.1:8000/hello`
     - `http://127.0.0.1:8000/docs`
     """)
-    return
-
-
-@app.cell
-def _():
     return
 
 

@@ -33,8 +33,11 @@ def _model_dump(model: BaseModel, **kwargs: Any) -> dict[str, Any]:
     return model.dict(**kwargs)
 
 
-def _clean_text(value: str) -> str:
-    return value.strip()
+def _clean_required_text(value: str, *, field_name: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty")
+    return cleaned
 
 
 class SalesRegion(BaseModel):
@@ -598,8 +601,10 @@ class SalesRepository:
         with self._lock:
             regions = self._read("regions")
             record = _model_dump(payload)
-            record["name"] = _clean_text(record["name"])
-            record["description"] = _clean_text(record["description"])
+            record["name"] = _clean_required_text(str(record["name"]), field_name="Region name")
+            record["description"] = _clean_required_text(
+                str(record["description"]), field_name="Region description"
+            )
             self._ensure_unique_name(
                 regions,
                 col="name",
@@ -624,7 +629,7 @@ class SalesRepository:
             row_index = idx[0]
 
             if "name" in patch:
-                patch["name"] = _clean_text(str(patch["name"]))
+                patch["name"] = _clean_required_text(str(patch["name"]), field_name="Region name")
                 self._ensure_unique_name(
                     regions,
                     col="name",
@@ -634,7 +639,9 @@ class SalesRepository:
                     ignore_id=region_id,
                 )
             if "description" in patch:
-                patch["description"] = _clean_text(str(patch["description"]))
+                patch["description"] = _clean_required_text(
+                    str(patch["description"]), field_name="Region description"
+                )
 
             for key, value in patch.items():
                 regions.at[row_index, key] = value
@@ -667,7 +674,7 @@ class SalesRepository:
                 raise ValueError(f"Region id {payload.region_id} does not exist")
 
             record = _model_dump(payload)
-            record["name"] = _clean_text(record["name"])
+            record["name"] = _clean_required_text(str(record["name"]), field_name="Country name")
             self._ensure_unique_name(
                 countries,
                 col="name",
@@ -697,7 +704,7 @@ class SalesRepository:
             if "region_id" in patch and regions.loc[regions["region_id"] == patch["region_id"]].empty:
                 raise ValueError(f"Region id {patch['region_id']} does not exist")
             if "name" in patch:
-                patch["name"] = _clean_text(str(patch["name"]))
+                patch["name"] = _clean_required_text(str(patch["name"]), field_name="Country name")
                 self._ensure_unique_name(
                     countries,
                     col="name",
@@ -732,8 +739,10 @@ class SalesRepository:
         with self._lock:
             categories = self._read("categories")
             record = _model_dump(payload)
-            record["name"] = _clean_text(record["name"])
-            record["description"] = _clean_text(record["description"])
+            record["name"] = _clean_required_text(str(record["name"]), field_name="Category name")
+            record["description"] = _clean_required_text(
+                str(record["description"]), field_name="Category description"
+            )
             self._ensure_unique_name(
                 categories,
                 col="name",
@@ -758,7 +767,7 @@ class SalesRepository:
             row_index = idx[0]
 
             if "name" in patch:
-                patch["name"] = _clean_text(str(patch["name"]))
+                patch["name"] = _clean_required_text(str(patch["name"]), field_name="Category name")
                 self._ensure_unique_name(
                     categories,
                     col="name",
@@ -768,7 +777,9 @@ class SalesRepository:
                     ignore_id=category_id,
                 )
             if "description" in patch:
-                patch["description"] = _clean_text(str(patch["description"]))
+                patch["description"] = _clean_required_text(
+                    str(patch["description"]), field_name="Category description"
+                )
 
             for key, value in patch.items():
                 categories.at[row_index, key] = value
@@ -801,8 +812,10 @@ class SalesRepository:
                 raise ValueError(f"Category id {payload.category_id} does not exist")
 
             record = _model_dump(payload)
-            record["name"] = _clean_text(record["name"])
-            record["description"] = _clean_text(record["description"])
+            record["name"] = _clean_required_text(str(record["name"]), field_name="Product name")
+            record["description"] = _clean_required_text(
+                str(record["description"]), field_name="Product description"
+            )
             self._ensure_unique_name(
                 products,
                 col="name",
@@ -832,7 +845,7 @@ class SalesRepository:
             if "category_id" in patch and categories.loc[categories["category_id"] == patch["category_id"]].empty:
                 raise ValueError(f"Category id {patch['category_id']} does not exist")
             if "name" in patch:
-                patch["name"] = _clean_text(str(patch["name"]))
+                patch["name"] = _clean_required_text(str(patch["name"]), field_name="Product name")
                 self._ensure_unique_name(
                     products,
                     col="name",
@@ -842,7 +855,9 @@ class SalesRepository:
                     ignore_id=product_id,
                 )
             if "description" in patch:
-                patch["description"] = _clean_text(str(patch["description"]))
+                patch["description"] = _clean_required_text(
+                    str(patch["description"]), field_name="Product description"
+                )
 
             for key, value in patch.items():
                 products.at[row_index, key] = value
@@ -867,7 +882,7 @@ class SalesRepository:
     ) -> list[dict[str, Any]]:
         if start_date and end_date and start_date > end_date:
             raise ValueError("start_date must be on or before end_date")
-        if min_rating and max_rating and min_rating > max_rating:
+        if min_rating is not None and max_rating is not None and min_rating > max_rating:
             raise ValueError("min_rating must be less than or equal to max_rating")
 
         with self._lock:
