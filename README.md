@@ -1,6 +1,6 @@
-# 📘 CIP SW03: Data Collection, Integration & Preprocessing
+# 📘 Collection, Integration & Preprocessing - SW03
 
-Course workspace for SW03 with Marimo notebooks, a FastAPI demo, and an optional Streamlit UI.
+Course materials for SW03 with Marimo notebooks, a FastAPI demo, and an optional Streamlit demo.
 
 ---
 
