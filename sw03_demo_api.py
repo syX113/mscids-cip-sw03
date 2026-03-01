@@ -6,13 +6,13 @@ Run with:
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Path as PathParam, Query
 from pydantic import BaseModel, Field
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -23,8 +23,9 @@ TABLE_PATHS = {
     "products": DATA_DIR / "products.parquet",
     "sales": DATA_DIR / "sales.parquet",
 }
-SEED_VERSION = "2026-02-11-regression-v2"
-SEED_VERSION_PATH = DATA_DIR / ".seed_version"
+SEED_DATA_DIR = DATA_DIR / "seed"
+SEED_TABLE_PATHS = {table_name: SEED_DATA_DIR / table_path.name for table_name, table_path in TABLE_PATHS.items()}
+T = TypeVar("T")
 
 
 def _model_dump(model: BaseModel, **kwargs: Any) -> dict[str, Any]:
@@ -154,26 +155,12 @@ class SalesRepository:
 
     def _ensure_store(self) -> None:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        if not self._is_store_valid():
-            self._seed_store()
-            return
-        if self._read_seed_version() != SEED_VERSION:
-            self._seed_store()
+        # Always reset working parquet files from the seed set at API startup.
+        self._seed_store()
 
-    def _read_seed_version(self) -> str:
-        if not SEED_VERSION_PATH.exists():
-            return ""
-        try:
-            return SEED_VERSION_PATH.read_text(encoding="utf-8").strip()
-        except Exception:
-            return ""
-
-    def _write_seed_version(self) -> None:
-        SEED_VERSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SEED_VERSION_PATH.write_text(SEED_VERSION, encoding="utf-8")
-
-    def _is_store_valid(self) -> bool:
-        required_columns = {
+    @staticmethod
+    def _required_columns() -> dict[str, set[str]]:
+        return {
             "regions": {"region_id", "name", "description"},
             "countries": {"country_id", "name", "region_id"},
             "categories": {"category_id", "name", "description"},
@@ -181,259 +168,26 @@ class SalesRepository:
             "sales": {"sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"},
         }
 
-        for table_name, path in self.table_paths.items():
-            if not path.exists():
-                return False
-            try:
-                df = pd.read_parquet(path)
-            except Exception:
-                return False
-            if not required_columns[table_name].issubset(set(df.columns)):
-                return False
-
-        try:
-            countries = pd.read_parquet(self.table_paths["countries"])
-            regions = pd.read_parquet(self.table_paths["regions"])
-            products = pd.read_parquet(self.table_paths["products"])
-            categories = pd.read_parquet(self.table_paths["categories"])
-            sales = pd.read_parquet(self.table_paths["sales"])
-        except Exception:
-            return False
-
-        if not set(countries["region_id"].dropna().astype(int).tolist()).issubset(
-            set(regions["region_id"].dropna().astype(int).tolist())
-        ):
-            return False
-        if not set(products["category_id"].dropna().astype(int).tolist()).issubset(
-            set(categories["category_id"].dropna().astype(int).tolist())
-        ):
-            return False
-        if not set(sales["product_id"].dropna().astype(int).tolist()).issubset(
-            set(products["product_id"].dropna().astype(int).tolist())
-        ):
-            return False
-        if not set(sales["country_id"].dropna().astype(int).tolist()).issubset(
-            set(countries["country_id"].dropna().astype(int).tolist())
-        ):
-            return False
-
-        return True
-
     def _seed_store(self) -> None:
-        regions = pd.DataFrame(
-            [
-                {"region_id": 1, "name": "US", "description": "United States sales region"},
-                {"region_id": 2, "name": "Europe", "description": "European sales region"},
-                {"region_id": 3, "name": "Asia", "description": "Asia-Pacific sales region"},
-                {"region_id": 4, "name": "Africa", "description": "African sales region"},
-            ]
-        )
+        required_columns = self._required_columns()
+        missing_seed_tables = [
+            table_name for table_name, seed_path in SEED_TABLE_PATHS.items() if not seed_path.exists()
+        ]
+        if missing_seed_tables:
+            missing_list = ", ".join(missing_seed_tables)
+            raise RuntimeError(
+                f"Missing seed parquet files for tables: {missing_list}. "
+                f"Expected files in '{SEED_DATA_DIR}'."
+            )
 
-        categories = pd.DataFrame(
-            [
-                {"category_id": 1, "name": "Hardware", "description": "Physical devices and components"},
-                {"category_id": 2, "name": "Software", "description": "Licenses and digital subscriptions"},
-                {"category_id": 3, "name": "Services", "description": "Consulting and managed services"},
-            ]
-        )
-
-        countries = pd.DataFrame(
-            [
-                {"country_id": 1, "name": "United States", "region_id": 1},
-                {"country_id": 2, "name": "Canada", "region_id": 1},
-                {"country_id": 3, "name": "Germany", "region_id": 2},
-                {"country_id": 4, "name": "United Kingdom", "region_id": 2},
-                {"country_id": 5, "name": "Japan", "region_id": 3},
-                {"country_id": 6, "name": "India", "region_id": 3},
-                {"country_id": 7, "name": "South Africa", "region_id": 4},
-                {"country_id": 8, "name": "Kenya", "region_id": 4},
-            ]
-        )
-
-        products = pd.DataFrame(
-            [
-                {
-                    "product_id": 1,
-                    "name": "Edge Sensor X1",
-                    "price": 195.0,
-                    "description": "Industrial sensor package for telemetry capture",
-                    "category_id": 1,
-                },
-                {
-                    "product_id": 2,
-                    "name": "Gateway Node Pro",
-                    "price": 420.0,
-                    "description": "Ruggedized gateway for distributed edge infrastructure",
-                    "category_id": 1,
-                },
-                {
-                    "product_id": 3,
-                    "name": "Ops Console",
-                    "price": 99.0,
-                    "description": "Monitoring and response software subscription",
-                    "category_id": 2,
-                },
-                {
-                    "product_id": 4,
-                    "name": "Forecast Studio",
-                    "price": 149.0,
-                    "description": "Demand forecasting and analytics suite",
-                    "category_id": 2,
-                },
-                {
-                    "product_id": 5,
-                    "name": "Deployment Sprint",
-                    "price": 2500.0,
-                    "description": "Two-week onboarding and deployment service",
-                    "category_id": 3,
-                },
-                {
-                    "product_id": 6,
-                    "name": "Managed Success",
-                    "price": 1800.0,
-                    "description": "Quarterly customer success management package",
-                    "category_id": 3,
-                },
-                {
-                    "product_id": 7,
-                    "name": "Customer Care Pack",
-                    "price": 980.0,
-                    "description": "Lightweight managed care service add-on",
-                    "category_id": 3,
-                },
-            ]
-        )
-
-        sales = self._seed_sales(regions=regions, countries=countries, categories=categories, products=products)
-
-        self._write("regions", regions)
-        self._write("countries", countries)
-        self._write("categories", categories)
-        self._write("products", products)
-        self._write("sales", sales)
-        self._write_seed_version()
-
-    def _seed_sales(
-        self,
-        *,
-        regions: pd.DataFrame,
-        countries: pd.DataFrame,
-        categories: pd.DataFrame,
-        products: pd.DataFrame,
-    ) -> pd.DataFrame:
-        def _add_months(base: date, delta: int) -> date:
-            month_index = (base.month - 1) + delta
-            year = base.year + month_index // 12
-            month = month_index % 12 + 1
-            return date(year, month, 1)
-
-        region_revenue_factor = {"US": 1.17, "Europe": 1.09, "Asia": 1.01, "Africa": 0.92}
-        region_units_factor = {"US": 1.16, "Europe": 1.08, "Asia": 1.0, "Africa": 0.94}
-        region_rating_offset = {"US": 0.22, "Europe": 0.12, "Asia": 0.05, "Africa": -0.18}
-        category_revenue_factor = {"Hardware": 1.16, "Software": 1.05, "Services": 1.34}
-        category_units_factor = {"Hardware": 1.12, "Software": 1.03, "Services": 0.78}
-        category_rating_base = {"Hardware": 3.35, "Software": 3.62, "Services": 3.98}
-        country_rating_offset = {
-            "United States": 0.20,
-            "Canada": 0.08,
-            "Germany": 0.12,
-            "United Kingdom": 0.06,
-            "Japan": 0.10,
-            "India": -0.04,
-            "South Africa": -0.12,
-            "Kenya": -0.08,
-        }
-
-        products_lookup = products.set_index("product_id").to_dict(orient="index")
-        region_name_by_id = regions.set_index("region_id")["name"].to_dict()
-        country_name_by_id = countries.set_index("country_id")["name"].to_dict()
-        category_name_by_id = categories.set_index("category_id")["name"].to_dict()
-
-        rows: list[dict[str, Any]] = []
-        sale_id = 1
-        anchor = date.today().replace(day=1)
-        start_month = _add_months(anchor, -23)
-
-        for month_idx in range(24):
-            month_start = _add_months(start_month, month_idx)
-            month = month_start.month
-            seasonal_revenue_factor = 1.16 if month in (10, 11, 12) else 1.07 if month in (4, 5, 6) else 0.93
-            seasonal_rating_offset = 0.18 if month in (11, 12) else 0.06 if month in (6, 7) else -0.03 if month in (1, 2) else 0.0
-
-            for country_row in countries.itertuples(index=False):
-                country_id = int(country_row.country_id)
-                region_id = int(country_row.region_id)
-                region_name = region_name_by_id[region_id]
-                country_name = country_name_by_id[country_id]
-                country_wave = 1.0 + (((country_id + month_idx) % 5) - 2) * 0.028
-
-                for product_row in products.itertuples(index=False):
-                    product_id = int(product_row.product_id)
-                    category_id = int(product_row.category_id)
-                    category_name = category_name_by_id[category_id]
-
-                    order_count = 2 + ((month_idx + country_id + product_id) % 2)
-                    for order_idx in range(order_count):
-                        base_units = 6 + ((month_idx * 4 + country_id * 3 + product_id * 5 + order_idx * 7) % 44)
-                        units_sold = max(
-                            2,
-                            int(
-                                round(
-                                    base_units
-                                    * region_units_factor[region_name]
-                                    * category_units_factor[category_name]
-                                )
-                            ),
-                        )
-                        day_offset = (2 + product_id * 3 + country_id + month_idx + order_idx * 6) % 27
-                        sale_date = month_start + timedelta(days=day_offset)
-
-                        base_price = float(products_lookup[product_id]["price"])
-                        pricing_wave = 1.0 + ((((month_idx + product_id + order_idx) % 7) - 3) * 0.013)
-                        discount = 0.02 + (((month_idx + country_id + order_idx) % 7) * 0.018)
-                        if region_name == "Africa":
-                            discount += 0.015
-                        discount = min(discount, 0.23)
-
-                        effective_unit_price = (
-                            base_price
-                            * seasonal_revenue_factor
-                            * region_revenue_factor[region_name]
-                            * category_revenue_factor[category_name]
-                            * country_wave
-                            * pricing_wave
-                            * (1 - discount)
-                        )
-                        total_price = round(max(1.0, units_sold * effective_unit_price), 2)
-
-                        noise = (((month_idx * 7 + country_id * 11 + product_id * 13 + order_idx * 17) % 100) / 100.0 - 0.5) * 0.55
-                        rating_raw = (
-                            category_rating_base[category_name]
-                            + region_rating_offset[region_name]
-                            + country_rating_offset[country_name]
-                            + (discount * 1.35)
-                            - (units_sold * 0.011)
-                            + seasonal_rating_offset
-                            + noise
-                        )
-                        customer_rating = int(max(1, min(5, round(rating_raw))))
-
-                        rows.append(
-                            {
-                                "sale_id": sale_id,
-                                "sale_date": sale_date,
-                                "product_id": product_id,
-                                "country_id": country_id,
-                                "units_sold": units_sold,
-                                "total_price": total_price,
-                                "customer_rating": customer_rating,
-                            }
-                        )
-                        sale_id += 1
-
-        df = pd.DataFrame(rows)
-        df["sale_date"] = pd.to_datetime(df["sale_date"])
-        return df
+        for table_name in self.table_paths:
+            seed_df = pd.read_parquet(SEED_TABLE_PATHS[table_name])
+            if not required_columns[table_name].issubset(set(seed_df.columns)):
+                raise RuntimeError(
+                    f"Seed parquet for '{table_name}' is missing required columns. "
+                    f"Expected at least: {sorted(required_columns[table_name])}"
+                )
+            self._write(table_name, seed_df)
 
     def _read(self, table_name: str) -> pd.DataFrame:
         path = self.table_paths[table_name]
@@ -907,7 +661,7 @@ class SalesRepository:
         if max_rating is not None:
             filtered = filtered[filtered["customer_rating"] <= max_rating]
 
-        filtered = filtered.sort_values("sale_date", ascending=False).head(limit)
+        filtered = filtered.sort_values(["sale_date", "sale_id"], ascending=[False, False]).head(limit)
         return self._format_sales_records(filtered)
 
     def get_sale(self, sale_id: int) -> dict[str, Any] | None:
@@ -988,11 +742,17 @@ repo = SalesRepository(TABLE_PATHS)
 app = FastAPI(title="Sales Analysis API", version="2.0.0")
 
 
+def _run_repo_call(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    try:
+        return func(*args, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {
         "message": "Sales Analysis API is running.",
-        "data_dir": str(DATA_DIR),
     }
 
 
@@ -1012,7 +772,7 @@ def list_regions() -> list[SalesRegion]:
 
 
 @app.get("/regions/{region_id}", response_model=SalesRegion)
-def get_region(region_id: int) -> SalesRegion:
+def get_region(region_id: int = PathParam(..., ge=1)) -> SalesRegion:
     region = repo.get_region(region_id)
     if region is None:
         raise HTTPException(status_code=404, detail="Region not found")
@@ -1021,19 +781,13 @@ def get_region(region_id: int) -> SalesRegion:
 
 @app.post("/regions", response_model=SalesRegion, status_code=201)
 def create_region(payload: SalesRegionCreate) -> SalesRegion:
-    try:
-        created = repo.create_region(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created = _run_repo_call(repo.create_region, payload)
     return SalesRegion(**created)
 
 
 @app.put("/regions/{region_id}", response_model=SalesRegion)
-def update_region(region_id: int, payload: SalesRegionUpdate) -> SalesRegion:
-    try:
-        updated = repo.update_region(region_id=region_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def update_region(payload: SalesRegionUpdate, region_id: int = PathParam(..., ge=1)) -> SalesRegion:
+    updated = _run_repo_call(repo.update_region, region_id=region_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Region not found")
     return SalesRegion(**updated)
@@ -1045,7 +799,7 @@ def list_countries() -> list[Country]:
 
 
 @app.get("/countries/{country_id}", response_model=Country)
-def get_country(country_id: int) -> Country:
+def get_country(country_id: int = PathParam(..., ge=1)) -> Country:
     country = repo.get_country(country_id)
     if country is None:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -1054,19 +808,13 @@ def get_country(country_id: int) -> Country:
 
 @app.post("/countries", response_model=Country, status_code=201)
 def create_country(payload: CountryCreate) -> Country:
-    try:
-        created = repo.create_country(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created = _run_repo_call(repo.create_country, payload)
     return Country(**created)
 
 
 @app.put("/countries/{country_id}", response_model=Country)
-def update_country(country_id: int, payload: CountryUpdate) -> Country:
-    try:
-        updated = repo.update_country(country_id=country_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def update_country(payload: CountryUpdate, country_id: int = PathParam(..., ge=1)) -> Country:
+    updated = _run_repo_call(repo.update_country, country_id=country_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Country not found")
     return Country(**updated)
@@ -1078,7 +826,7 @@ def list_categories() -> list[Category]:
 
 
 @app.get("/categories/{category_id}", response_model=Category)
-def get_category(category_id: int) -> Category:
+def get_category(category_id: int = PathParam(..., ge=1)) -> Category:
     category = repo.get_category(category_id)
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -1087,19 +835,13 @@ def get_category(category_id: int) -> Category:
 
 @app.post("/categories", response_model=Category, status_code=201)
 def create_category(payload: CategoryCreate) -> Category:
-    try:
-        created = repo.create_category(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created = _run_repo_call(repo.create_category, payload)
     return Category(**created)
 
 
 @app.put("/categories/{category_id}", response_model=Category)
-def update_category(category_id: int, payload: CategoryUpdate) -> Category:
-    try:
-        updated = repo.update_category(category_id=category_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def update_category(payload: CategoryUpdate, category_id: int = PathParam(..., ge=1)) -> Category:
+    updated = _run_repo_call(repo.update_category, category_id=category_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Category not found")
     return Category(**updated)
@@ -1111,7 +853,7 @@ def list_products() -> list[Product]:
 
 
 @app.get("/products/{product_id}", response_model=Product)
-def get_product(product_id: int) -> Product:
+def get_product(product_id: int = PathParam(..., ge=1)) -> Product:
     product = repo.get_product(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -1120,19 +862,13 @@ def get_product(product_id: int) -> Product:
 
 @app.post("/products", response_model=Product, status_code=201)
 def create_product(payload: ProductCreate) -> Product:
-    try:
-        created = repo.create_product(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created = _run_repo_call(repo.create_product, payload)
     return Product(**created)
 
 
 @app.put("/products/{product_id}", response_model=Product)
-def update_product(product_id: int, payload: ProductUpdate) -> Product:
-    try:
-        updated = repo.update_product(product_id=product_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def update_product(payload: ProductUpdate, product_id: int = PathParam(..., ge=1)) -> Product:
+    updated = _run_repo_call(repo.update_product, product_id=product_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return Product(**updated)
@@ -1150,25 +886,23 @@ def list_sales(
     max_rating: int | None = Query(default=None, ge=1, le=5),
     limit: int = Query(default=2000, ge=1, le=20000),
 ) -> list[Sale]:
-    try:
-        records = repo.list_sales(
-            regions=region,
-            countries=country,
-            products=product,
-            categories=category,
-            start_date=start_date,
-            end_date=end_date,
-            min_rating=min_rating,
-            max_rating=max_rating,
-            limit=limit,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    records = _run_repo_call(
+        repo.list_sales,
+        regions=region,
+        countries=country,
+        products=product,
+        categories=category,
+        start_date=start_date,
+        end_date=end_date,
+        min_rating=min_rating,
+        max_rating=max_rating,
+        limit=limit,
+    )
     return [Sale(**r) for r in records]
 
 
 @app.get("/sales/{sale_id}", response_model=Sale)
-def get_sale(sale_id: int) -> Sale:
+def get_sale(sale_id: int = PathParam(..., ge=1)) -> Sale:
     sale = repo.get_sale(sale_id)
     if sale is None:
         raise HTTPException(status_code=404, detail="Sale not found")
@@ -1177,19 +911,13 @@ def get_sale(sale_id: int) -> Sale:
 
 @app.post("/sales", response_model=Sale, status_code=201)
 def create_sale(payload: SaleCreate) -> Sale:
-    try:
-        created = repo.create_sale(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created = _run_repo_call(repo.create_sale, payload)
     return Sale(**created)
 
 
 @app.put("/sales/{sale_id}", response_model=Sale)
-def update_sale(sale_id: int, payload: SaleUpdate) -> Sale:
-    try:
-        updated = repo.update_sale(sale_id=sale_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def update_sale(payload: SaleUpdate, sale_id: int = PathParam(..., ge=1)) -> Sale:
+    updated = _run_repo_call(repo.update_sale, sale_id=sale_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Sale not found")
     return Sale(**updated)

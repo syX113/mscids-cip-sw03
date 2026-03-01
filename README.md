@@ -89,6 +89,9 @@ Use separate terminals so each service stays running.
 | Terminal 3 | 🚀 FastAPI demo | `uvicorn sw03_demo_api:app --reload --host 127.0.0.1 --port 8000` |
 | Terminal 4 (optional) | 🎛️ Streamlit demo | `streamlit run sw03_demo_streamlit.py` |
 
+> [!IMPORTANT]
+> On every API start, files in `data/` are reset from `data/seed/`.
+
 If Streamlit needs the API, use `http://127.0.0.1:8000` as the base URL.
 
 To stop a running process in a terminal: `Ctrl + C`.
