@@ -61,9 +61,18 @@ def _():
 def _(importlib):
     def optional_import(module_name):
         """Import a module if available; return None otherwise."""
-        if importlib.util.find_spec(module_name) is None:
+        try:
+            module_spec = importlib.util.find_spec(module_name)
+        except (ModuleNotFoundError, ImportError, ValueError):
             return None
-        return importlib.import_module(module_name)
+
+        if module_spec is None:
+            return None
+
+        try:
+            return importlib.import_module(module_name)
+        except (ModuleNotFoundError, ImportError):
+            return None
 
     def format_bytes(num_bytes):
         """Human-friendly byte counts."""

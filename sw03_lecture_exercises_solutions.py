@@ -33,7 +33,7 @@ def cell_title(mo):
     mo.md(r"""
     # SW03 Basic Exercises: Storage and APIs
 
-    This notebook contains practical exercises.
+    This notebook contains solved reference exercises.
 
     Topics:
     - Marimo notebook basics
@@ -44,7 +44,7 @@ def cell_title(mo):
     Recommended command:
 
     ```bash
-    marimo edit sw03_lecture_exercises.py
+    marimo edit sw03_lecture_exercises_solutions.py
     ```
     """)
     return
@@ -65,34 +65,6 @@ def cell_exercise_list(mo):
     8. API: Call an endpoint and parse JSON
 
     Each exercise includes a simple `pass` / `fail` check.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def syntax_cheatsheet(mo):
-    mo.md(r"""
-    ## Quick Syntax Cheatsheet
-
-    Useful patterns for these exercises:
-
-    ```python
-    # f-string
-    text = f"Hello {name}"
-
-    # CSV read pattern
-    with path.open("r", newline="", encoding="utf-8") as file_handle:
-        reader = csv.DictReader(file_handle)
-        rows = list(reader)
-
-    # clamp a numeric value
-    level = min(9, max(1, int(level)))
-
-    # safe URL join
-    base = str(base_url).rstrip("/")
-    path = "/" + str(path).lstrip("/")
-    url = f"{base}{path}"
-    ```
     """)
     return
 
@@ -121,26 +93,15 @@ def exercise1_prompt(mo):
     - return dictionary with keys:
       - `text`
       - `widget`
-
-    Hints:
-    - Use an f-string with a newline: `f"...\\n..."`
-    - Expected text format:
-      `### <title>`
-      `This notebook practices **<topic>**.`
-    - Build widget with: `mo_module.md(markdown_text)`
     """)
     return
 
 
 @app.cell
-def exercise1(mo):
+def exercise1_solution(mo):
     def build_intro_markdown(mo_module, title, topic):
-        # ### FILL HERE YOUR CODE ###
-        topic_text = "### FILL HERE YOUR CODE ###"
-        markdown_text = f"### {title}\nThis notebook practices **{topic_text}**."
-        # ### FILL HERE YOUR CODE ###
+        markdown_text = f"### {title}\nThis notebook practices **{topic}**."
         widget = mo_module.md(markdown_text)
-
         return {"text": markdown_text, "widget": widget}
 
     result_ex1 = build_intro_markdown(mo, "Welcome", "files, compression, and APIs")
@@ -167,27 +128,16 @@ def exercise2_prompt(mo):
       - `row_count`
       - `columns`
       - `widget`
-
-    Hints:
-    - `len(rows)` gives the number of rows
-    - Column names from first row:
-      `list(rows[0].keys()) if rows else []`
-    - Table widget example:
-      `mo_module.ui.table(rows, label="Sample rows")`
     """)
     return
 
 
 @app.cell
-def exercise2(mo, sample_rows):
+def exercise2_solution(mo, sample_rows):
     def create_preview_table(mo_module, rows):
-        # ### FILL HERE YOUR CODE ###
-        row_count = 0  # replace with len(rows)
-        # ### FILL HERE YOUR CODE ###
+        row_count = len(rows)
         columns = list(rows[0].keys()) if rows else []
-        # ### FILL HERE YOUR CODE ###
         widget = mo_module.ui.table(rows, label="Sample rows")
-
         return {"row_count": row_count, "columns": columns, "widget": widget}
 
     result_ex2 = create_preview_table(mo, sample_rows)
@@ -215,39 +165,25 @@ def exercise3_prompt(mo):
       - `row_count`
       - `file_size`
       - `columns`
-
-    Hints:
-    - Write pattern:
-      `writer = csv.DictWriter(file_handle, fieldnames=columns)`
-    - Read pattern:
-      `reader = csv.DictReader(file_handle)`
-      `loaded_rows = list(reader)`
-    - Keep encoding as UTF-8 and `newline=""`
     """)
     return
 
 
 @app.cell
-def exercise3(Path, csv, sample_rows, tempfile):
+def exercise3_solution(Path, csv, sample_rows, tempfile):
     def write_and_read_csv(rows, file_path):
-        # ### FILL HERE YOUR CODE ###
         path_obj = Path(file_path)
-        # ### FILL HERE YOUR CODE ###
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        # ### FILL HERE YOUR CODE ###
         columns = list(rows[0].keys()) if rows else []
-
-        # ### FILL HERE YOUR CODE ###
         with path_obj.open("w", newline="", encoding="utf-8") as file_handle:
             writer = csv.DictWriter(file_handle, fieldnames=columns)
             writer.writeheader()
             writer.writerows(rows)
 
-        # ### FILL HERE YOUR CODE ###
         with path_obj.open("r", newline="", encoding="utf-8") as file_handle:
             reader = csv.DictReader(file_handle)
-            loaded_rows = []  # replace with list(reader)
+            loaded_rows = list(reader)
 
         return {
             "row_count": len(loaded_rows),
@@ -285,30 +221,19 @@ def exercise4_prompt(mo):
       - `parquet_bytes` (`-1` if parquet unavailable)
       - `size_ratio_parquet_to_csv` (`None` if unavailable)
       - `row_count` (`-1` if unavailable)
-
-    Hints:
-    - Optional modules:
-      `optional_import("pyarrow")`, `optional_import("pyarrow.parquet")`
-    - Write parquet:
-      `table = pyarrow_module.Table.from_pylist(rows)`
-      `parquet_module.write_table(table, parquet_file.as_posix())`
-    - Ratio formula:
-      `round(parquet_bytes / csv_bytes, 4) if csv_bytes else None`
     """)
     return
 
 
 @app.cell
-def exercise4(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
+def exercise4_solution(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
     def write_parquet_and_compare(rows, parquet_path, csv_path):
-        # ### FILL HERE YOUR CODE ###
         pyarrow_module = optional_import("pyarrow")
         parquet_module = optional_import("pyarrow.parquet")
 
         csv_result = write_and_read_csv(rows, csv_path)
         csv_bytes = csv_result["file_size"]
 
-        # ### FILL HERE YOUR CODE ###
         if pyarrow_module is None or parquet_module is None:
             return {
                 "csv_bytes": csv_bytes,
@@ -317,23 +242,20 @@ def exercise4(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
                 "row_count": -1,
             }
 
-        # ### FILL HERE YOUR CODE ###
         parquet_file = Path(parquet_path)
         parquet_file.parent.mkdir(parents=True, exist_ok=True)
-        # ### FILL HERE YOUR CODE ###
+
         table = pyarrow_module.Table.from_pylist(rows)
         parquet_module.write_table(table, parquet_file.as_posix())
-        # ### FILL HERE YOUR CODE ###
-        table_read_back = parquet_module.read_table(parquet_file.as_posix())
 
+        table_read_back = parquet_module.read_table(parquet_file.as_posix())
         parquet_bytes = int(parquet_file.stat().st_size)
-        # ### FILL HERE YOUR CODE ###
-        size_ratio = None  # replace with round(parquet_bytes / csv_bytes, 4) if csv_bytes else None
+        ratio = round(parquet_bytes / csv_bytes, 4) if csv_bytes else None
 
         return {
             "csv_bytes": csv_bytes,
             "parquet_bytes": parquet_bytes,
-            "size_ratio_parquet_to_csv": size_ratio,
+            "size_ratio_parquet_to_csv": ratio,
             "row_count": int(table_read_back.num_rows),
         }
 
@@ -377,32 +299,21 @@ def exercise5_prompt(mo):
       - `raw_bytes`
       - `compressed_bytes`
       - `compression_ratio`
-
-    Hints:
-    - Convert to bytes: `str(text_payload).encode("utf-8")`
-    - Clamp level:
-      `compression_level = min(9, max(1, int(level)))`
-    - Ratio formula:
-      `compressed_bytes / raw_bytes` (with zero-check)
     """)
     return
 
 
 @app.cell
-def exercise5(gzip, sample_text):
+def exercise5_solution(gzip, sample_text):
     def gzip_report(text_payload, level=6):
-        # ### FILL HERE YOUR CODE ###
         payload_bytes = str(text_payload).encode("utf-8")
         raw_bytes = len(payload_bytes)
-        # ### FILL HERE YOUR CODE ###
         compression_level = min(9, max(1, int(level)))
 
-        # ### FILL HERE YOUR CODE ###
         compressed_payload = gzip.compress(payload_bytes, compresslevel=compression_level)
         compressed_bytes = len(compressed_payload)
 
-        # ### FILL HERE YOUR CODE ###
-        compression_ratio = 1.0  # replace with round(compressed_bytes / raw_bytes, 4) if raw_bytes else 0.0
+        compression_ratio = round(compressed_bytes / raw_bytes, 4) if raw_bytes else 0.0
         return {
             "raw_bytes": raw_bytes,
             "compressed_bytes": compressed_bytes,
@@ -433,29 +344,18 @@ def exercise6_prompt(mo):
       - `compressed_by_level`
       - `best_level`
       - `best_bytes`
-
-    Hints:
-    - Store compressed sizes in dict:
-      `compressed_by_level[int(level)] = report["compressed_bytes"]`
-    - Get level with smallest size:
-      `best_level = min(compressed_by_level, key=compressed_by_level.get)`
-    - Then:
-      `best_bytes = compressed_by_level[best_level]`
     """)
     return
 
 
 @app.cell
-def exercise6(gzip_report, sample_text):
+def exercise6_solution(gzip_report, sample_text):
     def compare_gzip_levels(text_payload, levels):
-        # ### FILL HERE YOUR CODE ###
         compressed_by_level = {}
         for level in levels:
-            # ### FILL HERE YOUR CODE ###
             report = gzip_report(text_payload, level)
             compressed_by_level[int(level)] = report["compressed_bytes"]
 
-        # ### FILL HERE YOUR CODE ###
         if not compressed_by_level:
             return {
                 "compressed_by_level": {},
@@ -463,11 +363,8 @@ def exercise6(gzip_report, sample_text):
                 "best_bytes": None,
             }
 
-        # ### FILL HERE YOUR CODE ###
         best_level = min(compressed_by_level, key=compressed_by_level.get)
-        # ### FILL HERE YOUR CODE ###
-        best_bytes = None
-
+        best_bytes = compressed_by_level[best_level]
         return {
             "compressed_by_level": compressed_by_level,
             "best_level": best_level,
@@ -497,39 +394,27 @@ def exercise7_prompt(mo):
     - otherwise build API with:
       - `GET /hello` returns `{"message": "hello from api"}`
       - `GET /status` returns `{"status": "ok"}`
-
-    Hints:
-    - Build app:
-      `FastAPI = fastapi_module.FastAPI`
-      `api = FastAPI(title="...")`
-    - Create routes with decorator syntax:
-      `@api.get("/hello")`
-      `def hello(): ...`
     """)
     return
 
 
 @app.cell
-def exercise7(optional_import):
+def exercise7_solution(optional_import):
     def create_hello_api(optional_import_fn):
-        # ### FILL HERE YOUR CODE ###
         fastapi_module = optional_import_fn("fastapi")
         if fastapi_module is None:
             return None
 
-        # ### FILL HERE YOUR CODE ###
         FastAPI = fastapi_module.FastAPI
         api = FastAPI(title="sw03-exercise-api")
 
-        # ### FILL HERE YOUR CODE ###
         @api.get("/hello")
         def hello():
             return {"message": "hello from api"}
 
-        # ### FILL HERE YOUR CODE ###
         @api.get("/status")
         def status():
-            return {"status": "### FILL HERE YOUR CODE ###"}  # expected: "ok"
+            return {"status": "ok"}
 
         return api
 
@@ -584,28 +469,18 @@ def exercise8_prompt(mo):
       - `url`
       - `status`
       - `payload`
-
-    Hints:
-    - Normalize URL parts:
-      `normalized_base = str(base_url).rstrip("/")`
-      `normalized_path = "/" + str(path).lstrip("/")`
-      `url = f"{normalized_base}{normalized_path}"`
-    - Parse JSON:
-      `json.loads(response.read().decode("utf-8"))`
     """)
     return
 
 
 @app.cell
-def exercise8(json):
+def exercise8_solution(json):
     def call_json_endpoint(base_url, path, opener):
-        # ### FILL HERE YOUR CODE ###
         normalized_base = str(base_url).rstrip("/")
         normalized_path = "/" + str(path).lstrip("/")
-        url = "### FILL HERE YOUR CODE ###"  # replace with f"{normalized_base}{normalized_path}"
+        url = f"{normalized_base}{normalized_path}"
 
         try:
-            # ### FILL HERE YOUR CODE ###
             response = opener(url, timeout=2)
             payload = json.loads(response.read().decode("utf-8"))
             status = getattr(response, "status", None)
