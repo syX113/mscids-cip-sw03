@@ -15,9 +15,9 @@ Course materials for SW03 with Marimo notebooks, a FastAPI demo, and an optional
 
 ---
 
-## Project Components
+## Used Materials
 
-| Component | File | Purpose |
+| Material | File | Purpose |
 | --- | --- | --- |
 | 📓 Lecture Notebook | `sw03_lecture_content.py` | Main teaching notebook |
 | 🧪 Exercises Notebook | `sw03_lecture_exercises.py` | Student exercises |
