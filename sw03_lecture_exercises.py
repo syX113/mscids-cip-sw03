@@ -1,6 +1,6 @@
 import marimo
 
-generated_with = "0.19.8"
+__generated_with = "0.19.8"
 app = marimo.App(width="medium")
 
 
@@ -35,11 +35,10 @@ def cell_title(mo):
 
     This notebook contains practical exercises.
 
-    Topics:
-    - Marimo notebook basics
-    - CSV and Parquet I/O
-    - Compression with gzip
-    - Building and calling simple APIs
+    Rule for students:
+    - Edit only lines marked with `TODO`.
+    - Complete all TODOs in each exercise.
+    - Enter code where `### FILL HERE ###` is shown.
 
     Recommended command:
 
@@ -64,7 +63,7 @@ def cell_exercise_list(mo):
     7. API: Create a small FastAPI app
     8. API: Call an endpoint and parse JSON
 
-    Each exercise includes a simple `pass` / `fail` check.
+    Each exercise prints `pass` or `fail`.
     """)
     return
 
@@ -74,16 +73,14 @@ def syntax_cheatsheet(mo):
     mo.md(r"""
     ## Quick Syntax Cheatsheet
 
-    Useful patterns for these exercises:
-
     ```python
     # f-string
     text = f"Hello {name}"
 
     # CSV read pattern
-    with path.open("r", newline="", encoding="utf-8") as file_handle:
-        reader = csv.DictReader(file_handle)
-        rows = list(reader)
+    with path.open("r", newline="\", encoding="utf-8") as file_handle:
+    reader = csv.DictReader(file_handle)
+    rows = list(reader)
 
     # clamp a numeric value
     level = min(9, max(1, int(level)))
@@ -116,18 +113,11 @@ def exercise1_prompt(mo):
 
     Implement `build_intro_markdown(mo_module, title, topic)`.
 
-    Expected behavior:
-    - build markdown text using `title` and `topic`
-    - return dictionary with keys:
-      - `text`
-      - `widget`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Use an f-string with a newline: `f"...\\n..."`
-    - Expected text format:
-      `### <title>`
-      `This notebook practices **<topic>**.`
-    - Build widget with: `mo_module.md(markdown_text)`
+    Hint:
+    - A formatted string should be used.
+    - Reuse both function inputs: `title` and `topic`.
     """)
     return
 
@@ -135,12 +125,12 @@ def exercise1_prompt(mo):
 @app.cell
 def exercise1(mo):
     def build_intro_markdown(mo_module, title, topic):
-        # ### FILL HERE YOUR CODE ###
-        topic_text = "### FILL HERE YOUR CODE ###"
-        markdown_text = f"### {title}\nThis notebook practices **{topic_text}**."
-        # ### FILL HERE YOUR CODE ###
-        widget = mo_module.md(markdown_text)
+        # TODO (Exercise 1): edit the following line
+        topic_text = ""  # ### FILL HERE ###
 
+        # TODO (Exercise 1): edit the following line
+        markdown_text = ""  # ### FILL HERE ###
+        widget = mo_module.md(markdown_text)
         return {"text": markdown_text, "widget": widget}
 
     result_ex1 = build_intro_markdown(mo, "Welcome", "files, compression, and APIs")
@@ -151,7 +141,7 @@ def exercise1(mo):
         and result_ex1["widget"] is not None
     )
     print("pass" if check_passed_ex1 else "fail")
-    return (build_intro_markdown,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -161,19 +151,11 @@ def exercise2_prompt(mo):
 
     Implement `create_preview_table(mo_module, rows)`.
 
-    Expected behavior:
-    - create table widget with `mo.ui.table`
-    - return dictionary with keys:
-      - `row_count`
-      - `columns`
-      - `widget`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - `len(rows)` gives the number of rows
-    - Column names from first row:
-      `list(rows[0].keys()) if rows else []`
-    - Table widget example:
-      `mo_module.ui.table(rows, label="Sample rows")`
+    Hint:
+    - A list operation should be used to get column names.
+    - A table widget method from `mo_module.ui` should be used.
     """)
     return
 
@@ -181,13 +163,14 @@ def exercise2_prompt(mo):
 @app.cell
 def exercise2(mo, sample_rows):
     def create_preview_table(mo_module, rows):
-        # ### FILL HERE YOUR CODE ###
-        row_count = 0  # replace with len(rows)
-        # ### FILL HERE YOUR CODE ###
-        columns = list(rows[0].keys()) if rows else []
-        # ### FILL HERE YOUR CODE ###
-        widget = mo_module.ui.table(rows, label="Sample rows")
+        # TODO (Exercise 2): edit the following line
+        row_count = 0  # ### FILL HERE ###
 
+        # TODO (Exercise 2): edit the following line
+        columns = []  # ### FILL HERE ###
+
+        # TODO (Exercise 2): edit the following line
+        widget = None  # ### FILL HERE ###
         return {"row_count": row_count, "columns": columns, "widget": widget}
 
     result_ex2 = create_preview_table(mo, sample_rows)
@@ -198,7 +181,7 @@ def exercise2(mo, sample_rows):
         and result_ex2["widget"] is not None
     )
     print("pass" if check_passed_ex2 else "fail")
-    return (create_preview_table,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -208,21 +191,12 @@ def exercise3_prompt(mo):
 
     Implement `write_and_read_csv(rows, file_path)`.
 
-    Expected behavior:
-    - write rows to CSV with header
-    - read rows back
-    - return dictionary with keys:
-      - `row_count`
-      - `file_size`
-      - `columns`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Write pattern:
-      `writer = csv.DictWriter(file_handle, fieldnames=columns)`
-    - Read pattern:
-      `reader = csv.DictReader(file_handle)`
-      `loaded_rows = list(reader)`
-    - Keep encoding as UTF-8 and `newline=""`
+    Hint:
+    - A dictionary writer and dictionary reader should be used.
+    - One TODO should convert the reader output to a list.
+    - One TODO should set the final row count.
     """)
     return
 
@@ -230,27 +204,26 @@ def exercise3_prompt(mo):
 @app.cell
 def exercise3(Path, csv, sample_rows, tempfile):
     def write_and_read_csv(rows, file_path):
-        # ### FILL HERE YOUR CODE ###
         path_obj = Path(file_path)
-        # ### FILL HERE YOUR CODE ###
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        # ### FILL HERE YOUR CODE ###
         columns = list(rows[0].keys()) if rows else []
 
-        # ### FILL HERE YOUR CODE ###
         with path_obj.open("w", newline="", encoding="utf-8") as file_handle:
             writer = csv.DictWriter(file_handle, fieldnames=columns)
             writer.writeheader()
             writer.writerows(rows)
 
-        # ### FILL HERE YOUR CODE ###
         with path_obj.open("r", newline="", encoding="utf-8") as file_handle:
             reader = csv.DictReader(file_handle)
-            loaded_rows = []  # replace with list(reader)
+            # TODO (Exercise 3): edit the following line
+            loaded_rows = []  # ### FILL HERE ###
+
+        # TODO (Exercise 3): edit the following line
+        row_count_value = 0  # ### FILL HERE ###
 
         return {
-            "row_count": len(loaded_rows),
+            "row_count": row_count_value,
             "file_size": int(path_obj.stat().st_size) if path_obj.exists() else 0,
             "columns": columns,
         }
@@ -276,39 +249,31 @@ def exercise4_prompt(mo):
 
     Implement `write_parquet_and_compare(rows, parquet_path, csv_path)`.
 
-    Expected behavior:
-    - write parquet file (if `pyarrow` available)
-    - read parquet row count
-    - compare parquet size to CSV size
-    - return dictionary with keys:
-      - `csv_bytes`
-      - `parquet_bytes` (`-1` if parquet unavailable)
-      - `size_ratio_parquet_to_csv` (`None` if unavailable)
-      - `row_count` (`-1` if unavailable)
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Optional modules:
-      `optional_import("pyarrow")`, `optional_import("pyarrow.parquet")`
-    - Write parquet:
-      `table = pyarrow_module.Table.from_pylist(rows)`
-      `parquet_module.write_table(table, parquet_file.as_posix())`
-    - Ratio formula:
-      `round(parquet_bytes / csv_bytes, 4) if csv_bytes else None`
+    Hint:
+    - Optional imports should be used for parquet support.
+    - A ratio should compare parquet size against CSV size.
     """)
     return
 
 
 @app.cell
-def exercise4(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
+def exercise4(
+    Path,
+    optional_import,
+    sample_rows,
+    tempfile,
+    write_and_read_csv,
+):
     def write_parquet_and_compare(rows, parquet_path, csv_path):
-        # ### FILL HERE YOUR CODE ###
         pyarrow_module = optional_import("pyarrow")
         parquet_module = optional_import("pyarrow.parquet")
 
         csv_result = write_and_read_csv(rows, csv_path)
-        csv_bytes = csv_result["file_size"]
+        # TODO (Exercise 4): edit the following line
+        csv_bytes = 0  # ### FILL HERE ###
 
-        # ### FILL HERE YOUR CODE ###
         if pyarrow_module is None or parquet_module is None:
             return {
                 "csv_bytes": csv_bytes,
@@ -317,18 +282,16 @@ def exercise4(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
                 "row_count": -1,
             }
 
-        # ### FILL HERE YOUR CODE ###
         parquet_file = Path(parquet_path)
         parquet_file.parent.mkdir(parents=True, exist_ok=True)
-        # ### FILL HERE YOUR CODE ###
+
         table = pyarrow_module.Table.from_pylist(rows)
         parquet_module.write_table(table, parquet_file.as_posix())
-        # ### FILL HERE YOUR CODE ###
         table_read_back = parquet_module.read_table(parquet_file.as_posix())
 
         parquet_bytes = int(parquet_file.stat().st_size)
-        # ### FILL HERE YOUR CODE ###
-        size_ratio = None  # replace with round(parquet_bytes / csv_bytes, 4) if csv_bytes else None
+        # TODO (Exercise 4): edit the following line
+        size_ratio = None  # ### FILL HERE ###
 
         return {
             "csv_bytes": csv_bytes,
@@ -361,7 +324,7 @@ def exercise4(Path, optional_import, sample_rows, tempfile, write_and_read_csv):
         )
 
     print("pass" if check_passed_ex4 else "fail")
-    return (write_parquet_and_compare,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -371,19 +334,11 @@ def exercise5_prompt(mo):
 
     Implement `gzip_report(text_payload, level=6)`.
 
-    Expected behavior:
-    - compress a UTF-8 payload using gzip
-    - return dictionary with keys:
-      - `raw_bytes`
-      - `compressed_bytes`
-      - `compression_ratio`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Convert to bytes: `str(text_payload).encode("utf-8")`
-    - Clamp level:
-      `compression_level = min(9, max(1, int(level)))`
-    - Ratio formula:
-      `compressed_bytes / raw_bytes` (with zero-check)
+    Hint:
+    - A byte length method should be used.
+    - The compression ratio should compare compressed size to raw size.
     """)
     return
 
@@ -391,18 +346,17 @@ def exercise5_prompt(mo):
 @app.cell
 def exercise5(gzip, sample_text):
     def gzip_report(text_payload, level=6):
-        # ### FILL HERE YOUR CODE ###
         payload_bytes = str(text_payload).encode("utf-8")
-        raw_bytes = len(payload_bytes)
-        # ### FILL HERE YOUR CODE ###
+        # TODO (Exercise 5): edit the following line
+        raw_bytes = 0  # ### FILL HERE ###
         compression_level = min(9, max(1, int(level)))
 
-        # ### FILL HERE YOUR CODE ###
         compressed_payload = gzip.compress(payload_bytes, compresslevel=compression_level)
         compressed_bytes = len(compressed_payload)
 
-        # ### FILL HERE YOUR CODE ###
-        compression_ratio = 1.0  # replace with round(compressed_bytes / raw_bytes, 4) if raw_bytes else 0.0
+        # TODO (Exercise 5): edit the following line
+        compression_ratio = 1.0  # ### FILL HERE ###
+
         return {
             "raw_bytes": raw_bytes,
             "compressed_bytes": compressed_bytes,
@@ -427,20 +381,11 @@ def exercise6_prompt(mo):
 
     Implement `compare_gzip_levels(text_payload, levels)`.
 
-    Expected behavior:
-    - run compression for each level
-    - return dictionary with keys:
-      - `compressed_by_level`
-      - `best_level`
-      - `best_bytes`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Store compressed sizes in dict:
-      `compressed_by_level[int(level)] = report["compressed_bytes"]`
-    - Get level with smallest size:
-      `best_level = min(compressed_by_level, key=compressed_by_level.get)`
-    - Then:
-      `best_bytes = compressed_by_level[best_level]`
+    Hint:
+    - A dictionary key function should be used to find the smallest value.
+    - After finding the best key, retrieve its value from the same dictionary.
     """)
     return
 
@@ -448,14 +393,11 @@ def exercise6_prompt(mo):
 @app.cell
 def exercise6(gzip_report, sample_text):
     def compare_gzip_levels(text_payload, levels):
-        # ### FILL HERE YOUR CODE ###
         compressed_by_level = {}
         for level in levels:
-            # ### FILL HERE YOUR CODE ###
             report = gzip_report(text_payload, level)
             compressed_by_level[int(level)] = report["compressed_bytes"]
 
-        # ### FILL HERE YOUR CODE ###
         if not compressed_by_level:
             return {
                 "compressed_by_level": {},
@@ -463,10 +405,10 @@ def exercise6(gzip_report, sample_text):
                 "best_bytes": None,
             }
 
-        # ### FILL HERE YOUR CODE ###
-        best_level = min(compressed_by_level, key=compressed_by_level.get)
-        # ### FILL HERE YOUR CODE ###
-        best_bytes = None
+        # TODO (Exercise 6): edit the following line
+        best_level = None  # ### FILL HERE ###
+        # TODO (Exercise 6): edit the following line
+        best_bytes = None  # ### FILL HERE ###
 
         return {
             "compressed_by_level": compressed_by_level,
@@ -482,7 +424,7 @@ def exercise6(gzip_report, sample_text):
         and isinstance(result_ex6["best_bytes"], int)
     )
     print("pass" if check_passed_ex6 else "fail")
-    return (compare_gzip_levels,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -492,19 +434,11 @@ def exercise7_prompt(mo):
 
     Implement `create_hello_api(optional_import_fn)`.
 
-    Expected behavior:
-    - return `None` if FastAPI is not available
-    - otherwise build API with:
-      - `GET /hello` returns `{"message": "hello from api"}`
-      - `GET /status` returns `{"status": "ok"}`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Build app:
-      `FastAPI = fastapi_module.FastAPI`
-      `api = FastAPI(title="...")`
-    - Create routes with decorator syntax:
-      `@api.get("/hello")`
-      `def hello(): ...`
+    Hint:
+    - A FastAPI object should be created from the imported class.
+    - Both endpoints should return small dictionaries.
     """)
     return
 
@@ -512,24 +446,22 @@ def exercise7_prompt(mo):
 @app.cell
 def exercise7(optional_import):
     def create_hello_api(optional_import_fn):
-        # ### FILL HERE YOUR CODE ###
         fastapi_module = optional_import_fn("fastapi")
         if fastapi_module is None:
             return None
 
-        # ### FILL HERE YOUR CODE ###
         FastAPI = fastapi_module.FastAPI
         api = FastAPI(title="sw03-exercise-api")
 
-        # ### FILL HERE YOUR CODE ###
         @api.get("/hello")
         def hello():
-            return {"message": "hello from api"}
+            # TODO (Exercise 7): edit the following line
+            return {"message": "### FILL HERE ###"}
 
-        # ### FILL HERE YOUR CODE ###
         @api.get("/status")
         def status():
-            return {"status": "### FILL HERE YOUR CODE ###"}  # expected: "ok"
+            # TODO (Exercise 7): edit the following line
+            return {"status": "### FILL HERE ###"}
 
         return api
 
@@ -566,7 +498,7 @@ def exercise7(optional_import):
         )
 
     print("pass" if check_passed_ex7 else "fail")
-    return (create_hello_api,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -576,22 +508,11 @@ def exercise8_prompt(mo):
 
     Implement `call_json_endpoint(base_url, path, opener)`.
 
-    Expected behavior:
-    - call URL `base_url + path`
-    - parse JSON body
-    - return dictionary with keys:
-      - `ok`
-      - `url`
-      - `status`
-      - `payload`
+    Complete all TODO lines in the code cell.
 
-    Hints:
-    - Normalize URL parts:
-      `normalized_base = str(base_url).rstrip("/")`
-      `normalized_path = "/" + str(path).lstrip("/")`
-      `url = f"{normalized_base}{normalized_path}"`
-    - Parse JSON:
-      `json.loads(response.read().decode("utf-8"))`
+    Hint:
+    - Build the URL from base and path parts.
+    - The final `ok` value should depend on both the status code and payload type.
     """)
     return
 
@@ -599,17 +520,18 @@ def exercise8_prompt(mo):
 @app.cell
 def exercise8(json):
     def call_json_endpoint(base_url, path, opener):
-        # ### FILL HERE YOUR CODE ###
         normalized_base = str(base_url).rstrip("/")
         normalized_path = "/" + str(path).lstrip("/")
-        url = "### FILL HERE YOUR CODE ###"  # replace with f"{normalized_base}{normalized_path}"
+
+        # TODO (Exercise 8): edit the following line
+        url = "### FILL HERE ###"
 
         try:
-            # ### FILL HERE YOUR CODE ###
             response = opener(url, timeout=2)
             payload = json.loads(response.read().decode("utf-8"))
             status = getattr(response, "status", None)
-            ok = status == 200 and isinstance(payload, dict)
+            # TODO (Exercise 8): edit the following line
+            ok = False  # ### FILL HERE ###
             return {
                 "ok": ok,
                 "url": url,
@@ -646,7 +568,7 @@ def exercise8(json):
         "payload": {"message": "hello from api"},
     }
     print("pass" if check_passed_ex8 else "fail")
-    return (call_json_endpoint,)
+    return
 
 
 @app.cell(hide_code=True)

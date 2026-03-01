@@ -509,6 +509,15 @@ def _(mo):
             border-radius: 16px;
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
           }
+
+          .disclaimer-red {
+            background: rgba(239, 68, 68, 0.16);
+            border: 1px solid rgba(185, 28, 28, 0.55);
+            color: #7f1d1d;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-weight: 600;
+          }
         </style>
         """
     )
@@ -702,12 +711,8 @@ def _(mo):
 @app.cell
 def _(mo):
     lu_workers = mo.ui.slider(1, 20, value=5, label="Workers (concurrent updaters)")
-    lu_iterations = mo.ui.slider(
-        10, 2000, step=10, value=400, label="Iterations per worker"
-    )
-    lu_observed = mo.ui.number(
-        value=1800, label="Observed final counter (actual result)"
-    )
+    lu_iterations = mo.ui.slider(10, 2000, step=10, value=400, label="Iterations per worker")
+    lu_observed = mo.ui.number(value=1800, label="Observed final counter (actual result)")
     _lu_note = mo.md(
         """
 `Expected counter = workers x iterations per worker`
@@ -745,9 +750,7 @@ def _(lu_iterations, lu_observed, lu_workers, mo):
         ],
         label="Consistency check",
     )
-    _interpretation = mo.md(
-        "High lost-update rate means writes are racing. Add locking or transactional updates."
-    ).callout(kind="info" if _lost_value > 0 else "success")
+    _interpretation = mo.md("High lost-update rate means writes are racing. Add locking or transactional updates.").callout(kind="info" if _lost_value > 0 else "success")
     _panel = mo.vstack([_summary, _interpretation], gap=0.6)
     _panel
     return (_panel,)
@@ -762,9 +765,7 @@ def _(mo):
     )
     workers = mo.ui.slider(2, 12, value=4, label="Concurrent workers")
     iterations = mo.ui.slider(50, 2000, step=50, value=300, label="Increments per worker")
-    jitter = mo.ui.slider(
-        0, 5, value=1, step=1, label="Artificial jitter (ms) per update"
-    )
+    jitter = mo.ui.slider(0, 5, value=1, step=1, label="Artificial jitter (ms) per update")
     run_race = mo.ui.button(label="Re-run counter experiment", value=1, kind="success")
     _term_note = mo.md(
         """
@@ -882,9 +883,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
         return final_value, duration
 
     if run_race.value == 0:
-        _output = mo.md(
-            "Click **Run counter experiment** to simulate concurrent writes."
-        ).callout(kind="neutral")
+        _output = mo.md("Click **Run counter experiment** to simulate concurrent writes.").callout(kind="neutral")
     else:
         _expected_counter = workers.value * iterations.value
         jitter_s = jitter.value / 1000
@@ -938,9 +937,7 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
                 )
                 race_rows.append(
                     {
-                        "strategy": "file (fcntl lock)"
-                        if supported
-                        else "file (lock unsupported)",
+                        "strategy": "file (fcntl lock)" if supported else "file (lock unsupported)",
                         "expected": _expected_counter,
                         "actual": value,
                         "lost updates": _expected_counter - value,
@@ -1003,9 +1000,7 @@ The simulator below shuffles these steps to make the race condition visible (non
 
 @app.cell
 def _(mo):
-    interleave_steps = mo.ui.slider(
-        1, 6, value=2, label="Increments per worker (simulated)"
-    )
+    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker (simulated)")
     interleave_seed = mo.ui.slider(1, 999, value=13, label="Interleaving seed")
     show_trace = mo.ui.switch(value=True, label="Show step-by-step trace")
 
@@ -1024,6 +1019,7 @@ def _(mo):
 @app.cell
 def _(interleave_seed, interleave_steps, mo, random, show_trace):
     _rng = random.Random(interleave_seed.value)
+
     def _build_ops():
         ops = []
         for idx in range(interleave_steps.value):
@@ -1068,9 +1064,7 @@ def _(interleave_seed, interleave_steps, mo, random, show_trace):
 
     _expected = interleave_steps.value * 2
     _lost = _expected - _shared
-    _summary = mo.md(
-        f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**."
-    ).callout(kind="info")
+    _summary = mo.md(f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**.").callout(kind="info")
 
     _panel_items = [_summary]
     if show_trace.value:
@@ -1151,9 +1145,7 @@ def _(mo):
 @app.cell
 def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile):
     if run_atomic.value == 0:
-        _output = mo.md(
-            "Click **Run atomicity demo** to simulate the transfer step-by-step."
-        ).callout(kind="neutral")
+        _output = mo.md("Click **Run atomicity demo** to simulate the transfer step-by-step.").callout(kind="neutral")
     else:
         _initial = {"Alice": 1000, "Bob": 500}
         _expected_total = sum(_initial.values())
@@ -1194,43 +1186,29 @@ def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile)
             _file_balances = dict(_initial)
             _file_balances["Alice"] -= atomic_amount.value
             _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
-            _add_timeline(
-                "file (JSON)", "debit", dict(_file_balances), "Alice debited"
-            )
+            _add_timeline("file (JSON)", "debit", dict(_file_balances), "Alice debited")
             if not atomic_fail.value:
                 _file_balances["Bob"] += atomic_amount.value
                 _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
-                _add_timeline(
-                    "file (JSON)", "credit", dict(_file_balances), "Bob credited"
-                )
+                _add_timeline("file (JSON)", "credit", dict(_file_balances), "Bob credited")
             else:
-                _add_timeline(
-                    "file (JSON)", "crash", dict(_file_balances), "crash before credit"
-                )
+                _add_timeline("file (JSON)", "crash", dict(_file_balances), "crash before credit")
 
             _file_final = json.loads(_file_path.read_text(encoding="utf-8"))
 
             _db_path = _tmpdir / "ledger.db"
             _con = sqlite3.connect(str(_db_path), isolation_level=None)
-            _con.execute(
-                "CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)"
-            )
+            _con.execute("CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)")
             _con.executemany("INSERT INTO accounts VALUES (?, ?)", list(_initial.items()))
 
             try:
                 _con.execute("BEGIN")
-                _add_timeline(
-                    "sqlite", "start", dict(_initial), "initial balances"
-                )
+                _add_timeline("sqlite", "start", dict(_initial), "initial balances")
                 _con.execute(
                     "UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'",
                     (atomic_amount.value,),
                 )
-                _db_after_debit = dict(
-                    _con.execute(
-                        "SELECT name, balance FROM accounts ORDER BY name"
-                    ).fetchall()
-                )
+                _db_after_debit = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
                 _add_timeline(
                     "sqlite",
                     "debit (txn)",
@@ -1244,31 +1222,17 @@ def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile)
                     (atomic_amount.value,),
                 )
                 _con.execute("COMMIT")
-                _db_final = dict(
-                    _con.execute(
-                        "SELECT name, balance FROM accounts ORDER BY name"
-                    ).fetchall()
-                )
-                _add_timeline(
-                    "sqlite", "commit", _db_final, "transaction committed"
-                )
+                _db_final = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
+                _add_timeline("sqlite", "commit", _db_final, "transaction committed")
             except Exception:
                 try:
                     _con.execute("ROLLBACK")
                 except sqlite3.OperationalError:
                     pass
-                _db_final = dict(
-                    _con.execute(
-                        "SELECT name, balance FROM accounts ORDER BY name"
-                    ).fetchall()
-                )
-                _add_timeline(
-                    "sqlite", "rollback", _db_final, "transaction rolled back"
-                )
+                _db_final = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
+                _add_timeline("sqlite", "rollback", _db_final, "transaction rolled back")
 
-            _db_rows = _con.execute(
-                "SELECT name, balance FROM accounts ORDER BY name"
-            ).fetchall()
+            _db_rows = _con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall()
             _con.close()
 
         if not _db_rows:
@@ -1337,12 +1301,8 @@ while the database rolls back to the consistent total.
             """
         ).callout(kind="info")
 
-        _file_callout = mo.md(
-            "File writes are **not atomic**: debit and credit can be split by a crash."
-        ).callout(kind=_file_kind)
-        _db_callout = mo.md(
-            "SQLite uses **transactions**: either both updates happen or none."
-        ).callout(kind=_db_kind)
+        _file_callout = mo.md("File writes are **not atomic**: debit and credit can be split by a crash.").callout(kind=_file_kind)
+        _db_callout = mo.md("SQLite uses **transactions**: either both updates happen or none.").callout(kind=_db_kind)
 
         _output = mo.vstack(
             [
@@ -1575,10 +1535,9 @@ def _(format_priority, format_use_case, mo):
         ("Streaming event log", "Safety"): "Avro + schema registry",
     }
     choice = recommendations.get(key, "JSON")
-    _text = mo.md(
-        f"Recommended starting point: **{choice}**\n\n"
-        "Treat this as a default, then benchmark on the real workload (actual data + query pattern)."
-    ).callout(kind="info")
+    _text = mo.md(f"Recommended starting point: **{choice}**\n\n" "Treat this as a default, then benchmark on the real workload (actual data + query pattern).").callout(
+        kind="info"
+    )
     _text
     return (_text,)
 
@@ -1589,9 +1548,7 @@ def _(mo):
     serial_cols = mo.ui.slider(2, 8, value=5, label="Numeric columns")
     serial_seed = mo.ui.slider(1, 999, value=42, label="Seed")
     run_serial = mo.ui.button(label="Re-run serialization benchmark", value=1, kind="success")
-    _note = mo.md(
-        "Includes Arrow, Parquet, and Avro by default (requires `pyarrow` + `fastavro`)."
-    )
+    _note = mo.md("Includes Arrow, Parquet, and Avro by default (requires `pyarrow` + `fastavro`).")
 
     _controls = mo.vstack(
         [
@@ -1659,13 +1616,9 @@ def _(
         }
 
     if run_serial.value == 0:
-        _output = mo.md("Click **Run serialization benchmark** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral")
     else:
-        _records = _make_records(
-            serial_rows.value, serial_cols.value, serial_seed.value + run_serial.value
-        )
+        _records = _make_records(serial_rows.value, serial_cols.value, serial_seed.value + run_serial.value)
         sample = mo.ui.table(_records[:5], label="Sample records")
 
         _results = []
@@ -1690,9 +1643,7 @@ def _(
                 with path.open("rb") as f:
                     pickle.load(f)
 
-            _results.append(
-                bench("Pickle (unsafe)", pickle_write, pickle_read, _tmpdir / "data.pkl")
-            )
+            _results.append(bench("Pickle (unsafe)", pickle_write, pickle_read, _tmpdir / "data.pkl"))
 
             def csv_write(path):
                 with path.open("w", newline="", encoding="utf-8") as f:
@@ -1764,10 +1715,7 @@ def _(
                         {"name": "city", "type": "string"},
                         {"name": "score", "type": "float"},
                     ]
-                    + [
-                        {"name": f"metric_{c}", "type": "float"}
-                        for c in range(serial_cols.value)
-                    ],
+                    + [{"name": f"metric_{c}", "type": "float"} for c in range(serial_cols.value)],
                 }
 
                 def avro_write(path):
@@ -1778,9 +1726,7 @@ def _(
                     with path.open("rb") as f:
                         list(fastavro.reader(f))
 
-                _results.append(
-                    bench("Avro", avro_write, avro_read, _tmpdir / "data.avro")
-                )
+                _results.append(bench("Avro", avro_write, avro_read, _tmpdir / "data.avro"))
 
         _display_rows = []
         for row in _results:
@@ -1843,15 +1789,11 @@ def _(
         _missing_note = None
         if _missing:
             _missing_note = mo.md(
-                "Missing libraries required for Arrow/Parquet/Avro: "
-                + ", ".join(f"`{name}`" for name in _missing)
-                + ". Install them to include these formats."
+                "Missing libraries required for Arrow/Parquet/Avro: " + ", ".join(f"`{name}`" for name in _missing) + ". Install them to include these formats."
             ).callout(kind="warn")
 
         results_table = mo.ui.table(_display_rows, label="Serialization benchmark")
-        benchmark_note = mo.md(
-            "Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark."
-        ).callout(kind="info")
+        benchmark_note = mo.md("Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark.").callout(kind="info")
         warning = mo.md(
             """
 **Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources.
@@ -1906,9 +1848,7 @@ def _(json, mo, pickle):
     )
 
     _table = mo.ui.table(_rows, label="Type fidelity: JSON vs Pickle")
-    _note = mo.md(
-        "JSON is interoperable but can lose types; Pickle preserves Python types but is unsafe for untrusted data."
-    ).callout(kind="info")
+    _note = mo.md("JSON is interoperable but can lose types; Pickle preserves Python types but is unsafe for untrusted data.").callout(kind="info")
 
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
@@ -2120,9 +2060,7 @@ def _(io_needed_cols, io_rows, io_total_cols, mo):
         ],
         label="Estimated read effort",
     )
-    _note = mo.md(
-        "As k gets much smaller than C, columnar advantage increases."
-    ).callout(kind="info")
+    _note = mo.md("As k gets much smaller than C, columnar advantage increases.").callout(kind="info")
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
     return (_panel,)
@@ -2135,9 +2073,7 @@ def _(mo):
     storage_seed = mo.ui.slider(1, 999, value=7, label="Seed")
     run_storage = mo.ui.button(label="Re-run storage benchmark", value=1, kind="success")
 
-    _controls = mo.vstack(
-        [mo.hstack([n_rows, n_cols], widths="equal"), storage_seed, run_storage], gap=0.6
-    ).callout(kind="neutral")
+    _controls = mo.vstack([mo.hstack([n_rows, n_cols], widths="equal"), storage_seed, run_storage], gap=0.6).callout(kind="neutral")
     _controls
     return n_cols, n_rows, run_storage, storage_seed
 
@@ -2152,13 +2088,9 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
         return rows_list, columns, col_names
 
     if run_storage.value == 0:
-        _output = mo.md("Click **Run storage benchmark** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral")
     else:
-        rows_list, columns, col_names = build_data(
-            n_rows.value, n_cols.value, storage_seed.value + run_storage.value
-        )
+        rows_list, columns, col_names = build_data(n_rows.value, n_cols.value, storage_seed.value + run_storage.value)
         target_col = col_names[0]
         threshold = 0.75
 
@@ -2170,12 +2102,8 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
         row_select_time, row_select = time_it(lambda: [row[0] for row in rows_list])
         col_select_time, col_select = time_it(lambda: columns[target_col])
 
-        row_filter_time, row_filter = time_it(
-            lambda: [row for row in rows_list if row[0] > threshold]
-        )
-        col_filter_time, col_filter = time_it(
-            lambda: [val for val in columns[target_col] if val > threshold]
-        )
+        row_filter_time, row_filter = time_it(lambda: [row for row in rows_list if row[0] > threshold])
+        col_filter_time, col_filter = time_it(lambda: [val for val in columns[target_col] if val > threshold])
 
         row_sum_time, row_sum = time_it(lambda: sum(row[0] for row in rows_list))
         col_sum_time, col_sum = time_it(lambda: sum(columns[target_col]))
@@ -2342,9 +2270,7 @@ def _(mo):
     budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)")
     budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio")
     budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day")
-    _note = mo.md(
-        "Set the estimated compression ratio and scan frequency to quantify daily I/O savings (reduced bytes read/written)."
-    ).callout(kind="info")
+    _note = mo.md("Set the estimated compression ratio and scan frequency to quantify daily I/O savings (reduced bytes read/written).").callout(kind="info")
     _panel = mo.vstack(
         [
             mo.md("### Mini-lab: Compression Cost Impact"),
@@ -2373,9 +2299,7 @@ def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
         ],
         label="Compression budget impact",
     )
-    _note = mo.md(
-        "Use this as a first-order estimate before deeper benchmarking."
-    ).callout(kind="info")
+    _note = mo.md("Use this as a first-order estimate before deeper benchmarking.").callout(kind="info")
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
     return (_panel,)
@@ -2383,22 +2307,28 @@ def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
 
 @app.cell
 def _(mo):
-    image_demo_rank = mo.ui.slider(
-        4, 90, value=26, step=2, label="PCA components (rank k)"
+    _pca_disclaimer = mo.Html(
+        """
+<div class="disclaimer-red">
+  Disclaimer: PCA will be discussed in-depth in the <strong>Machine Learning 2</strong> module.
+  Here it is only used as a simple example to illustrate compression ideas.
+</div>
+        """
     )
-    image_demo_width = mo.ui.slider(
-        200, 360, value=280, step=20, label="Image width (px)"
-    )
+    _pca_disclaimer
+    return (_pca_disclaimer,)
+
+
+@app.cell
+def _(mo):
+    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="PCA components (rank k)")
+    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)")
     _panel = mo.vstack(
         [
             mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
             mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
-            mo.md(
-                "Left is the reference cat image. Right is reconstructed from only `k` PCA components per color channel."
-            ).callout(kind="info"),
-            mo.md(
-                "Further Details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)"
-            ).callout(kind="neutral"),
+            mo.md("Left is the reference cat image. Right is reconstructed from only `k` PCA components per color channel.").callout(kind="info"),
+            mo.md("Further Details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)").callout(kind="neutral"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -2413,9 +2343,7 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
     _np = optional_import("numpy")
 
     if not (_pil_image and _pil_draw and _np):
-        _output = mo.md(
-            "Install `Pillow` and `numpy` to run the PCA image compression lab (`pip install pillow numpy`)."
-        ).callout(kind="warn")
+        _output = mo.md("Install `Pillow` and `numpy` to run the PCA image compression lab (`pip install pillow numpy`).").callout(kind="warn")
     else:
         _width = image_demo_width.value
         _height = int(_width * 0.74)
@@ -2449,32 +2377,24 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
         _ear_inner = (246, 186, 198)
 
         _draw.polygon(
-            [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)),
-             (_cx - int(0.40 * _r), _cy - int(1.35 * _r)),
-             (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
+            [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)), (_cx - int(0.40 * _r), _cy - int(1.35 * _r)), (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
             fill=_fur,
             outline=_fur_dark,
             width=3,
         )
         _draw.polygon(
-            [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)),
-             (_cx + int(0.40 * _r), _cy - int(1.35 * _r)),
-             (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
+            [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)), (_cx + int(0.40 * _r), _cy - int(1.35 * _r)), (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
             fill=_fur,
             outline=_fur_dark,
             width=3,
         )
         _draw.polygon(
-            [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)),
-             (_cx - int(0.40 * _r), _cy - int(1.16 * _r)),
-             (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
+            [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)), (_cx - int(0.40 * _r), _cy - int(1.16 * _r)), (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
             fill=_ear_inner,
             outline=None,
         )
         _draw.polygon(
-            [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)),
-             (_cx + int(0.40 * _r), _cy - int(1.16 * _r)),
-             (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
+            [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)), (_cx + int(0.40 * _r), _cy - int(1.16 * _r)), (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
             fill=_ear_inner,
             outline=None,
         )
@@ -2530,9 +2450,7 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
 
         _nose_y = _cy + int(0.13 * _r)
         _draw.polygon(
-            [(_cx, _nose_y),
-             (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)),
-             (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
+            [(_cx, _nose_y), (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)), (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
             fill=(234, 150, 165),
             outline=(120, 74, 86),
         )
@@ -2632,9 +2550,7 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
                 mo.image(
                     src=_rec_bytes,
                     width="100%",
-                    caption=(
-                        f"PCA reconstruction (k={_rank}, display preview)"
-                    ),
+                    caption=(f"PCA reconstruction (k={_rank}, display preview)"),
                 ),
             ],
             widths="equal",
@@ -2680,9 +2596,7 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
             """
         )
 
-        _output = mo.vstack(
-            [_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6
-        )
+        _output = mo.vstack([_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6)
 
     _output
     return (_output,)
@@ -2728,9 +2642,7 @@ def _(
         return records
 
     if run_compress.value == 0:
-        _output = mo.md("Click **Run compression benchmark** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Run compression benchmark** to execute.").callout(kind="neutral")
     else:
         _records = _make_records(
             compress_rows.value,
@@ -2794,16 +2706,24 @@ def _(
                         {
                             "format": f"Parquet ({codec})",
                             "size (bytes)": parquet_path.stat().st_size,
-                            "ratio vs JSON": round(
-                                parquet_path.stat().st_size / baseline, 4
-                            ),
+                            "ratio vs JSON": round(parquet_path.stat().st_size / baseline, 4),
                         }
                     )
 
         _table = mo.ui.table(_results, label="Compression ratios (baseline: JSON size)")
         _note = mo.md(
             """
-**Discussion:** Columnar + compression reduces I/O, especially for analytics workloads (scan-heavy query patterns).
+How to read this table:
+
+- `ratio vs JSON = 1.00` means same size as JSON.
+- `< 1.00` means the format is smaller than JSON (good for I/O).
+- `> 1.00` means the format is larger than JSON.
+
+Why this matters:
+
+- In analytics, we often scan many rows and columns.
+- Smaller files mean fewer bytes read from disk/network.
+- Parquet often wins because it is columnar and uses compression codecs effectively.
             """
         ).callout(kind="info")
 
@@ -2814,40 +2734,80 @@ def _(
 
 
 @app.cell
-def _(math, mo, random):
-    _rng = random.Random(7)
-    _categories = ["A", "B", "C", "D", "E"]
-    _samples = [_rng.choice(_categories) for _ in range(2000)]
-    _unique = len(set(_samples))
-    _code_bits = max(1, math.ceil(math.log2(_unique)))
-    _avg_len = 1
-    _original_bytes = len(_samples) * _avg_len
-    _dictionary_bytes = _unique * _avg_len
-    _encoded_bytes = len(_samples) * (_code_bits / 8)
-    _estimated_ratio = (_dictionary_bytes + _encoded_bytes) / _original_bytes
+def _(mo):
+    dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows")
+    dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values")
+    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Average bytes per original value")
+    _panel = mo.vstack(
+        [
+            mo.md("### Dictionary Encoding Intuition (Toy Model)"),
+            mo.hstack([dict_rows, dict_unique], widths="equal"),
+            dict_value_bytes,
+            mo.md("We estimate storage in two ways:\n" "1) store full values directly, and 2) store a dictionary + compact integer codes.").callout(kind="info"),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return dict_rows, dict_unique, dict_value_bytes
 
-    _rows = [
-        {
-            "metric": "rows",
-            "value": len(_samples),
-        },
-        {
-            "metric": "unique values",
-            "value": _unique,
-        },
-        {
-            "metric": "code bits",
-            "value": _code_bits,
-        },
-        {
-            "metric": "estimated ratio",
-            "value": round(_estimated_ratio, 4),
-        },
-    ]
 
-    _table = mo.ui.table(_rows, label="Dictionary encoding intuition")
+@app.cell
+def _(dict_rows, dict_unique, dict_value_bytes, math, mo):
+    _rows_count = dict_rows.value
+    _unique_values = min(dict_unique.value, _rows_count)
+    _bytes_per_value = dict_value_bytes.value
+
+    _code_bits = max(1, math.ceil(math.log2(_unique_values)))
+    _raw_bytes = _rows_count * _bytes_per_value
+    _dictionary_bytes = _unique_values * _bytes_per_value
+    _encoded_index_bytes = _rows_count * (_code_bits / 8)
+    _encoded_total_bytes = _dictionary_bytes + _encoded_index_bytes
+    _encoded_ratio = _encoded_total_bytes / max(_raw_bytes, 1)
+    _savings = 1 - _encoded_ratio
+
+    _table = mo.ui.table(
+        [
+            {
+                "metric": "Raw storage (no dictionary)",
+                "formula": "rows x bytes_per_value",
+                "value": int(_raw_bytes),
+            },
+            {
+                "metric": "Dictionary storage",
+                "formula": "unique_values x bytes_per_value",
+                "value": int(_dictionary_bytes),
+            },
+            {
+                "metric": "Code size per row",
+                "formula": "ceil(log2(unique_values)) bits",
+                "value": int(_code_bits),
+            },
+            {
+                "metric": "Encoded indexes storage",
+                "formula": "rows x code_bits/8",
+                "value": round(_encoded_index_bytes, 2),
+            },
+            {
+                "metric": "Estimated encoded/ raw ratio",
+                "formula": "(dictionary + indexes) / raw",
+                "value": round(_encoded_ratio, 4),
+            },
+            {
+                "metric": "Estimated savings",
+                "formula": "1 - ratio",
+                "value": f"{round(_savings * 100, 2)}%",
+            },
+        ],
+        label="Dictionary encoding intuition (toy calculation)",
+    )
     _note = mo.md(
-        "Fewer unique values → fewer bits per row → better compression (especially in columnar formats)."
+        """
+Interpretation:
+
+- Lower `unique values` usually means fewer bits per code and better compression.
+- If almost every row has a different value, dictionary encoding helps less.
+- Columnar formats often benefit because repeated values are common in a column.
+        """
     ).callout(kind="info")
 
     _panel = mo.vstack([_table, _note], gap=0.6)
@@ -2877,6 +2837,21 @@ DuckDB helps reduce both parts for many analytical workloads (query/data access 
 
 @app.cell
 def _(mo):
+    _db_disclaimer = mo.Html(
+        """
+<div class="disclaimer-red">
+  Disclaimer: Databases will be discussed in-depth later in the semester in the
+  <strong>Database Management for Data Scientists (DBM)</strong> module.
+  Here we focus only on practical intuition for analytics workflows.
+</div>
+        """
+    )
+    _db_disclaimer
+    return (_db_disclaimer,)
+
+
+@app.cell
+def _(mo):
     _section = mo.md("## 5. DuckDB Example (SQL on Files)")
     _section
     return (_section,)
@@ -2888,18 +2863,23 @@ def _(mo):
         """
 ### Chapter 5 Introduction
 
-> **Key Question:** How much work can the engine skip (prune: avoid reading/processing) before processing?
+> **Key Question:** How can DuckDB answer a query while reading much less data?
 
-DuckDB provides SQL analytics without running a database server.
-It helps because query planning decides what data can be skipped early (predicate/projection pruning).
+DuckDB is a database engine that runs directly inside your Python process.
+No separate server is needed for this lecture demo.
+
+Two key ideas:
+
+- **Predicate pushdown**: filters are applied early, so rows that do not match are skipped.
+- **Projection pushdown**: only needed columns are read, unused columns are skipped.
 
 Main idea:
 
 $$
-\\text{effective rows processed} = N \\times \\text{selectivity}
+\\text{work units} \\approx N \\times \\text{selectivity} \\times C_{needed}
 $$
 
-Lower selectivity means more benefit from predicate pushdown.
+Lower selectivity and fewer needed columns usually mean less total work.
         """
     ).callout(kind="neutral")
     _chapter5_guide
@@ -2912,16 +2892,25 @@ def _(mo):
         """
 ### DuckDB: SQL on Files, Zero Server
 
-DuckDB is an **embedded analytical database**. It can scan CSV/Parquet files with SQL,
-perform vectorized execution, and apply *predicate + projection pushdown*.
+DuckDB is an **embedded analytical database**:
+
+- **Embedded** means it runs in your app process (like a library).
+- **Analytical** means it is optimized for scans, filters, GROUP BY, joins, and aggregates.
+
+For this notebook, think of DuckDB as a fast SQL engine for local files.
+
+What "pushdown" means in plain words:
+
+- Predicate pushdown: if query says `WHERE amount > 600`, DuckDB tries to skip rows/blocks that cannot match.
+- Projection pushdown: if query only needs `region` and `amount`, DuckDB avoids reading irrelevant columns.
 
 Why it often outperforms direct plain-file scans for analytics (lower query runtime):
 
-- Query optimizer + execution engine  
-- Columnar reads and filter pushdown  
-- Fast joins and aggregations without a server
+- Query optimizer + vectorized execution
+- Columnar reads + pushdown
+- Fast joins and aggregations without standing up a server process
 
-The demo below runs a GROUP BY directly on a CSV file to show the experience.
+The mini-labs below first estimate skipped work, then run an actual query timing demo.
         """
     ).callout(kind="neutral")
     _explanation
@@ -2931,17 +2920,23 @@ The demo below runs a GROUP BY directly on a CSV file to show the experience.
 @app.cell
 def _(mo):
     push_rows = mo.ui.slider(10_000, 5_000_000, step=10_000, value=400_000, label="Rows (N)")
-    push_selectivity = mo.ui.slider(
-        0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction kept)"
-    )
+    push_selectivity = mo.ui.slider(0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction of rows kept)")
     push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns")
     push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query")
     _push_note = mo.md(
-        "Selectivity 0.08 means about 8% of rows pass the filter."
+        """
+Model used in this mini-lab:
+
+- Without pushdown, approximate work is `rows x total_columns`.
+- With predicate + projection pushdown, approximate work is
+  `rows x selectivity x needed_columns`.
+
+So this is a simplified *relative work* estimate, not exact runtime.
+        """
     ).callout(kind="info")
     _panel = mo.vstack(
         [
-            mo.md("### Mini-lab: Pushdown Intuition"),
+            mo.md("### Mini-lab: Pushdown Intuition (What Work Gets Skipped?)"),
             mo.hstack([push_rows, push_selectivity], widths="equal"),
             mo.hstack([push_cols_total, push_cols_needed], widths="equal"),
             _push_note,
@@ -2965,14 +2960,29 @@ def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
 
     _table = mo.ui.table(
         [
-            {"metric": "work without pushdown", "value": int(no_push)},
-            {"metric": "work with pushdown", "value": int(with_push)},
-            {"metric": "estimated reduction factor", "value": round(gain, 2)},
+            {
+                "metric": "Estimated work without pushdown",
+                "formula": "rows x total_columns",
+                "value": int(no_push),
+            },
+            {
+                "metric": "Estimated work with pushdown",
+                "formula": "rows x selectivity x needed_columns",
+                "value": int(with_push),
+            },
+            {
+                "metric": "Estimated reduction factor",
+                "formula": "without / with",
+                "value": round(gain, 2),
+            },
         ],
-        label="Predicate + projection pushdown estimate",
+        label="Predicate + projection pushdown estimate (toy model)",
     )
     _panel = mo.vstack(
-        [_table, mo.md("Higher reduction factors usually mean larger query speedups.").callout(kind="info")],
+        [
+            _table,
+            mo.md("If reduction factor is high, DuckDB has a stronger chance to speed up the query.").callout(kind="info"),
+        ],
         gap=0.6,
     )
     _panel
@@ -3018,15 +3028,11 @@ def _(
     time,
 ):
     if run_duck.value == 0:
-        _output = mo.md("Click **Run DuckDB demo** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Run DuckDB demo** to execute.").callout(kind="neutral")
     else:
         _duckdb = optional_import("duckdb")
         if not _duckdb:
-            _output = mo.md(
-                "DuckDB is not installed. Install with `pip install duckdb` to run this demo."
-            ).callout(kind="warn")
+            _output = mo.md("DuckDB is not installed. Install with `pip install duckdb` to run this demo.").callout(kind="warn")
         else:
             _rng = random.Random(33 + run_duck.value)
             _records = []
@@ -3048,9 +3054,7 @@ def _(
                 _tmpdir = Path(_tmpdir)
                 _csv_path = _tmpdir / "orders.csv"
                 with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                    _writer = csv.DictWriter(
-                        _f, fieldnames=["order_id", "region", "segment", "amount", "day"]
-                    )
+                    _writer = csv.DictWriter(_f, fieldnames=["order_id", "region", "segment", "amount", "day"])
                     _writer.writeheader()
                     _writer.writerows(_records)
 
@@ -3067,29 +3071,20 @@ def _(
                 if duck_storage.value != "CSV scan":
                     _ingest_start = time.perf_counter()
                     if duck_storage.value.startswith("Parquet") and _parquet_path:
-                        _con.execute(
-                            f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')"
-                        )
+                        _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')")
                     else:
-                        _con.execute(
-                            f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')"
-                        )
+                        _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')")
                     _ingest_time = time.perf_counter() - _ingest_start
 
                 _threshold = duck_threshold.value
-                _query = (
-                    "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount "
-                    f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
-                )
+                _query = "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount " f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
 
                 _timings = []
                 _result_rows = None
 
                 # 1) CSV scan
                 _start = time.perf_counter()
-                _csv_result = _con.execute(
-                    _query.format(source=f"read_csv_auto('{_csv_path}')")
-                ).fetchall()
+                _csv_result = _con.execute(_query.format(source=f"read_csv_auto('{_csv_path}')")).fetchall()
                 _timings.append(
                     {
                         "source": "CSV scan",
@@ -3100,9 +3095,7 @@ def _(
                 # 2) Parquet scan (optional)
                 if _parquet_path:
                     _start = time.perf_counter()
-                    _pq_result = _con.execute(
-                        _query.format(source=f"read_parquet('{_parquet_path}')")
-                    ).fetchall()
+                    _pq_result = _con.execute(_query.format(source=f"read_parquet('{_parquet_path}')")).fetchall()
                     _timings.append(
                         {
                             "source": "Parquet scan",
@@ -3113,9 +3106,7 @@ def _(
                 # 3) DuckDB table query
                 if duck_storage.value != "CSV scan":
                     _start = time.perf_counter()
-                    _tbl_result = _con.execute(
-                        _query.format(source="orders")
-                    ).fetchall()
+                    _tbl_result = _con.execute(_query.format(source="orders")).fetchall()
                     _timings.append(
                         {
                             "source": "DuckDB table",
@@ -3133,9 +3124,7 @@ def _(
                     {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
                 ]
                 if _parquet_path:
-                    _sizes.append(
-                        {"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size}
-                    )
+                    _sizes.append({"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size})
 
             _results_table = [
                 {
@@ -3152,18 +3141,10 @@ def _(
 
             _notes = []
             if _ingest_time is not None:
-                _notes.append(
-                    mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**")
-                )
-            _notes.append(
-                mo.md(
-                    "DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans."
-                ).callout(kind="info")
-            )
+                _notes.append(mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**"))
+            _notes.append(mo.md("DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans.").callout(kind="info"))
 
-            _output = mo.vstack(
-                [_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6
-            )
+            _output = mo.vstack([_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6)
 
     _output
     return (_output,)
@@ -3175,7 +3156,13 @@ def _(mo):
         """
 ### Indexing Demo: Full Scan vs Indexed Search
 
-Databases accelerate selective queries with **indexes**. Here we compare:
+So far, DuckDB pushdown helped by skipping work during scans.
+Indexes solve a related but different problem:
+
+- Pushdown: reduce work while scanning large datasets.
+- Index: jump directly to matching rows for selective filters.
+
+Now we compare:
 
 - **Full table scan** (no index)
 - **Indexed lookup** (index on `category` + `value`)
@@ -3222,9 +3209,7 @@ def _(
     time,
 ):
     if run_index.value == 0:
-        _output = mo.md("Click **Re-run indexing demo** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Re-run indexing demo** to execute.").callout(kind="neutral")
     else:
         _rng = random.Random(idx_seed.value)
         _rows = []
@@ -3244,10 +3229,7 @@ def _(
             _con.executemany("INSERT INTO events VALUES (?, ?, ?)", _rows)
             _con.commit()
 
-            _query = (
-                "SELECT COUNT(*), AVG(value) FROM events "
-                f"WHERE category = 'C' AND value > {idx_threshold.value}"
-            )
+            _query = "SELECT COUNT(*), AVG(value) FROM events " f"WHERE category = 'C' AND value > {idx_threshold.value}"
 
             _plan_scan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
             _start = time.perf_counter()
@@ -3290,12 +3272,8 @@ def _(
         )
 
         _speedup = (_scan_time / _idx_time) if _idx_time else None
-        _speedup_note = mo.md(
-            f"Observed speedup: **{_speedup:.2f}x**" if _speedup else "Observed speedup: **n/a**"
-        ).callout(kind="info")
-        _note = mo.md(
-            "Look for the plan to switch from **SCAN** to **SEARCH** when the index is present."
-        ).callout(kind="info")
+        _speedup_note = mo.md(f"Observed speedup: **{_speedup:.2f}x**" if _speedup else "Observed speedup: **n/a**").callout(kind="info")
+        _note = mo.md("Look for the plan to switch from **SCAN** to **SEARCH** when the index is present.").callout(kind="info")
 
         _output = mo.vstack(
             [_timing_table, _plan_table, _result_table, _speedup_note, _note],
@@ -3317,8 +3295,17 @@ def _(mo):
 def _(mo):
     _schema_expl = mo.md(
         """
-DuckDB can **infer** types when reading files (schema‑on‑read), or **enforce** types
-when loading data (schema‑on‑write). With messy data, these choices change:
+DuckDB can **infer datatypes** when reading a file (schema-on-read).
+
+What "infer datatype" means:
+
+- DuckDB looks at values in a column and guesses a type such as `INTEGER`, `DOUBLE`, `VARCHAR`, or `DATE`.
+- Example: values `10, 20, 31` are inferred as numeric.
+- Example: values `10, N/A, 31` may be inferred as text (`VARCHAR`) because of mixed content.
+
+Alternative: **schema-on-write** means you explicitly enforce the types during loading.
+
+With messy data, these choices change:
 
 - the inferred column types  
 - how many values become `NULL`  
@@ -3334,7 +3321,7 @@ N/A
 ```
 
 **Watch for:** the inferred type of `amount`, how many values become `NULL` after casting,
-and whether numeric aggregates require explicit casts.
+and whether numeric aggregates require explicit conversion (`TRY_CAST`).
         """
     ).callout(kind="neutral")
     _schema_expl
@@ -3373,15 +3360,11 @@ def _(
     tempfile,
 ):
     if run_schema.value == 0:
-        _output = mo.md("Click **Re-run schema demo** to execute.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Re-run schema demo** to execute.").callout(kind="neutral")
     else:
         _duckdb = optional_import("duckdb")
         if not _duckdb:
-            _output = mo.md(
-                "DuckDB is not installed. Install with `pip install duckdb` to run this demo."
-            ).callout(kind="warn")
+            _output = mo.md("DuckDB is not installed. Install with `pip install duckdb` to run this demo.").callout(kind="warn")
         else:
             _rng = random.Random(schema_seed.value)
             _rows = []
@@ -3407,16 +3390,12 @@ def _(
                 _tmpdir = Path(_tmpdir)
                 _csv_path = _tmpdir / "dirty.csv"
                 with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                    _writer = csv.DictWriter(
-                        _f, fieldnames=["id", "category", "amount", "day"]
-                    )
+                    _writer = csv.DictWriter(_f, fieldnames=["id", "category", "amount", "day"])
                     _writer.writeheader()
                     _writer.writerows(_rows)
 
                 _con = _duckdb.connect()
-                _inferred = _con.execute(
-                    f"DESCRIBE SELECT * FROM read_csv_auto('{_csv_path}')"
-                ).fetchall()
+                _inferred = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_csv_path}')").fetchall()
                 _explicit = _con.execute(
                     "DESCRIBE SELECT "
                     "CAST(id AS INTEGER) AS id, "
@@ -3426,27 +3405,15 @@ def _(
                     f"FROM read_csv_auto('{_csv_path}', all_varchar=true)"
                 ).fetchall()
 
-                _inferred_bad = _con.execute(
-                    "SELECT SUM(TRY_CAST(amount AS DOUBLE) IS NULL AND amount IS NOT NULL) "
-                    f"FROM read_csv_auto('{_csv_path}')"
-                ).fetchone()[0]
-                _num_avg = _con.execute(
-                    f"SELECT AVG(TRY_CAST(amount AS DOUBLE)) FROM read_csv_auto('{_csv_path}')"
-                ).fetchone()[0]
-                _lex_min = _con.execute(
-                    f"SELECT MIN(amount) FROM read_csv_auto('{_csv_path}')"
-                ).fetchone()[0]
+                _inferred_bad = _con.execute("SELECT SUM(TRY_CAST(amount AS DOUBLE) IS NULL AND amount IS NOT NULL) " f"FROM read_csv_auto('{_csv_path}')").fetchone()[0]
+                _num_avg = _con.execute(f"SELECT AVG(TRY_CAST(amount AS DOUBLE)) FROM read_csv_auto('{_csv_path}')").fetchone()[0]
+                _lex_min = _con.execute(f"SELECT MIN(amount) FROM read_csv_auto('{_csv_path}')").fetchone()[0]
                 _explicit_nulls = _con.execute(
-                    "SELECT SUM(amount IS NULL) FROM ("
-                    "SELECT TRY_CAST(amount AS DOUBLE) AS amount "
-                    f"FROM read_csv_auto('{_csv_path}', all_varchar=true)"
-                    ")"
+                    "SELECT SUM(amount IS NULL) FROM (" "SELECT TRY_CAST(amount AS DOUBLE) AS amount " f"FROM read_csv_auto('{_csv_path}', all_varchar=true)" ")"
                 ).fetchone()[0]
                 _con.close()
 
-            _inferred_amount_type = next(
-                (row[1] for row in _inferred if row[0] == "amount"), "unknown"
-            )
+            _inferred_amount_type = next((row[1] for row in _inferred if row[0] == "amount"), "unknown")
             _dirty_pct = (_dirty_count / schema_rows.value * 100) if schema_rows.value else 0
 
             _dirty_rows = [row for row in _rows if isinstance(row["amount"], str)]
@@ -3462,13 +3429,9 @@ def _(
                 if _target_clean == 0:
                     _target_clean = 1
                     _sample_dirty = _sample_dirty[: max(1, _sample_size - 1)]
-                _sample_clean = _rng.sample(
-                    _clean_rows, min(len(_clean_rows), _target_clean)
-                )
+                _sample_clean = _rng.sample(_clean_rows, min(len(_clean_rows), _target_clean))
 
-            _sample_source = sorted(
-                _sample_dirty + _sample_clean, key=lambda row: row["id"]
-            )
+            _sample_source = sorted(_sample_dirty + _sample_clean, key=lambda row: row["id"])
             if not _sample_source:
                 _sample_source = _rows[:_sample_size]
 
@@ -3528,17 +3491,11 @@ def _(
             _sample_table = _render_sample_table(_sample_rows)
 
             _inferred_table = mo.ui.table(
-                [
-                    {"column": row[0], "inferred_type": row[1]}
-                    for row in _inferred
-                ],
+                [{"column": row[0], "inferred_type": row[1]} for row in _inferred],
                 label="Schema-on-read (inferred types)",
             )
             _explicit_table = mo.ui.table(
-                [
-                    {"column": row[0], "explicit_type": row[1]}
-                    for row in _explicit
-                ],
+                [{"column": row[0], "explicit_type": row[1]} for row in _explicit],
                 label="Schema-on-write (explicit types)",
             )
             _quality_table = mo.ui.table(
@@ -3557,9 +3514,7 @@ def _(
                         "dirty_rate_pct": round(_dirty_pct, 2),
                         "inferred_non_numeric": _inferred_bad,
                         "explicit_nulls": _explicit_nulls,
-                        "avg_amount_try_cast": round(_num_avg, 3)
-                        if _num_avg is not None
-                        else None,
+                        "avg_amount_try_cast": round(_num_avg, 3) if _num_avg is not None else None,
                     }
                 ],
                 label="Why schema choice matters (numeric)",
@@ -3681,11 +3636,20 @@ def _(mo):
 An API is a contract between systems.
 Most API bugs are contract mismatches (interface mismatches): wrong path, wrong payload shape, or wrong status handling.
 
+Quick basics:
+
+- **HTTP** is the message protocol used by clients and servers on the web.
+- **HTTPS** is HTTP with encryption (TLS), so data is protected in transit.
+- In practice: same API idea, but HTTPS is the secure default.
+
 Keep this mapping in mind:
 
 - 2xx: success
 - 4xx: client-side issue
 - 5xx: server-side issue
+
+Reference list of status codes:
+https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
 
 Status family is computed from the code:
 
@@ -3779,26 +3743,18 @@ def _(http_code, http_method_hint, mo):
         if http_method_hint.value in {"GET", "PUT", "DELETE"}
         else "POST may create duplicates unless idempotency keys are used."
     )
-    _msg = mo.md(
-        f"Status **{code}** belongs to **{family}**.\n\n{retry_note}"
-    ).callout(kind=kind)
+    _msg = mo.md(f"Status **{code}** belongs to **{family}**.\n\n{retry_note}").callout(kind=kind)
     _msg
     return (_msg,)
 
 
 @app.cell
 def _(mo):
-    method = mo.ui.dropdown(
-        options=["GET", "POST", "PUT", "DELETE"], value="GET", label="HTTP method"
-    )
+    method = mo.ui.dropdown(options=["GET", "POST", "PUT", "DELETE"], value="GET", label="HTTP method")
     base_url = mo.ui.text(value="https://httpbin.org", label="Base URL")
     path = mo.ui.text(value="/anything", label="Path")
-    payload = mo.ui.text_area(
-        value='{"message": "hello"}', label="JSON payload (for POST/PUT)"
-    )
-    use_live_http = mo.ui.switch(
-        value=False, label="Use live HTTP (requires internet)"
-    )
+    payload = mo.ui.text_area(value='{"message": "hello"}', label="JSON payload (for POST/PUT)")
+    use_live_http = mo.ui.switch(value=False, label="Use live HTTP (requires internet)")
     mock_latency = mo.ui.slider(0, 1500, step=100, value=200, label="Mock latency (ms)")
     send = mo.ui.button(label="Send request", value=1, kind="success")
 
@@ -3833,14 +3789,10 @@ def _(
     use_live_http,
 ):
     if send.value == 0:
-        _output = mo.md("Click **Send request** to call the API.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Send request** to call the API.").callout(kind="neutral")
     else:
         url = base_url.value.rstrip("/") + "/" + path.value.lstrip("/")
-        _meta = mo.md(
-            f"**Request #{send.value}** · `{method.value}` `{url}`"
-        ).callout(kind="info")
+        _meta = mo.md(f"**Request #{send.value}** · `{method.value}` `{url}`").callout(kind="info")
 
         data_bytes = None
         headers = {"Accept": "application/json"}
@@ -3852,9 +3804,7 @@ def _(
                 data_bytes = json.dumps(payload_obj).encode("utf-8")
                 headers["Content-Type"] = "application/json"
             except json.JSONDecodeError as exc:
-                _response_panel = mo.md(
-                    f"Invalid JSON payload: `{exc}`"
-                ).callout(kind="danger")
+                _response_panel = mo.md(f"Invalid JSON payload: `{exc}`").callout(kind="danger")
 
         def _simulate_response():
             if mock_latency.value:
@@ -3904,9 +3854,7 @@ def _(
             return status, body
 
         if _response_panel is None:
-            req = url_request.Request(
-                url, data=data_bytes, headers=headers, method=method.value
-            )
+            req = url_request.Request(url, data=data_bytes, headers=headers, method=method.value)
 
             if use_live_http.value:
                 try:
@@ -3914,9 +3862,7 @@ def _(
                         body = _response.read().decode("utf-8", errors="replace")
                         status = _response.status
                 except Exception as exc:
-                    _response_panel = mo.md(f"Request failed: `{exc}`").callout(
-                        kind="danger"
-                    )
+                    _response_panel = mo.md(f"Request failed: `{exc}`").callout(kind="danger")
                 else:
                     try:
                         parsed = json.loads(body)
@@ -4072,52 +4018,92 @@ Try editing the JSON below to trigger validation errors and see the message stru
 
 @app.cell
 def _(mo):
-    req_id = mo.ui.switch(value=True, label="Require id")
-    req_name = mo.ui.switch(value=True, label="Require name")
-    req_email = mo.ui.switch(value=True, label="Require email")
-    req_gpa = mo.ui.switch(value=True, label="Require gpa in [0,4]")
-    _note = mo.md(
-        "Turn rules on/off to see how stricter schemas reject more malformed input."
-    ).callout(kind="info")
+    payload_case = mo.ui.dropdown(
+        options=["valid", "missing_email", "gpa_out_of_range", "wrong_type"],
+        value="valid",
+        label="Preset payload scenario",
+    )
+    payload_templates = {
+        "valid": {
+            "id": 1,
+            "name": "Ada",
+            "gpa": 3.8,
+            "email": "ada@example.com",
+        },
+        "missing_email": {
+            "id": 2,
+            "name": "Lin",
+            "gpa": 3.4,
+        },
+        "gpa_out_of_range": {
+            "id": 3,
+            "name": "Mira",
+            "gpa": 5.2,
+            "email": "mira@example.com",
+        },
+        "wrong_type": {
+            "id": "not-an-int",
+            "name": "Sam",
+            "gpa": "high",
+            "email": "sam@example.com",
+        },
+    }
+    _model_code = mo.md(
+        """
+### Pydantic model used in this mini-lab
+
+```python
+from pydantic import BaseModel, Field
+
+class Student(BaseModel):
+    id: int
+    name: str
+    gpa: float = Field(ge=0.0, le=4.0)
+    email: str
+```
+        """
+    ).callout(kind="neutral")
     _panel = mo.vstack(
         [
-            mo.md("### Mini-lab: Validation Rule Builder"),
-            mo.hstack([req_id, req_name], widths="equal"),
-            mo.hstack([req_email, req_gpa], widths="equal"),
-            _note,
+            mo.md("### Mini-lab: Interactive Payload Validation"),
+            payload_case,
+            mo.md("Choose a preset scenario, then edit the JSON below and click **Validate with Pydantic**.").callout(kind="info"),
+            _model_code,
         ],
         gap=0.6,
     ).callout(kind="neutral")
     _panel
-    return req_email, req_gpa, req_id, req_name
+    return payload_case, payload_templates
 
 
 @app.cell
-def _(mo, req_email, req_gpa, req_id, req_name):
-    checks = [
-        ("id present", req_id.value),
-        ("name present", req_name.value),
-        ("email present", req_email.value),
-        ("gpa bounded", req_gpa.value),
-    ]
-    strictness = sum(1 for _, ok in checks if ok)
-    _table = mo.ui.table(
-        [{"rule": name, "enabled": ok} for name, ok in checks],
-        label="Active schema rules",
-    )
-    _msg = mo.md(
-        f"Current strictness score: **{strictness}/4**. "
-        "Higher strictness catches more bad input, but can reject more requests."
+def _(json, mo, payload_case, payload_templates):
+    selected_payload = payload_templates[payload_case.value]
+    selected_payload_text = json.dumps(selected_payload, indent=2)
+    expected_result = {
+        "valid": "should pass",
+        "missing_email": "should fail (missing required field)",
+        "gpa_out_of_range": "should fail (gpa > 4.0)",
+        "wrong_type": "should fail (type mismatch)",
+    }[payload_case.value]
+
+    _preview = mo.md(
+        f"""
+Selected preset expectation: **{expected_result}**
+
+```json
+{selected_payload_text}
+```
+        """
     ).callout(kind="info")
-    _panel = mo.vstack([_table, _msg], gap=0.6)
-    _panel
-    return (_panel,)
+    _preview
+    return (selected_payload_text,)
 
 
 @app.cell
-def _(mo):
+def _(mo, selected_payload_text):
     input_data = mo.ui.text_area(
-        value='{"id": 1, "name": "Ada", "gpa": 3.8, "email": "ada@example.com"}',
+        value=selected_payload_text,
         label="Student JSON",
     )
     validate = mo.ui.button(label="Validate with Pydantic", value=1, kind="success")
@@ -4129,15 +4115,11 @@ def _(mo):
 @app.cell
 def _(input_data, json, mo, optional_import, validate):
     if validate.value == 0:
-        _output = mo.md("Click **Validate with Pydantic** to parse.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **Validate with Pydantic** to parse.").callout(kind="neutral")
     else:
         pydantic = optional_import("pydantic")
         if not pydantic:
-            _output = mo.md(
-                "Pydantic is not installed. Install with `pip install pydantic`."
-            ).callout(kind="warn")
+            _output = mo.md("Pydantic is not installed. Install with `pip install pydantic`.").callout(kind="warn")
         else:
             _BaseModel = pydantic.BaseModel
             _Field = pydantic.Field
@@ -4325,53 +4307,6 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    fa_network_ms = mo.ui.slider(5, 300, value=40, label="Network latency (ms)")
-    fa_validation_ms = mo.ui.slider(1, 100, value=8, label="Validation cost (ms)")
-    fa_logic_ms = mo.ui.slider(1, 500, value=25, label="Business logic (ms)")
-    _note = mo.md(
-        """
-Change one component at a time to see which part dominates end-to-end latency.
-
-$$
-T_{endpoint} \\approx T_{network} + T_{validation} + T_{logic}
-$$
-        """
-    ).callout(kind="info")
-    _panel = mo.vstack(
-        [
-            mo.md("### Mini-lab: Endpoint Latency Budget"),
-            mo.hstack([fa_network_ms, fa_validation_ms], widths="equal"),
-            fa_logic_ms,
-            _note,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    _panel
-    return fa_logic_ms, fa_network_ms, fa_validation_ms
-
-
-@app.cell
-def _(fa_logic_ms, fa_network_ms, fa_validation_ms, mo):
-    total = fa_network_ms.value + fa_validation_ms.value + fa_logic_ms.value
-    _table = mo.ui.table(
-        [
-            {"component": "network", "ms": fa_network_ms.value},
-            {"component": "validation", "ms": fa_validation_ms.value},
-            {"component": "logic", "ms": fa_logic_ms.value},
-            {"component": "total", "ms": total},
-        ],
-        label="Estimated latency budget",
-    )
-    _msg = mo.md("Use this to decide whether to optimize code, validation, or infrastructure first.").callout(
-        kind="info"
-    )
-    _panel = mo.vstack([_table, _msg], gap=0.6)
-    _panel
-    return (_panel,)
-
-
-@app.cell
-def _(mo):
     fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
     fastapi_check = mo.ui.button(label="1) Check API status", kind="neutral")
     fastapi_payload = mo.ui.text_area(
@@ -4406,9 +4341,7 @@ def _(mo):
 def _(fastapi_base_url, fastapi_check, json, mo, url_request):
     _output = mo.md("Waiting for API status check...").callout(kind="neutral")
     if fastapi_check.value == 0:
-        _output = mo.md(
-            "Click **1) Check API status** after starting `uvicorn sw03_demo_api:app --reload`."
-        ).callout(kind="neutral")
+        _output = mo.md("Click **1) Check API status** after starting `uvicorn sw03_demo_api:app --reload`.").callout(kind="neutral")
     else:
         _url = fastapi_base_url.value.rstrip("/") + "/openapi.json"
         _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
@@ -4463,9 +4396,7 @@ Known routes (preview):
 def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_request):
     _output = mo.md("Waiting for POST request...").callout(kind="neutral")
     if fastapi_post.value == 0:
-        _output = mo.md(
-            "Edit the payload, then click **2) POST /products**."
-        ).callout(kind="neutral")
+        _output = mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral")
     else:
         _url = fastapi_base_url.value.rstrip("/") + "/products"
         try:
@@ -4530,9 +4461,7 @@ Error:
 def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_request):
     _output = mo.md("Waiting for GET request...").callout(kind="neutral")
     if fastapi_get.value == 0:
-        _output = mo.md("Click **3) GET /products/{id}** to fetch a product.").callout(
-            kind="neutral"
-        )
+        _output = mo.md("Click **3) GET /products/{id}** to fetch a product.").callout(kind="neutral")
     else:
         try:
             _item_id = int(fastapi_item_id.value.strip())
@@ -4684,6 +4613,12 @@ $$
 
 Interpretation:
 - faster iteration often comes with less low-level UI control; more control usually needs more engineering effort
+
+Useful showcase/example pages:
+- Marimo gallery: https://marimo.io/gallery
+- Dash examples: https://dash.plotly.com/examples
+- React community/resources: https://react.dev/community
+- Flask patterns/tutorial examples: https://flask.palletsprojects.com/en/stable/patterns/
         """
     ).callout(kind="neutral")
 
@@ -4725,16 +4660,12 @@ def _(fw_control, fw_js, fw_speed, mo):
         "Flask": fw_speed.value * 0.6 + fw_js.value * 0.5 + fw_control.value * 1.2,
         "React": fw_speed.value * 0.5 + fw_js.value * 1.4 + fw_control.value * 1.3,
     }
-    _ranked_frameworks = sorted(
-        _framework_scores.items(), key=lambda x: x[1], reverse=True
-    )
+    _ranked_frameworks = sorted(_framework_scores.items(), key=lambda x: x[1], reverse=True)
     _fit_table = mo.ui.table(
         [{"framework": name, "score": round(score, 2)} for name, score in _ranked_frameworks],
         label="Teaching score (higher = better fit)",
     )
-    _fit_message = mo.md(
-        f"Current top fit: **{_ranked_frameworks[0][0]}**"
-    ).callout(kind="info")
+    _fit_message = mo.md(f"Current top fit: **{_ranked_frameworks[0][0]}**").callout(kind="info")
     _fit_panel = mo.vstack([_fit_table, _fit_message], gap=0.6)
     _fit_panel
     return (_fit_panel,)
@@ -4834,10 +4765,7 @@ def _(mo, reg_alpha, reg_beta, reg_x):
         ],
         label="Linear prediction snapshot",
     )
-    _regression_note = mo.md(
-        "Adjust beta and observe how quickly y changes. "
-        "Large |beta| means stronger trend sensitivity."
-    ).callout(kind="info")
+    _regression_note = mo.md("Adjust beta and observe how quickly y changes. " "Large |beta| means stronger trend sensitivity.").callout(kind="info")
     _regression_panel = mo.vstack([_regression_table, _regression_note], gap=0.6)
     _regression_panel
     return (_regression_panel,)
@@ -4930,13 +4858,17 @@ def _(
             _intercept = _mean_y - _slope * _mean_x
             return _slope, _intercept
 
-        _scatter = _alt.Chart(_df).mark_circle(size=60, opacity=0.6, color="#2f6fed").encode(
-            x=_alt.X("x:Q"),
-            y=_alt.Y("y:Q"),
-            tooltip=[
-                _alt.Tooltip("x:Q"),
-                _alt.Tooltip("y:Q"),
-            ],
+        _scatter = (
+            _alt.Chart(_df)
+            .mark_circle(size=60, opacity=0.6, color="#2f6fed")
+            .encode(
+                x=_alt.X("x:Q"),
+                y=_alt.Y("y:Q"),
+                tooltip=[
+                    _alt.Tooltip("x:Q"),
+                    _alt.Tooltip("y:Q"),
+                ],
+            )
         )
         _scatter_layers = _scatter
         _formula = None
@@ -4951,18 +4883,13 @@ def _(
                     "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
                 }
             )
-            _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(
-                x=_alt.X("x:Q"), y=_alt.Y("y:Q")
-            )
+            _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(x=_alt.X("x:Q"), y=_alt.Y("y:Q"))
             _scatter_layers = _scatter + _reg_line
-            _formula = mo.md(
-                f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
-                f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$"
-            ).callout(kind="info")
-        else:
-            _formula = mo.md("Regression could not be computed for this sample.").callout(
-                kind="warn"
+            _formula = mo.md(f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n" f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$").callout(
+                kind="info"
             )
+        else:
+            _formula = mo.md("Regression could not be computed for this sample.").callout(kind="warn")
 
         _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
 
@@ -5087,6 +5014,7 @@ def _(mo):
   <p>Reference material for deeper dives and lookup:</p>
   <ul>
     <li>Marimo documentation: <code>https://marimo.io</code></li>
+    <li>Marimo gallery: <code>https://marimo.io/gallery</code></li>
     <li>DuckDB documentation: <code>https://duckdb.org/docs</code></li>
     <li>SQLite documentation: <code>https://www.sqlite.org/docs.html</code></li>
     <li>Apache Parquet: <code>https://parquet.apache.org</code></li>
@@ -5097,12 +5025,17 @@ def _(mo):
     <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
     <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
     <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>
+    <li>HTTP status code reference: <code>https://en.wikipedia.org/wiki/List_of_HTTP_status_codes</code></li>
+    <li>Dash examples: <code>https://dash.plotly.com/examples</code></li>
+    <li>React community/resources: <code>https://react.dev/community</code></li>
+    <li>Flask patterns/tutorial examples: <code>https://flask.palletsprojects.com/en/stable/patterns/</code></li>
   </ul>
 </div>
         """
     )
     _links
     return (_links,)
+
 
 if __name__ == "__main__":
     app.run()
