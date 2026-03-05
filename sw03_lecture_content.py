@@ -4313,7 +4313,7 @@ def _(mo):
         value='{"name": "Notebook Pro", "price": 99.9, "description": "Lecture demo product", "category_id": 1}',
         label="POST /products payload (JSON)",
     )
-    fastapi_post = mo.ui.button(label="2) POST /products", kind="success")
+    fastapi_post = mo.ui.run_button(label="2) POST /products", kind="success")
     fastapi_item_id = mo.ui.text(value="1", label="Product id for GET /products/{id}")
     fastapi_get = mo.ui.button(label="3) GET /products/{id}", kind="neutral")
 
@@ -4395,7 +4395,7 @@ Known routes (preview):
 @app.cell
 def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_request):
     _output = mo.md("Waiting for POST request...").callout(kind="neutral")
-    if fastapi_post.value == 0:
+    if not fastapi_post.value:
         _output = mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral")
     else:
         _url = fastapi_base_url.value.rstrip("/") + "/products"
