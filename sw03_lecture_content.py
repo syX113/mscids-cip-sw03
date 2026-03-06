@@ -430,6 +430,84 @@ def _(mo):
             font-size: 0.9rem;
           }
 
+          .lost-update-card {
+            gap: 14px;
+          }
+
+          .lost-update-wrap {
+            overflow-x: auto;
+          }
+
+          .lost-update-grid {
+            display: grid;
+            grid-template-columns: 90px repeat(3, minmax(180px, 1fr));
+            min-width: 760px;
+            border: 1px solid rgba(11, 18, 32, 0.14);
+            border-radius: 14px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.86);
+          }
+
+          .lu-header,
+          .lu-step,
+          .lu-event,
+          .lu-state {
+            padding: 10px 12px;
+            border-right: 1px solid rgba(11, 18, 32, 0.1);
+            border-bottom: 1px solid rgba(11, 18, 32, 0.1);
+            display: flex;
+            align-items: center;
+          }
+
+          .lu-header {
+            font-weight: 700;
+            color: var(--ink);
+            background: rgba(47, 111, 237, 0.14);
+          }
+
+          .lu-step {
+            justify-content: center;
+            font-weight: 700;
+            color: var(--ink-2);
+            background: rgba(11, 18, 32, 0.05);
+          }
+
+          .lu-event {
+            font-weight: 600;
+            color: var(--ink);
+            background: rgba(255, 255, 255, 0.84);
+          }
+
+          .lu-read {
+            background: rgba(20, 184, 166, 0.14);
+          }
+
+          .lu-write {
+            background: rgba(245, 158, 11, 0.18);
+          }
+
+          .lu-idle {
+            color: var(--muted);
+            background: rgba(11, 18, 32, 0.04);
+            font-weight: 500;
+          }
+
+          .lu-stale {
+            color: #991b1b;
+            background: rgba(254, 226, 226, 0.9);
+            font-weight: 700;
+          }
+
+          .lu-state {
+            font-weight: 700;
+            color: var(--ink-2);
+          }
+
+          .lu-problem {
+            color: #991b1b;
+            background: rgba(254, 226, 226, 0.85);
+          }
+
           .chart-grid {
             display: grid;
             gap: 14px;
@@ -686,21 +764,32 @@ Databases coordinate concurrency, ensure isolation, and provide crash recovery.
 def _(mo):
     _lost_update_diagram = mo.md(
         """
-<div class="section-card flow-card">
-  <h3>Visual: How a Lost Update Happens</h3>
-  <div class="flow-diagram">
-    <div class="flow-box">Worker A reads counter = 41</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Worker B reads counter = 41</div>
+<div class="section-card flow-card lost-update-card">
+  <h3>Visual: Lost Update Timeline (Who Does What, When)</h3>
+  <div class="lost-update-wrap">
+    <div class="lost-update-grid">
+      <div class="lu-header">Step</div>
+      <div class="lu-header">Worker A</div>
+      <div class="lu-header">Worker B</div>
+      <div class="lu-header">Shared counter</div>
+
+      <div class="lu-step">1</div>
+      <div class="lu-event lu-read">reads 41 into local copy</div>
+      <div class="lu-event lu-read">reads 41 into local copy</div>
+      <div class="lu-state">41</div>
+
+      <div class="lu-step">2</div>
+      <div class="lu-event lu-write">writes 42</div>
+      <div class="lu-event lu-idle">waiting</div>
+      <div class="lu-state">42</div>
+
+      <div class="lu-step">3</div>
+      <div class="lu-event lu-idle">done</div>
+      <div class="lu-event lu-stale">writes stale 42</div>
+      <div class="lu-state lu-problem">42 (A increment overwritten)</div>
+    </div>
   </div>
-  <div class="flow-diagram">
-    <div class="flow-box">A writes 42</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">B also writes 42</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Expected 43, observed 42</div>
-  </div>
-  <div class="flow-note">Both workers used stale state. One increment is overwritten and effectively lost.</div>
+  <div class="flow-note"><strong>Expected after 2 increments: 43.</strong> Observed: 42, so one update was lost.</div>
 </div>
         """
     )
