@@ -54,7 +54,7 @@ def _(Path, mo):
     # floats instead; several labs below read this file.
     SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
     SALES_SEED = SEED_DIR / "sales.parquet"
-    return SALES_SEED, SEED_DIR
+    return (SALES_SEED,)
 
 
 @app.cell
@@ -851,31 +851,31 @@ def _(mo):
 def _(mo):
     _lock_metaphor = mo.md(
         """
-### What a Lock Actually Is
+    ### What a Lock Actually Is
 
-Four flatmates share one bathroom. **There is no lock on the door.** Instead a single key hangs
-on a hook in the hall, and the house rule is: do not go in unless you are holding the key.
-If everyone follows the rule, nobody is ever walked in on.
+    Four flatmates share one bathroom. **There is no lock on the door.** Instead a single key hangs
+    on a hook in the hall, and the house rule is: do not go in unless you are holding the key.
+    If everyone follows the rule, nobody is ever walked in on.
 
-Notice what is doing the work. Not the door, which has no lock and never did. **The agreement**
-is doing the work.
+    Notice what is doing the work. Not the door, which has no lock and never did. **The agreement**
+    is doing the work.
 
-That is exactly what an operating-system file lock is. The OS hands out one key per file and
-makes everyone else wait at the hook. It does not touch the door. Any program that opens the file
-without reaching for the key walks straight in and overwrites whatever it likes.
+    That is exactly what an operating-system file lock is. The OS hands out one key per file and
+    makes everyone else wait at the hook. It does not touch the door. Any program that opens the file
+    without reaching for the key walks straight in and overwrites whatever it likes.
 
-Three things the picture gets right, and one it does not:
+    Three things the picture gets right, and one it does not:
 
-- The OS empties the pockets of anyone who leaves the building, so a program that crashes while
-  holding the key does **not** wedge the file forever.
-- There is a second kind of key that many people may hold at once, for looking but not touching.
-  The code below asks for the exclusive one, `LOCK_EX`.
-- The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
-  which is why this technique stops working across a network filesystem.
-- **Where it breaks:** the flatmate rule is only as good as the flatmates. A database does not
-  rely on an agreement - it refuses to hand out the data in the first place. That is the
-  difference you are about to measure.
-        """
+    - The OS empties the pockets of anyone who leaves the building, so a program that crashes while
+      holding the key does **not** wedge the file forever.
+    - There is a second kind of key that many people may hold at once, for looking but not touching.
+      The code below asks for the exclusive one, `LOCK_EX`.
+    - The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
+      which is why this technique stops working across a network filesystem.
+    - **Where it breaks:** the flatmate rule is only as good as the flatmates. A database does not
+      rely on an agreement - it refuses to hand out the data in the first place. That is the
+      difference you are about to measure.
+            """
     ).callout(kind="neutral")
     _lock_metaphor
     return
@@ -2051,7 +2051,7 @@ def _(
 
 
 @app.cell
-def _(SALES_SEED, mo, optional_import, tempfile, Path):
+def _(Path, SALES_SEED, mo, optional_import, tempfile):
     _pd = optional_import("pandas")
     if _pd is None or not SALES_SEED.exists():
         _panel = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
@@ -2529,7 +2529,7 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, Path, mo, optional_import, run_rowgroup, tempfile):
+def _(Path, SALES_SEED, mo, optional_import, run_rowgroup, tempfile):
     if run_rowgroup.value == 0:
         _output = mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral")
     else:
@@ -5399,7 +5399,7 @@ def _(mo):
         """
     ### Chapter 9 Introduction
 
-    > **Key Question:** Which frontend maximizes delivery speed without exceeding complexity?
+    > **Key Question:** What does the frontend need to know about everything behind it?
 
     *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
 
@@ -5460,6 +5460,30 @@ def _(mo):
     _framework_note = mo.md(
         """
     ### Choosing a Frontend Stack
+
+    **First, what a frontend actually is.** A restaurant has three rooms. The **cold store** holds
+    the ingredients and has exactly one job, keeping them correct: that was chapters 1 to 5. The
+    **kitchen** holds the recipes and the rules, and nothing leaves without being checked, whether
+    the order came from a table, a phone or a delivery app: chapters 6 to 8. The **dining room**
+    is what the guest sees, the menu and the plating and the waiter: chapters 9 and 10.
+
+    A frontend is the dining room. It owns no ingredients and no recipes. It writes an order slip,
+    which is an HTTP request to a path, hands it through the hatch, and arranges whatever comes
+    back so a human can decide something.
+
+    This is the payoff for splitting the tiers at all. Change supplier, Parquet for DuckDB, and no
+    guest notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not
+    change one line. **This repo already contains that dining room:** `sw03_demo_streamlit.py`,
+    talking to the API you started in chapter 8.
+
+    *Where the picture breaks.* A waiter cannot cook, but a frontend **does** compute: it sorts,
+    formats, aggregates and draws every chart in that dashboard. So do not read this as "the
+    frontend is dumb". Read it as **the frontend owns no rules**. Anyone can telephone the kitchen
+    directly, with `curl` or a script or another team's app, so a rule that lives only in the
+    dining room is not a rule at all. That is why this repo deliberately states the same rule
+    twice: the Streamlit form sets `min_value=1` for units sold, and the API states it again as
+    `units_sold: int = Field(ge=1, ...)`. The dining room may repeat a rule for politeness.
+    Never instead.
 
     Think in terms of trade‑offs (explicit engineering compromises): speed vs. control, Python‑native vs. JS ecosystems, and expected scale.
 
@@ -5615,47 +5639,18 @@ def _(mo):
         """
     ### Marimo Charts Lab
 
-    Use the controls below to generate a dataset and explore it with:
+    Use the controls below to generate a dataset where **you** set the true slope and the noise,
+    then watch what the regression reports back:
 
-    - **XY scatter + linear regression** (equation updates automatically)  
-    - **2D scatter by category** (four colors)  
-    - **Two trend lines** to compare two trajectories that move at slightly different rates
+    - **XY scatter + linear regression**, with the equation and its $R^2$
+    - a verdict that says whether the line means anything at all
 
-    We also compute summary statistics to make the patterns quantitative.
+    Set the slope to 0 and the noise high. The equation still prints confidently. The $R^2$ is
+    what tells you not to believe it. Then the mini-lab below asks the same question of real data
+    three different ways, and gets three different answers.
             """
     ).callout(kind="neutral")
     _explanation
-    return
-
-
-@app.cell
-def _(mo):
-    reg_alpha = mo.ui.slider(-5.0, 5.0, step=0.1, value=0.5, label="Intercept (alpha)")
-    reg_beta = mo.ui.slider(-4.0, 4.0, step=0.1, value=1.4, label="Slope (beta)")
-    reg_x = mo.ui.slider(-10.0, 10.0, step=0.5, value=2.0, label="Input x")
-    _panel = mo.vstack(
-        [mo.md("### Mini-lab: Regression Predictor"), reg_alpha, reg_beta, reg_x],
-        gap=0.6,
-    ).callout(kind="neutral")
-    _panel
-    return reg_alpha, reg_beta, reg_x
-
-
-@app.cell
-def _(mo, reg_alpha, reg_beta, reg_x):
-    _y_hat = reg_alpha.value + reg_beta.value * reg_x.value
-    _regression_table = mo.ui.table(
-        [
-            {"symbol": "alpha", "value": reg_alpha.value},
-            {"symbol": "beta", "value": reg_beta.value},
-            {"symbol": "x", "value": reg_x.value},
-            {"symbol": "predicted y", "value": round(_y_hat, 4)},
-        ],
-        label="Linear prediction snapshot",
-    )
-    _regression_note = mo.md("Adjust beta and observe how quickly y changes. " "Large |beta| means stronger trend sensitivity.").callout(kind="info")
-    _regression_panel = mo.vstack([_regression_table, _regression_note], gap=0.6)
-    _regression_panel
     return
 
 
@@ -5802,73 +5797,11 @@ def _(
 
         _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
 
-        _scatter_cat = (
-            _alt.Chart(_df)
-            .mark_circle(opacity=0.6)
-            .encode(
-                x=_alt.X("x:Q"),
-                y=_alt.Y("y:Q"),
-                color=_alt.Color("category:N"),
-                tooltip=[
-                    _alt.Tooltip("x:Q"),
-                    _alt.Tooltip("y:Q"),
-                    _alt.Tooltip("category:N"),
-                ],
-            )
-            .properties(height=280)
-        )
-        _scatter_cat_chart = mo.ui.altair_chart(_scatter_cat)
-
-        _line_len = min(chart_rows.value, 200)
-        _line_rows = []
-        # Keep the sign: a negative slope must trend downward here too, or this chart
-        # contradicts the scatter above it that uses the same slider.
-        _base_slope = chart_slope.value * 0.05
-        _slope_a = _base_slope
-        _slope_b = _base_slope + 0.015
-        _noise_scale = chart_noise.value * 0.2
-        for _i in range(_line_len):
-            _line_rows.append(
-                {
-                    "idx": _i,
-                    "series": "Trend A",
-                    "y": _slope_a * _i + _rng.gauss(0, _noise_scale),
-                }
-            )
-            _line_rows.append(
-                {
-                    "idx": _i,
-                    "series": "Trend B",
-                    "y": _slope_b * _i + 0.6 + _rng.gauss(0, _noise_scale),
-                }
-            )
-
-        _line_df = _pd.DataFrame(_line_rows)
-        _line_chart = mo.ui.altair_chart(
-            _alt.Chart(_line_df)
-            .mark_line(opacity=0.8)
-            .encode(
-                x=_alt.X("idx:Q", title="index"),
-                y=_alt.Y("y:Q", title="value"),
-                color=_alt.Color("series:N"),
-                tooltip=[
-                    _alt.Tooltip("idx:Q"),
-                    _alt.Tooltip("y:Q"),
-                    _alt.Tooltip("series:N"),
-                ],
-            )
-            .properties(height=260)
-        )
-
         _panel = mo.vstack(
             [
                 _formula,
                 mo.md("#### XY scatter + regression"),
                 _scatter_chart,
-                mo.md("#### 2D scatter by category"),
-                _scatter_cat_chart,
-                mo.md("#### Two upward trends"),
-                _line_chart,
                 _stats_table,
             ],
             gap=0.8,
@@ -5884,6 +5817,143 @@ def _(
         )
 
     _panel
+    return
+
+
+@app.cell
+def _(mo):
+    honest_view = mo.ui.radio(
+        options=[
+            "A - aggregate the dots",
+            "B - split by category",
+            "C - drop one category",
+        ],
+        value="A - aggregate the dots",
+        label="Ask the same question a different way",
+    )
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Three Ways to Change the Finding Without Changing the Data"),
+            mo.md(
+                """
+    One question, asked of the repo's real 3,360 sales: **does spending more make customers
+    happier?** Nothing below adds or removes a single sale. Only the way we look changes.
+                """
+            ).callout(kind="info"),
+            honest_view,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (honest_view,)
+
+
+@app.cell
+def _(SEED_DIR, honest_view, mo, optional_import, statistics):
+    _duckdb = optional_import("duckdb")
+    if _duckdb is None or not (SEED_DIR / "sales.parquet").exists():
+        _output = mo.md("Needs `duckdb` and the files in `data/seed/`.").callout(kind="warn")
+    else:
+
+        def _fit(_xs, _ys):
+            _mx, _my = statistics.mean(_xs), statistics.mean(_ys)
+            _vx = sum((_x - _mx) ** 2 for _x in _xs)
+            _vy = sum((_y - _my) ** 2 for _y in _ys)
+            if not _vx or not _vy:
+                return None, None
+            _cov = sum((_x - _mx) * (_y - _my) for _x, _y in zip(_xs, _ys))
+            return _cov / _vx, (_cov * _cov) / (_vx * _vy)
+
+        _con = _duckdb.connect()
+        _join = (
+            f"FROM '{(SEED_DIR / 'sales.parquet').as_posix()}' s "
+            f"JOIN '{(SEED_DIR / 'products.parquet').as_posix()}' p USING (product_id) "
+            f"JOIN '{(SEED_DIR / 'categories.parquet').as_posix()}' c USING (category_id)"
+        )
+
+        def _measure(_label, _sql):
+            _df = _con.execute(_sql).df()
+            _slope, _r2 = _fit(_df["x"].tolist(), _df["y"].tolist())
+            return {
+                "what we plotted": _label,
+                "dots (n)": len(_df),
+                "slope (rating per CHF 10k)": None if _slope is None else round(_slope * 10000, 3),
+                "R²": None if _r2 is None else round(_r2, 3),
+            }
+
+        if honest_view.value.startswith("A"):
+            _rows = [
+                _measure("one dot per sale", f"SELECT total_price x, customer_rating y {_join}"),
+                _measure(
+                    "one dot per product per month",
+                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
+                    "GROUP BY p.name, date_trunc('month', s.sale_date)",
+                ),
+                _measure(
+                    "one dot per category per month",
+                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
+                    "GROUP BY c.name, date_trunc('month', s.sale_date)",
+                ),
+                _measure(
+                    "one dot per category",
+                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} GROUP BY c.name",
+                ),
+            ]
+            _lesson = """
+    **$R^2$ went from "weak" to "publishable" and no new information entered the room.**
+
+    Every row above is the same 3,360 sales. Averaging dots together does not strengthen a
+    relationship, it **deletes the disagreement** that was telling you the relationship is weak.
+    The last row has three dots and a story you could put on a slide.
+
+    This is why a goodness-of-fit number is meaningless without its sample size. Always read
+    $R^2$ and $n$ together, which is why the table prints both.
+            """
+        elif honest_view.value.startswith("B"):
+            _cats = [_r[0] for _r in _con.execute(f"SELECT DISTINCT c.name {_join} ORDER BY 1").fetchall()]
+            _rows = [_measure("all sales pooled together", f"SELECT total_price x, customer_rating y {_join}")]
+            _rows += [
+                _measure(f"only {_c}", f"SELECT total_price x, customer_rating y {_join} WHERE c.name = '{_c}'")
+                for _c in _cats
+            ]
+            _lesson = """
+    **The pooled line does not describe any of the groups.**
+
+    Pooled, the slope is positive: spend more, be happier. Look inside Hardware and the slope is
+    *negative*. The upward line is not describing customers at all. It is describing the gaps
+    **between** categories, because Services happen to be expensive and well rated while Hardware
+    is mid-priced and rated worst.
+
+    Three groups' worth of difference, wearing three thousand dots' worth of authority. When a
+    relationship reverses inside every subgroup, that has a name: Simpson's paradox.
+            """
+        else:
+            _rows = [
+                _measure("all sales", f"SELECT total_price x, customer_rating y {_join}"),
+                _measure(
+                    "every sale except Services",
+                    f"SELECT total_price x, customer_rating y {_join} WHERE c.name <> 'Services'",
+                ),
+            ]
+            _lesson = """
+    **One group out of three decided the direction of the answer.**
+
+    Remove Services and the slope flips sign: the finding reverses completely. Now look at the
+    $R^2$ column. It barely moved.
+
+    That is the warning worth leaving this chapter with. $R^2$ tells you how tightly the dots hug
+    the line. It never tells you whether the line was the right line to draw, and it will not
+    warn you when one group is carrying the entire result.
+            """
+
+        _output = mo.vstack(
+            [
+                mo.ui.table(_rows, label="Same 3,360 sales, same question"),
+                mo.md(_lesson).callout(kind="warn"),
+            ],
+            gap=0.6,
+        )
+    _output
     return
 
 
