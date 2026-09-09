@@ -1,14 +1,20 @@
-altair
-duckdb
-fastapi
-fastavro
-marimo
-numpy
-pandas
-pillow
-protobuf>=4.25,<6
-pydantic
-pyarrow
-requests
-streamlit>=1.41,<2
-uvicorn
+# SW03 - exact versions this course was tested with (Python 3.14).
+# Pinned on purpose: everyone in the class gets the same stack, so a demo that
+# works for the lecturer works on your laptop too.
+#
+#   python -m pip install -r requirements.txt
+
+altair==6.2.2
+duckdb==1.5.5
+fastapi==0.141.1
+fastavro==1.12.2
+marimo==0.24.0
+numpy==2.5.3
+pandas==3.0.5
+pillow==12.3.0
+protobuf==7.36.1
+pyarrow==25.0.1
+pydantic==2.13.5
+requests==2.34.2
+streamlit==1.63.0
+uvicorn==0.52.4

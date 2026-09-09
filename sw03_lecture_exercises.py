@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.8"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium")
 
 
@@ -8,7 +8,7 @@ app = marimo.App(width="medium")
 def cell_imports():
     import csv
     import gzip
-    import importlib
+    import importlib.util
     import json
     import tempfile
     from pathlib import Path
@@ -79,8 +79,14 @@ def syntax_cheatsheet(mo):
 
     # CSV read pattern
     with path.open("r", newline="\", encoding="utf-8") as file_handle:
-    reader = csv.DictReader(file_handle)
-    rows = list(reader)
+        reader = csv.DictReader(file_handle)
+        rows = list(reader)
+
+    # count the rows you just read
+    row_count = len(rows)
+
+    # pick the dictionary key with the smallest value
+    best_key = min(sizes_by_key, key=sizes_by_key.get)
 
     # clamp a numeric value
     level = min(9, max(1, int(level)))
@@ -103,7 +109,15 @@ def cell_shared_data():
         {"id": 4, "city": "Geneva", "qty": 4, "unit_price": 3.5},
     ]
     sample_text = "storage-compression-api-" * 200
-    return sample_rows, sample_text
+
+    # Parquet always writes about 1.3 KB of schema and footer metadata, so on four
+    # rows it loses badly. Exercise 4 needs enough rows for the columnar win to show.
+    sample_rows_bulk = [
+        {**row, "id": batch * len(sample_rows) + row["id"]}
+        for batch in range(500)
+        for row in sample_rows
+    ]
+    return sample_rows, sample_rows_bulk, sample_text
 
 
 @app.cell(hide_code=True)
@@ -125,9 +139,6 @@ def exercise1_prompt(mo):
 @app.cell
 def exercise1(mo):
     def build_intro_markdown(mo_module, title, topic):
-        # TODO (Exercise 1): edit the following line
-        topic_text = ""  # ### FILL HERE ###
-
         # TODO (Exercise 1): edit the following line
         markdown_text = ""  # ### FILL HERE ###
         widget = mo_module.md(markdown_text)
@@ -226,6 +237,7 @@ def exercise3(Path, csv, sample_rows, tempfile):
             "row_count": row_count_value,
             "file_size": int(path_obj.stat().st_size) if path_obj.exists() else 0,
             "columns": columns,
+            "loaded_rows": loaded_rows,
         }
 
     with tempfile.TemporaryDirectory() as temp_dir_ex3:
@@ -237,6 +249,9 @@ def exercise3(Path, csv, sample_rows, tempfile):
         and result_ex3["row_count"] == len(sample_rows)
         and result_ex3["file_size"] > 0
         and result_ex3["columns"] == ["id", "city", "qty", "unit_price"]
+        # the data really came back out of the file, not just a hard-coded count
+        and len(result_ex3["loaded_rows"]) == len(sample_rows)
+        and result_ex3["loaded_rows"][0]["city"] == "Zurich"
     )
     print("pass" if check_passed_ex3 else "fail")
     return (write_and_read_csv,)
@@ -262,7 +277,7 @@ def exercise4_prompt(mo):
 def exercise4(
     Path,
     optional_import,
-    sample_rows,
+    sample_rows_bulk,
     tempfile,
     write_and_read_csv,
 ):
@@ -304,7 +319,7 @@ def exercise4(
         parquet_path_ex4 = Path(temp_dir_ex4) / "exercise4.parquet"
         csv_path_ex4 = Path(temp_dir_ex4) / "exercise4.csv"
         result_ex4 = write_parquet_and_compare(
-            sample_rows,
+            sample_rows_bulk,
             parquet_path_ex4.as_posix(),
             csv_path_ex4.as_posix(),
         )
@@ -320,7 +335,7 @@ def exercise4(
             result_ex4["csv_bytes"] > 0
             and result_ex4["parquet_bytes"] > 0
             and result_ex4["size_ratio_parquet_to_csv"] is not None
-            and result_ex4["row_count"] == len(sample_rows)
+            and result_ex4["row_count"] == len(sample_rows_bulk)
         )
 
     print("pass" if check_passed_ex4 else "fail")
@@ -366,9 +381,11 @@ def exercise5(gzip, sample_text):
     result_ex5 = gzip_report(sample_text, 6)
     check_passed_ex5 = (
         isinstance(result_ex5, dict)
-        and result_ex5["raw_bytes"] > 0
+        and result_ex5["raw_bytes"] == len(sample_text.encode("utf-8"))
         and result_ex5["compressed_bytes"] > 0
         and 0 < result_ex5["compression_ratio"] < 1
+        # the ratio is really compressed/raw, not just some number below 1
+        and abs(result_ex5["compression_ratio"] - result_ex5["compressed_bytes"] / result_ex5["raw_bytes"]) < 1e-4
     )
     print("pass" if check_passed_ex5 else "fail")
     return (gzip_report,)

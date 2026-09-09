@@ -9,10 +9,11 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Path as PathParam, Query
+from fastapi import FastAPI, HTTPException, Path as PathParam, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -25,13 +26,11 @@ TABLE_PATHS = {
 }
 SEED_DATA_DIR = DATA_DIR / "seed"
 SEED_TABLE_PATHS = {table_name: SEED_DATA_DIR / table_path.name for table_name, table_path in TABLE_PATHS.items()}
-T = TypeVar("T")
+DEFAULT_SALES_LIMIT = 5000
 
-
-def _model_dump(model: BaseModel, **kwargs: Any) -> dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return model.model_dump(**kwargs)
-    return model.dict(**kwargs)
+# Documented in /docs so students see which errors an endpoint can actually return.
+NOT_FOUND = {404: {"description": "No row with that id."}}
+BAD_REQUEST = {400: {"description": "The request broke a rule, for example a duplicate name or an unknown id."}}
 
 
 def _clean_required_text(value: str, *, field_name: str) -> str:
@@ -192,7 +191,8 @@ class SalesRepository:
     def _read(self, table_name: str) -> pd.DataFrame:
         path = self.table_paths[table_name]
         if not path.exists():
-            self._ensure_store()
+            # Restore only the table that vanished; the other four keep their data.
+            self._write(table_name, pd.read_parquet(SEED_TABLE_PATHS[table_name]))
         df = pd.read_parquet(path)
         if table_name == "sales" and "sale_date" in df.columns:
             df["sale_date"] = pd.to_datetime(df["sale_date"])
@@ -233,17 +233,17 @@ class SalesRepository:
         if duplicates.any():
             raise ValueError(f"{entity_name} name '{value.strip()}' already exists")
 
-    def _get_enriched_countries(self, countries: pd.DataFrame | None = None, regions: pd.DataFrame | None = None) -> pd.DataFrame:
-        countries_df = countries.copy() if countries is not None else self._read("countries")
-        regions_df = regions.copy() if regions is not None else self._read("regions")
-        region_lookup = regions_df.rename(columns={"name": "region_name"})[["region_id", "region_name"]]
-        return countries_df.merge(region_lookup, on="region_id", how="left")
+    @staticmethod
+    def _get_enriched_countries(countries: pd.DataFrame, regions: pd.DataFrame) -> pd.DataFrame:
+        """Add each country's region name, so the client does not have to join it itself."""
+        region_lookup = regions.rename(columns={"name": "region_name"})[["region_id", "region_name"]]
+        return countries.merge(region_lookup, on="region_id", how="left")
 
-    def _get_enriched_products(self, products: pd.DataFrame | None = None, categories: pd.DataFrame | None = None) -> pd.DataFrame:
-        products_df = products.copy() if products is not None else self._read("products")
-        categories_df = categories.copy() if categories is not None else self._read("categories")
-        category_lookup = categories_df.rename(columns={"name": "category_name"})[["category_id", "category_name"]]
-        return products_df.merge(category_lookup, on="category_id", how="left")
+    @staticmethod
+    def _get_enriched_products(products: pd.DataFrame, categories: pd.DataFrame) -> pd.DataFrame:
+        """Add each product's category name."""
+        category_lookup = categories.rename(columns={"name": "category_name"})[["category_id", "category_name"]]
+        return products.merge(category_lookup, on="category_id", how="left")
 
     def _get_enriched_sales(self) -> pd.DataFrame:
         sales = self._read("sales")
@@ -354,7 +354,7 @@ class SalesRepository:
     def create_region(self, payload: SalesRegionCreate) -> dict[str, Any]:
         with self._lock:
             regions = self._read("regions")
-            record = _model_dump(payload)
+            record = payload.model_dump()
             record["name"] = _clean_required_text(str(record["name"]), field_name="Region name")
             record["description"] = _clean_required_text(
                 str(record["description"]), field_name="Region description"
@@ -379,7 +379,7 @@ class SalesRepository:
             if not idx:
                 return None
 
-            patch = _model_dump(payload, exclude_unset=True)
+            patch = payload.model_dump(exclude_unset=True, exclude_none=True)
             row_index = idx[0]
 
             if "name" in patch:
@@ -427,7 +427,7 @@ class SalesRepository:
             if regions.loc[regions["region_id"] == payload.region_id].empty:
                 raise ValueError(f"Region id {payload.region_id} does not exist")
 
-            record = _model_dump(payload)
+            record = payload.model_dump()
             record["name"] = _clean_required_text(str(record["name"]), field_name="Country name")
             self._ensure_unique_name(
                 countries,
@@ -452,7 +452,7 @@ class SalesRepository:
             if not idx:
                 return None
 
-            patch = _model_dump(payload, exclude_unset=True)
+            patch = payload.model_dump(exclude_unset=True, exclude_none=True)
             row_index = idx[0]
 
             if "region_id" in patch and regions.loc[regions["region_id"] == patch["region_id"]].empty:
@@ -492,7 +492,7 @@ class SalesRepository:
     def create_category(self, payload: CategoryCreate) -> dict[str, Any]:
         with self._lock:
             categories = self._read("categories")
-            record = _model_dump(payload)
+            record = payload.model_dump()
             record["name"] = _clean_required_text(str(record["name"]), field_name="Category name")
             record["description"] = _clean_required_text(
                 str(record["description"]), field_name="Category description"
@@ -517,7 +517,7 @@ class SalesRepository:
             if not idx:
                 return None
 
-            patch = _model_dump(payload, exclude_unset=True)
+            patch = payload.model_dump(exclude_unset=True, exclude_none=True)
             row_index = idx[0]
 
             if "name" in patch:
@@ -565,7 +565,7 @@ class SalesRepository:
             if categories.loc[categories["category_id"] == payload.category_id].empty:
                 raise ValueError(f"Category id {payload.category_id} does not exist")
 
-            record = _model_dump(payload)
+            record = payload.model_dump()
             record["name"] = _clean_required_text(str(record["name"]), field_name="Product name")
             record["description"] = _clean_required_text(
                 str(record["description"]), field_name="Product description"
@@ -593,7 +593,7 @@ class SalesRepository:
             if not idx:
                 return None
 
-            patch = _model_dump(payload, exclude_unset=True)
+            patch = payload.model_dump(exclude_unset=True, exclude_none=True)
             row_index = idx[0]
 
             if "category_id" in patch and categories.loc[categories["category_id"] == patch["category_id"]].empty:
@@ -632,7 +632,7 @@ class SalesRepository:
         end_date: date | None = None,
         min_rating: int | None = None,
         max_rating: int | None = None,
-        limit: int = 2000,
+        limit: int = DEFAULT_SALES_LIMIT,
     ) -> list[dict[str, Any]]:
         if start_date and end_date and start_date > end_date:
             raise ValueError("start_date must be on or before end_date")
@@ -685,7 +685,7 @@ class SalesRepository:
             if countries.loc[countries["country_id"] == payload.country_id].empty:
                 raise ValueError(f"Country id {payload.country_id} does not exist")
 
-            record = _model_dump(payload)
+            record = payload.model_dump()
             record["sale_id"] = self._next_id(sales, "sale_id")
 
             if record.get("total_price") is None:
@@ -711,21 +711,21 @@ class SalesRepository:
                 return None
             row_index = idx[0]
 
-            patch = _model_dump(payload, exclude_unset=True)
+            patch = payload.model_dump(exclude_unset=True, exclude_none=True)
 
             if "product_id" in patch and products.loc[products["product_id"] == patch["product_id"]].empty:
                 raise ValueError(f"Product id {patch['product_id']} does not exist")
             if "country_id" in patch and countries.loc[countries["country_id"] == patch["country_id"]].empty:
                 raise ValueError(f"Country id {patch['country_id']} does not exist")
 
-            explicit_total = patch.get("total_price") if "total_price" in patch else None
-
             for key, value in patch.items():
-                if key == "total_price" and value is None:
-                    continue
+                if key == "sale_date":
+                    value = pd.Timestamp(value)
                 sales.at[row_index, key] = value
 
-            if explicit_total is None:
+            # Recompute the total only when the numbers it is derived from changed,
+            # so a deliberately stored total survives an unrelated edit.
+            if "total_price" not in patch and ("units_sold" in patch or "product_id" in patch):
                 product_id = int(sales.at[row_index, "product_id"])
                 units_sold = int(sales.at[row_index, "units_sold"])
                 unit_price_match = products.loc[products["product_id"] == product_id, "price"]
@@ -737,157 +737,275 @@ class SalesRepository:
 
         return self.get_sale(sale_id)
 
+    def _delete_row(self, table_name: str, id_col: str, row_id: int) -> bool:
+        table = self._read(table_name)
+        if table.loc[table[id_col] == row_id].empty:
+            return False
+        self._write(table_name, table.loc[table[id_col] != row_id])
+        return True
+
+    @staticmethod
+    def _refuse_if_referenced(child: pd.DataFrame, fk_col: str, value: int, message: str) -> None:
+        used_by = int((child[fk_col] == value).sum())
+        if used_by:
+            raise ValueError(f"{message} ({used_by} row(s) still reference it)")
+
+    def delete_region(self, region_id: int) -> bool:
+        with self._lock:
+            self._refuse_if_referenced(
+                self._read("countries"), "region_id", region_id,
+                f"Region {region_id} still has countries",
+            )
+            return self._delete_row("regions", "region_id", region_id)
+
+    def delete_country(self, country_id: int) -> bool:
+        with self._lock:
+            self._refuse_if_referenced(
+                self._read("sales"), "country_id", country_id,
+                f"Country {country_id} still has sales",
+            )
+            return self._delete_row("countries", "country_id", country_id)
+
+    def delete_category(self, category_id: int) -> bool:
+        with self._lock:
+            self._refuse_if_referenced(
+                self._read("products"), "category_id", category_id,
+                f"Category {category_id} still has products",
+            )
+            return self._delete_row("categories", "category_id", category_id)
+
+    def delete_product(self, product_id: int) -> bool:
+        with self._lock:
+            self._refuse_if_referenced(
+                self._read("sales"), "product_id", product_id,
+                f"Product {product_id} still has sales",
+            )
+            return self._delete_row("products", "product_id", product_id)
+
+    def delete_sale(self, sale_id: int) -> bool:
+        with self._lock:
+            return self._delete_row("sales", "sale_id", sale_id)
+
 
 repo = SalesRepository(TABLE_PATHS)
-app = FastAPI(title="Sales Analysis API", version="2.0.0")
+app = FastAPI(
+    title="Sales Analysis API",
+    version="3.0.0",
+    description=(
+        "Teaching API for SW03. It is the **logic tier** of a three-tier stack: "
+        "Parquet files underneath (data tier), a notebook or Streamlit app on top "
+        "(presentation tier).\n\n"
+        "Every table supports the four REST verbs: `GET`, `POST`, `PUT`, `DELETE`. "
+        "`PUT` here is a *partial* update - fields you leave out keep their current value.\n\n"
+        "On every start, `data/` is reset from `data/seed/`, so you can experiment freely."
+    ),
+    openapi_tags=[
+        {"name": "Service", "description": "Is the API alive, and what values may I choose?"},
+        {"name": "Regions", "description": "Sales regions. A region groups countries."},
+        {"name": "Countries", "description": "Countries. Each country belongs to one region."},
+        {"name": "Categories", "description": "Product categories."},
+        {"name": "Products", "description": "Products. Each product belongs to one category."},
+        {"name": "Sales", "description": "Individual sales, enriched with product, category, country and region names."},
+    ],
+)
 
 
-def _run_repo_call(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    try:
-        return func(*args, **kwargs)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+@app.exception_handler(ValueError)
+def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """Turn a rejected business rule into 400 Bad Request instead of a 500 crash."""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-@app.get("/")
+@app.get("/", tags=["Service"])
 def root() -> dict[str, str]:
-    return {
-        "message": "Sales Analysis API is running.",
-    }
+    """Friendly landing message. Open /docs for the interactive documentation."""
+    return {"message": "Sales Analysis API is running. Open /docs to try it out."}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Service"])
 def health() -> dict[str, str]:
+    """Liveness check. Answers {"status": "ok"} when the API is reachable."""
     return {"status": "ok"}
 
 
-@app.get("/meta/options")
+@app.get("/meta/options", tags=["Service"])
 def meta_options() -> dict[str, Any]:
+    """Every value the filters accept: region, country, category and product names, plus the date range."""
     return repo.options()
 
 
-@app.get("/regions", response_model=list[SalesRegion])
+# --- Regions ---------------------------------------------------------------
+
+@app.get("/regions", response_model=list[SalesRegion], tags=["Regions"])
 def list_regions() -> list[SalesRegion]:
+    """List all regions, sorted by name."""
     return [SalesRegion(**r) for r in repo.list_regions()]
 
 
-@app.get("/regions/{region_id}", response_model=SalesRegion)
+@app.get("/regions/{region_id}", response_model=SalesRegion, tags=["Regions"], responses=NOT_FOUND)
 def get_region(region_id: int = PathParam(..., ge=1)) -> SalesRegion:
+    """Fetch one region by id."""
     region = repo.get_region(region_id)
     if region is None:
         raise HTTPException(status_code=404, detail="Region not found")
     return SalesRegion(**region)
 
 
-@app.post("/regions", response_model=SalesRegion, status_code=201)
+@app.post("/regions", response_model=SalesRegion, status_code=201, tags=["Regions"], responses=BAD_REQUEST)
 def create_region(payload: SalesRegionCreate) -> SalesRegion:
-    created = _run_repo_call(repo.create_region, payload)
-    return SalesRegion(**created)
+    """Create a region. The name must not already exist."""
+    return SalesRegion(**repo.create_region(payload))
 
 
-@app.put("/regions/{region_id}", response_model=SalesRegion)
+@app.put("/regions/{region_id}", response_model=SalesRegion, tags=["Regions"], responses=NOT_FOUND | BAD_REQUEST)
 def update_region(payload: SalesRegionUpdate, region_id: int = PathParam(..., ge=1)) -> SalesRegion:
-    updated = _run_repo_call(repo.update_region, region_id=region_id, payload=payload)
+    """Update a region. Fields you leave out keep their current value."""
+    updated = repo.update_region(region_id=region_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Region not found")
     return SalesRegion(**updated)
 
 
-@app.get("/countries", response_model=list[Country])
+@app.delete("/regions/{region_id}", status_code=204, tags=["Regions"], responses=NOT_FOUND | BAD_REQUEST)
+def delete_region(region_id: int = PathParam(..., ge=1)) -> None:
+    """Delete a region. Refused while countries still belong to it."""
+    if not repo.delete_region(region_id):
+        raise HTTPException(status_code=404, detail="Region not found")
+
+
+# --- Countries -------------------------------------------------------------
+
+@app.get("/countries", response_model=list[Country], tags=["Countries"])
 def list_countries() -> list[Country]:
+    """List all countries with their region name, sorted by name."""
     return [Country(**r) for r in repo.list_countries()]
 
 
-@app.get("/countries/{country_id}", response_model=Country)
+@app.get("/countries/{country_id}", response_model=Country, tags=["Countries"], responses=NOT_FOUND)
 def get_country(country_id: int = PathParam(..., ge=1)) -> Country:
+    """Fetch one country by id."""
     country = repo.get_country(country_id)
     if country is None:
         raise HTTPException(status_code=404, detail="Country not found")
     return Country(**country)
 
 
-@app.post("/countries", response_model=Country, status_code=201)
+@app.post("/countries", response_model=Country, status_code=201, tags=["Countries"], responses=BAD_REQUEST)
 def create_country(payload: CountryCreate) -> Country:
-    created = _run_repo_call(repo.create_country, payload)
-    return Country(**created)
+    """Create a country. The region_id must already exist."""
+    return Country(**repo.create_country(payload))
 
 
-@app.put("/countries/{country_id}", response_model=Country)
+@app.put("/countries/{country_id}", response_model=Country, tags=["Countries"], responses=NOT_FOUND | BAD_REQUEST)
 def update_country(payload: CountryUpdate, country_id: int = PathParam(..., ge=1)) -> Country:
-    updated = _run_repo_call(repo.update_country, country_id=country_id, payload=payload)
+    """Update a country. Fields you leave out keep their current value."""
+    updated = repo.update_country(country_id=country_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Country not found")
     return Country(**updated)
 
 
-@app.get("/categories", response_model=list[Category])
+@app.delete("/countries/{country_id}", status_code=204, tags=["Countries"], responses=NOT_FOUND | BAD_REQUEST)
+def delete_country(country_id: int = PathParam(..., ge=1)) -> None:
+    """Delete a country. Refused while sales still reference it."""
+    if not repo.delete_country(country_id):
+        raise HTTPException(status_code=404, detail="Country not found")
+
+
+# --- Categories ------------------------------------------------------------
+
+@app.get("/categories", response_model=list[Category], tags=["Categories"])
 def list_categories() -> list[Category]:
+    """List all categories, sorted by name."""
     return [Category(**r) for r in repo.list_categories()]
 
 
-@app.get("/categories/{category_id}", response_model=Category)
+@app.get("/categories/{category_id}", response_model=Category, tags=["Categories"], responses=NOT_FOUND)
 def get_category(category_id: int = PathParam(..., ge=1)) -> Category:
+    """Fetch one category by id."""
     category = repo.get_category(category_id)
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
     return Category(**category)
 
 
-@app.post("/categories", response_model=Category, status_code=201)
+@app.post("/categories", response_model=Category, status_code=201, tags=["Categories"], responses=BAD_REQUEST)
 def create_category(payload: CategoryCreate) -> Category:
-    created = _run_repo_call(repo.create_category, payload)
-    return Category(**created)
+    """Create a category. The name must not already exist."""
+    return Category(**repo.create_category(payload))
 
 
-@app.put("/categories/{category_id}", response_model=Category)
+@app.put("/categories/{category_id}", response_model=Category, tags=["Categories"], responses=NOT_FOUND | BAD_REQUEST)
 def update_category(payload: CategoryUpdate, category_id: int = PathParam(..., ge=1)) -> Category:
-    updated = _run_repo_call(repo.update_category, category_id=category_id, payload=payload)
+    """Update a category. Fields you leave out keep their current value."""
+    updated = repo.update_category(category_id=category_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Category not found")
     return Category(**updated)
 
 
-@app.get("/products", response_model=list[Product])
+@app.delete("/categories/{category_id}", status_code=204, tags=["Categories"], responses=NOT_FOUND | BAD_REQUEST)
+def delete_category(category_id: int = PathParam(..., ge=1)) -> None:
+    """Delete a category. Refused while products still belong to it."""
+    if not repo.delete_category(category_id):
+        raise HTTPException(status_code=404, detail="Category not found")
+
+
+# --- Products --------------------------------------------------------------
+
+@app.get("/products", response_model=list[Product], tags=["Products"])
 def list_products() -> list[Product]:
+    """List all products with their category name, sorted by name."""
     return [Product(**r) for r in repo.list_products()]
 
 
-@app.get("/products/{product_id}", response_model=Product)
+@app.get("/products/{product_id}", response_model=Product, tags=["Products"], responses=NOT_FOUND)
 def get_product(product_id: int = PathParam(..., ge=1)) -> Product:
+    """Fetch one product by id."""
     product = repo.get_product(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return Product(**product)
 
 
-@app.post("/products", response_model=Product, status_code=201)
+@app.post("/products", response_model=Product, status_code=201, tags=["Products"], responses=BAD_REQUEST)
 def create_product(payload: ProductCreate) -> Product:
-    created = _run_repo_call(repo.create_product, payload)
-    return Product(**created)
+    """Create a product. The name must be new and the category_id must already exist."""
+    return Product(**repo.create_product(payload))
 
 
-@app.put("/products/{product_id}", response_model=Product)
+@app.put("/products/{product_id}", response_model=Product, tags=["Products"], responses=NOT_FOUND | BAD_REQUEST)
 def update_product(payload: ProductUpdate, product_id: int = PathParam(..., ge=1)) -> Product:
-    updated = _run_repo_call(repo.update_product, product_id=product_id, payload=payload)
+    """Update a product. Fields you leave out keep their current value."""
+    updated = repo.update_product(product_id=product_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return Product(**updated)
 
 
-@app.get("/sales", response_model=list[Sale])
+@app.delete("/products/{product_id}", status_code=204, tags=["Products"], responses=NOT_FOUND | BAD_REQUEST)
+def delete_product(product_id: int = PathParam(..., ge=1)) -> None:
+    """Delete a product. Refused while sales still reference it."""
+    if not repo.delete_product(product_id):
+        raise HTTPException(status_code=404, detail="Product not found")
+
+
+# --- Sales -----------------------------------------------------------------
+
+@app.get("/sales", response_model=list[Sale], tags=["Sales"], responses=BAD_REQUEST)
 def list_sales(
-    region: list[str] | None = Query(default=None),
-    country: list[str] | None = Query(default=None),
-    product: list[str] | None = Query(default=None),
-    category: list[str] | None = Query(default=None),
-    start_date: date | None = None,
-    end_date: date | None = None,
+    region: list[str] | None = Query(default=None, description="Keep only these region names."),
+    country: list[str] | None = Query(default=None, description="Keep only these country names."),
+    product: list[str] | None = Query(default=None, description="Keep only these product names."),
+    category: list[str] | None = Query(default=None, description="Keep only these category names."),
+    start_date: date | None = Query(default=None, description="Earliest sale date to include."),
+    end_date: date | None = Query(default=None, description="Latest sale date to include."),
     min_rating: int | None = Query(default=None, ge=1, le=5),
     max_rating: int | None = Query(default=None, ge=1, le=5),
-    limit: int = Query(default=2000, ge=1, le=20000),
+    limit: int = Query(default=DEFAULT_SALES_LIMIT, ge=1, le=20000, description="Maximum rows returned, newest first."),
 ) -> list[Sale]:
-    records = _run_repo_call(
-        repo.list_sales,
+    """Search sales. Every filter is optional; combining them narrows the result."""
+    records = repo.list_sales(
         regions=region,
         countries=country,
         products=product,
@@ -901,23 +1019,32 @@ def list_sales(
     return [Sale(**r) for r in records]
 
 
-@app.get("/sales/{sale_id}", response_model=Sale)
+@app.get("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND)
 def get_sale(sale_id: int = PathParam(..., ge=1)) -> Sale:
+    """Fetch one sale by id, enriched with product, category, country and region names."""
     sale = repo.get_sale(sale_id)
     if sale is None:
         raise HTTPException(status_code=404, detail="Sale not found")
     return Sale(**sale)
 
 
-@app.post("/sales", response_model=Sale, status_code=201)
+@app.post("/sales", response_model=Sale, status_code=201, tags=["Sales"], responses=BAD_REQUEST)
 def create_sale(payload: SaleCreate) -> Sale:
-    created = _run_repo_call(repo.create_sale, payload)
-    return Sale(**created)
+    """Record a sale. Leave total_price out and it is computed as units_sold x product price."""
+    return Sale(**repo.create_sale(payload))
 
 
-@app.put("/sales/{sale_id}", response_model=Sale)
+@app.put("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND | BAD_REQUEST)
 def update_sale(payload: SaleUpdate, sale_id: int = PathParam(..., ge=1)) -> Sale:
-    updated = _run_repo_call(repo.update_sale, sale_id=sale_id, payload=payload)
+    """Update a sale. Changing units_sold or product_id recomputes total_price."""
+    updated = repo.update_sale(sale_id=sale_id, payload=payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Sale not found")
     return Sale(**updated)
+
+
+@app.delete("/sales/{sale_id}", status_code=204, tags=["Sales"], responses=NOT_FOUND)
+def delete_sale(sale_id: int = PathParam(..., ge=1)) -> None:
+    """Delete a sale. Nothing references a sale, so this always succeeds."""
+    if not repo.delete_sale(sale_id):
+        raise HTTPException(status_code=404, detail="Sale not found")

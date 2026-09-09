@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.8"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium")
 
 
@@ -20,23 +20,15 @@ def _():
     import threading
     import time
     import urllib.error as url_error
-    import urllib.parse as url_parse
     import urllib.request as url_request
-    from dataclasses import dataclass
     from pathlib import Path
-    from typing import Any, Dict, List, Tuple
 
-    import importlib
+    import importlib.util
     import marimo as mo
 
     return (
-        Any,
-        Dict,
-        List,
         Path,
-        Tuple,
         csv,
-        dataclass,
         gzip,
         importlib,
         io,
@@ -52,7 +44,6 @@ def _():
         threading,
         time,
         url_error,
-        url_parse,
         url_request,
     )
 
@@ -522,190 +513,240 @@ def _(mo):
         """
     )
     css
-    return (css,)
+    return
 
 
 @app.cell
 def _(mo):
     title = mo.md(
         """
-<div class="hero">
-  <div class="hero-content">
-    <div class="eyebrow">CIP - SW03 Lecture Studio</div>
-    <div class="hero-title">Storage, Serialization, APIs & Apps</div>
-    <div class="hero-subtitle">
-      A hands‑on notebook to demonstrate:
-      race conditions, serialization trade‑offs (balancing size/speed/safety), columnar analytics, API design, and
-      rapid app prototyping.
+    <div class="hero">
+      <div class="hero-content">
+        <div class="eyebrow">CIP - SW03 Lecture Studio</div>
+        <div class="hero-title">Storage, Serialization, APIs & Apps</div>
+        <div class="hero-subtitle">
+          One data product, built in <strong>three tiers</strong>: where the data rests,
+          what serves it, and what people look at. We build each tier in turn and stack
+          them &mdash; race conditions, serialization trade&#8209;offs, columnar analytics,
+          API design, and rapid app prototyping.
+        </div>
+        <div class="hero-pills">
+          <span class="pill">ACID & Concurrency</span>
+          <span class="pill">Atomicity Transfers</span>
+          <span class="pill">Serialization Benchmarks</span>
+          <span class="pill">Columnar Analytics</span>
+          <span class="pill">APIs & FastAPI</span>
+          <span class="pill">Indexes & Plans</span>
+          <span class="pill">Marimo Charts</span>
+        </div>
+      </div>
     </div>
-    <div class="hero-pills">
-      <span class="pill">ACID & Concurrency</span>
-      <span class="pill">Atomicity Transfers</span>
-      <span class="pill">Serialization Benchmarks</span>
-      <span class="pill">Columnar Analytics</span>
-      <span class="pill">APIs & FastAPI</span>
-      <span class="pill">Indexes & Plans</span>
-      <span class="pill">Marimo Charts</span>
-    </div>
-  </div>
-</div>
-        """
+            """
     )
     title
-    return (title,)
+    return
 
 
 @app.cell
 def _(mo):
     agenda = mo.md(
         """
-<div class="section-card">
-  <h2>Discussed Topics  </h2>
-  <div class="grid-2">
-    <div>
-      <ul>
-        <li>File locks and why databases matter (ACID vs. files)</li>
-        <li>Atomicity demo: transfer + rollback</li>
-        <li>Serialization & deserialization benchmarks (JSON, Pickle, Arrow, Avro)</li>
-        <li>Column‑based vs row‑based storage</li>
-        <li>Compression & encoding (Parquet, gzip, compression ratios)</li>
-        <li>DuckDB for analytics on files + schema‑on‑read vs write</li>
-      </ul>
+    <div class="section-card">
+      <h2>Discussed Topics  </h2>
+      <div class="grid-2">
+        <div>
+          <ul>
+            <li>File locks and why databases matter (ACID vs. files)</li>
+            <li>Atomicity demo: transfer + rollback</li>
+            <li>Serialization & deserialization benchmarks (JSON, Pickle, Arrow, Avro)</li>
+            <li>Column‑based vs row‑based storage</li>
+            <li>Compression & encoding (Parquet, gzip, compression ratios)</li>
+            <li>DuckDB for analytics on files + schema‑on‑read vs write</li>
+          </ul>
+        </div>
+        <div>
+          <ul>
+            <li>REST APIs (GET, POST, PUT, DELETE)</li>
+            <li>Pydantic models for validation</li>
+            <li>FastAPI demo + automatic documentation</li>
+            <li>Indexing demo (SQLite) + query plans</li>
+            <li>Frontend framework comparison (Streamlit, Dash, Flask, React, Marimo)</li>
+            <li>Marimo charts lab: regression, category scatter, trend lines</li>
+          </ul>
+        </div>
+      </div>
     </div>
-    <div>
-      <ul>
-        <li>REST APIs (GET, POST, PUT, DELETE)</li>
-        <li>Pydantic models for validation</li>
-        <li>FastAPI demo + automatic documentation</li>
-        <li>Indexing demo (SQLite) + query plans</li>
-        <li>Frontend framework comparison (Streamlit, Dash, Flask, React, Marimo)</li>
-        <li>Marimo charts lab: regression, category scatter, trend lines</li>
-      </ul>
-    </div>
-  </div>
-</div>
-        """
+            """
     )
     agenda
-    return (agenda,)
+    return
+
+
+@app.cell
+def _(mo):
+    tier_map = mo.md(
+        """
+    <div class="section-card flow-card">
+      <h3>The Map: One Product, Three Tiers</h3>
+      <p>
+        Almost every data application is split into three layers, called <strong>tiers</strong>.
+        Each tier only talks to its neighbour, so any one of them can be replaced without
+        rewriting the others. This notebook builds them from the bottom up.
+      </p>
+      <div class="flow-diagram">
+        <div class="flow-box"><strong>Presentation tier</strong><br/>what a person sees<br/><em>chapters 9&ndash;10</em></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box"><strong>Logic tier</strong><br/>rules and the API<br/><em>chapters 6&ndash;8</em></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box"><strong>Data tier</strong><br/>where bytes rest<br/><em>chapters 1&ndash;5</em></div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <ul>
+            <li><strong>Data tier</strong> &mdash; keep writes correct (ch. 1), pick a format (ch. 2),
+                choose a layout (ch. 3), shrink it (ch. 4), query it (ch. 5).</li>
+            <li><strong>Logic tier</strong> &mdash; agree on a contract (ch. 6), check what comes in
+                (ch. 7), serve it over HTTP (ch. 8).</li>
+          </ul>
+        </div>
+        <div>
+          <ul>
+            <li><strong>Presentation tier</strong> &mdash; choose a frontend (ch. 9),
+                show the numbers honestly (ch. 10).</li>
+            <li>The arrows point the way a <em>request</em> travels. The answer travels back
+                the other way.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="flow-note">
+        Keep this picture in mind. At the start of every chapter we say which tier we are standing in.
+      </div>
+    </div>
+            """
+    )
+    tier_map
+    return
 
 
 @app.cell
 def _(mo):
     _legend = mo.md(
         """
-<div class="section-card">
-  <h3>How to Read This Notebook</h3>
-  <p><span class="key-chip">Key idea</span> appears where a core concept is introduced.</p>
-  <div class="focus-grid">
-    <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
-    <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
-    <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs (explicit design compromises).</div>
-  </div>
-</div>
-        """
+    <div class="section-card">
+      <h3>How to Read This Notebook</h3>
+      <p><span class="key-chip">Key idea</span> appears where a core concept is introduced.</p>
+      <div class="focus-grid">
+        <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
+        <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
+        <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs (explicit design compromises).</div>
+      </div>
+    </div>
+            """
     )
     _legend
-    return (_legend,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 1. File Locks vs Databases (ACID)")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter1_guide = mo.md(
         """
-### Chapter 1 Introduction
+    ### Chapter 1 Introduction
 
-> **Key Question:** When many users update shared data at the same time, do we preserve correctness?
+    > **Key Question:** When many users update shared data at the same time, do we preserve correctness?
 
-- **Atomicity:** all-or-nothing updates
-- **Isolation:** one write should not corrupt another
-- **Durability:** committed data survives crashes
+    We are standing in the **data tier**. Databases promise four things, abbreviated **ACID**:
 
-Practical signal to watch:
+    - **A — Atomicity:** all-or-nothing updates
+    - **C — Consistency:** the data obeys its rules before and after every change
+    - **I — Isolation:** one write should not corrupt another
+    - **D — Durability:** committed data survives crashes
 
-$$
-\\text{lost update rate} = \\frac{E - A}{E}
-$$
+    Practical signal to watch:
 
-Higher values indicate that concurrent writes are interfering.
-        """
+    $$
+    \\text{lost update rate} = \\frac{E - A}{E}
+    $$
+
+    Higher values indicate that concurrent writes are interfering.
+            """
     ).callout(kind="neutral")
     _chapter1_guide
-    return (_chapter1_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Why Files Are Not ACID
+    ### Why Files Are Not ACID
 
-Files are great for **simple storage**, but they do **not** provide ACID guarantees:
+    Files are great for **simple storage**, but they do **not** provide ACID guarantees:
 
-- **Atomicity**: file writes can be partial or interleaved.
-- **Consistency**: no built‑in rules about valid states.
-- **Isolation**: concurrent writers can overwrite each other.
-- **Durability**: durability depends on flush/fsync timing.
+    - **Atomicity**: file writes can be partial or interleaved.
+    - **Consistency**: no built‑in rules about valid states.
+    - **Isolation**: concurrent writers can overwrite each other.
+    - **Durability**: durability depends on flush/fsync timing.
 
-**What to observe:** when multiple workers update a shared file, the *actual* value drops below the *expected* value because increments are lost.
+    **What to observe:** when multiple workers update a shared file, the *actual* value drops below the *expected* value because increments are lost.
 
-In our experiment, the expected final counter is:
+    In our experiment, the expected final counter is:
 
-$$
-E = W \\times I
-$$
+    $$
+    E = W \\times I
+    $$
 
-and the number of lost updates is:
+    and the number of lost updates is:
 
-$$
-L = E - A
-$$
+    $$
+    L = E - A
+    $$
 
-Where:
-- $E$: expected final counter value  
-- $W$: number of concurrent workers  
-- $I$: increments per worker  
-- $A$: actual final counter value observed  
-- $L$: lost updates
+    Where:
+    - $E$: expected final counter value  
+    - $W$: number of concurrent workers  
+    - $I$: increments per worker  
+    - $A$: actual final counter value observed  
+    - $L$: lost updates
 
-Databases coordinate concurrency, ensure isolation, and provide crash recovery.
-        """
+    Databases coordinate concurrency, ensure isolation, and provide crash recovery.
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
 def _(mo):
     _lost_update_diagram = mo.md(
         """
-<div class="section-card flow-card">
-  <h3>Visual: How a Lost Update Happens</h3>
-  <div class="flow-diagram">
-    <div class="flow-box">Worker A reads counter = 41</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Worker B reads counter = 41</div>
-  </div>
-  <div class="flow-diagram">
-    <div class="flow-box">A writes 42</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">B also writes 42</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Expected 43, observed 42</div>
-  </div>
-  <div class="flow-note">Both workers used stale state. One increment is overwritten and effectively lost.</div>
-</div>
-        """
+    <div class="section-card flow-card">
+      <h3>Visual: How a Lost Update Happens</h3>
+      <div class="flow-diagram">
+        <div class="flow-box">Worker A reads counter = 41</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Worker B reads counter = 41</div>
+      </div>
+      <div class="flow-diagram">
+        <div class="flow-box">A writes 42</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">B also writes 42</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Expected 43, observed 42</div>
+      </div>
+      <div class="flow-note">Both workers used stale state. One increment is overwritten and effectively lost.</div>
+    </div>
+            """
     )
     _lost_update_diagram
-    return (_lost_update_diagram,)
+    return
 
 
 @app.cell
@@ -715,11 +756,11 @@ def _(mo):
     lu_observed = mo.ui.number(value=1800, label="Observed final counter (actual result)")
     _lu_note = mo.md(
         """
-`Expected counter = workers x iterations per worker`
+    `Expected counter = workers x iterations per worker`
 
-Enter the **actual value** observed after a run.  
-If observed < expected, those are lost updates.
-        """
+    Enter the **actual value** observed after a run.  
+    If observed < expected, those are lost updates.
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [
@@ -746,14 +787,19 @@ def _(lu_iterations, lu_observed, lu_workers, mo):
             {"metric": "expected", "value": _expected_value},
             {"metric": "observed", "value": _observed_value},
             {"metric": "lost updates", "value": _lost_value},
-            {"metric": "lost update rate", "value": round(_lost_rate * 100, 2)},
+            {"metric": "lost update rate (E-A)/E", "value": round(_lost_rate, 3)},
+            {"metric": "lost update rate (%)", "value": round(_lost_rate * 100, 1)},
         ],
         label="Consistency check",
     )
-    _interpretation = mo.md("High lost-update rate means writes are racing. Add locking or transactional updates.").callout(kind="info" if _lost_value > 0 else "success")
+    _interpretation = mo.md(
+        "Some updates disappeared: the writes are racing. Add locking or transactional updates."
+        if _lost_value > 0
+        else "No updates were lost. Either the workers never overlapped, or something is serialising them."
+    ).callout(kind="info" if _lost_value > 0 else "success")
     _panel = mo.vstack([_summary, _interpretation], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
@@ -763,20 +809,20 @@ def _(mo):
         value=["no_lock", "file_lock", "sqlite"],
         label="Strategies to run",
     )
-    workers = mo.ui.slider(2, 12, value=4, label="Concurrent workers")
-    iterations = mo.ui.slider(50, 2000, step=50, value=300, label="Increments per worker")
+    workers = mo.ui.slider(2, 8, value=4, label="Concurrent workers")
+    iterations = mo.ui.slider(50, 600, step=50, value=300, label="Increments per worker")
     jitter = mo.ui.slider(0, 5, value=1, step=1, label="Artificial jitter (ms) per update")
-    run_race = mo.ui.button(label="Re-run counter experiment", value=1, kind="success")
+    run_race = mo.ui.button(label="Run counter experiment", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     _term_note = mo.md(
         """
-**Strategy notes**
-- `no_lock`: plain file writes, race conditions likely (overlapping unsynchronized updates)
-- `thread_lock`: Python lock in one process
-- `file_lock`: OS file lock around write
-- `sqlite`: transactional database updates (ACID behavior)
+    **Strategy notes**
+    - `no_lock`: plain file writes, race conditions likely (overlapping unsynchronized updates)
+    - `thread_lock`: Python lock in one process
+    - `file_lock`: OS file lock around write
+    - `sqlite`: transactional database updates (ACID behavior)
 
-**Jitter (ms)** adds delay to each update, which increases overlap between workers.
-        """
+    **Jitter (ms)** adds delay to each update, which increases overlap between workers.
+            """
     ).callout(kind="info")
 
     _controls = mo.vstack(
@@ -796,7 +842,20 @@ def _(mo):
 
 
 @app.cell
-def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile, threading, time, workers):
+def _(
+    Path,
+    iterations,
+    jitter,
+    mo,
+    os,
+    run_race,
+    sqlite3,
+    strategies,
+    tempfile,
+    threading,
+    time,
+    workers,
+):
     def _run_file_counter(path, iterations, workers, lock_mode, jitter_s):
         """Increment a shared file counter with different locking strategies."""
         path.write_text("0")
@@ -964,38 +1023,38 @@ def _(Path, iterations, jitter, mo, os, run_race, sqlite3, strategies, tempfile,
         _table = mo.ui.table(race_rows, label="Concurrency results")
         _summary = mo.md(
             """
-**How to read the table**
+    **How to read the table**
 
-- **No lock**: often lowest wall-clock runtime, but can be incorrect (lost updates).
-- **File lock**: usually correct, but can be higher latency (serializes access).
-- **SQLite**: transactional and usually correct; runtime can remain competitive.
-            """
+    - **No lock**: often lowest wall-clock runtime, but can be incorrect (lost updates).
+    - **File lock**: usually correct, but can be higher latency (serializes access).
+    - **SQLite**: transactional and usually correct; runtime can remain competitive.
+                """
         ).callout(kind="info")
 
         _output = mo.vstack([_table, _summary], gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _interleave_intro = mo.md(
         """
-### Interleaving Simulator: Why Lost Updates Happen
+    ### Interleaving Simulator: Why Lost Updates Happen
 
-The file counter uses a **read → modify → write** sequence. Without a lock, two workers can interleave:
+    The file counter uses a **read → modify → write** sequence. Without a lock, two workers can interleave:
 
-1. Worker A reads 0  
-2. Worker B reads 0  
-3. Worker A writes 1  
-4. Worker B writes 1  ← lost update (A’s increment disappears)
+    1. Worker A reads 0  
+    2. Worker B reads 0  
+    3. Worker A writes 1  
+    4. Worker B writes 1  ← lost update (A’s increment disappears)
 
-The simulator below shuffles these steps to make the race condition visible (non-deterministic interleaving of operations).
-        """
+    The simulator below shuffles these steps to make the race condition visible (non-deterministic interleaving of operations).
+            """
     ).callout(kind="neutral")
     _interleave_intro
-    return (_interleave_intro,)
+    return
 
 
 @app.cell
@@ -1072,66 +1131,66 @@ def _(interleave_seed, interleave_steps, mo, random, show_trace):
 
     _panel = mo.vstack(_panel_items, gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _atomic_intro = mo.md(
         """
-### Atomicity Demo: Transfer With Failure
+    ### Atomicity Demo: Transfer With Failure
 
-Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
+    Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
 
-A transfer should preserve the total balance:
+    A transfer should preserve the total balance:
 
-$$
-B_{total} = B_{Alice} + B_{Bob}
-$$
+    $$
+    B_{total} = B_{Alice} + B_{Bob}
+    $$
 
-Where:
-- $B_{total}$: total money in the system  
-- $B_{Alice}$: Alice's balance  
-- $B_{Bob}$: Bob's balance
+    Where:
+    - $B_{total}$: total money in the system  
+    - $B_{Alice}$: Alice's balance  
+    - $B_{Bob}$: Bob's balance
 
-Without transactions, a crash between **debit** and **credit** can violate this invariant.
-Databases roll back the partial work, so the total remains consistent.
+    Without transactions, a crash between **debit** and **credit** can violate this invariant.
+    Databases roll back the partial work, so the total remains consistent.
 
-**What this demo highlights:**
-- The invariant to preserve (total balance)
-- The failure point between steps (crash after debit)
-- The commit/rollback boundary that restores consistency
-- Atomicity is separate from isolation (we are not modeling concurrency here)
+    **What this demo highlights:**
+    - The invariant to preserve (total balance)
+    - The failure point between steps (crash after debit)
+    - The commit/rollback boundary that restores consistency
+    - Atomicity is separate from isolation (we are not modeling concurrency here)
 
-**Try this:** run once with failure **on** (see the file total break),
-then run with failure **off** (both systems remain consistent).
-        """
+    **Try this:** run once with failure **on** (see the file total break),
+    then run with failure **off** (both systems remain consistent).
+            """
     ).callout(kind="neutral")
     _atomic_flow = mo.Html(
         """
-<div class="section-card flow-card">
-  <h3>Transaction Boundary</h3>
-  <div class="flow-diagram">
-    <div class="flow-box">Debit Alice</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Credit Bob</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Commit or Rollback</div>
-  </div>
-  <div class="flow-note">Atomicity means either all steps commit or none do.</div>
-</div>
-        """
+    <div class="section-card flow-card">
+      <h3>Transaction Boundary</h3>
+      <div class="flow-diagram">
+        <div class="flow-box">Debit Alice</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Credit Bob</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Commit or Rollback</div>
+      </div>
+      <div class="flow-note">Atomicity means either all steps commit or none do.</div>
+    </div>
+            """
     )
     _panel = mo.vstack([_atomic_intro, _atomic_flow], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount")
     atomic_fail = mo.ui.switch(value=True, label="Inject failure after debit")
-    run_atomic = mo.ui.button(label="Run atomicity demo", value=1, kind="success")
+    run_atomic = mo.ui.button(label="Run atomicity demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [mo.hstack([atomic_amount, atomic_fail], widths="equal"), run_atomic],
@@ -1143,7 +1202,16 @@ def _(mo):
 
 
 @app.cell
-def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile):
+def _(
+    Path,
+    atomic_amount,
+    atomic_fail,
+    json,
+    mo,
+    run_atomic,
+    sqlite3,
+    tempfile,
+):
     if run_atomic.value == 0:
         _output = mo.md("Click **Run atomicity demo** to simulate the transfer step-by-step.").callout(kind="neutral")
     else:
@@ -1266,39 +1334,39 @@ def _(Path, atomic_amount, atomic_fail, json, mo, run_atomic, sqlite3, tempfile)
         def _total_bar(label, total, expected, bar_class):
             pct = 0.0 if expected == 0 else min(100.0, (total / expected) * 100.0)
             return f"""
-<div class="bar-row">
-  <div class="bar-label">{label}</div>
-  <div class="bar-track">
-    <div class="bar-fill {bar_class}" style="width: {pct:.1f}%"></div>
-    <div class="bar-marker" style="left: 100%"></div>
-  </div>
-  <div class="bar-value">{total:,} / {expected:,}</div>
-</div>
-            """
+    <div class="bar-row">
+      <div class="bar-label">{label}</div>
+      <div class="bar-track">
+        <div class="bar-fill {bar_class}" style="width: {pct:.1f}%"></div>
+        <div class="bar-marker" style="left: 100%"></div>
+      </div>
+      <div class="bar-value">{total:,} / {expected:,}</div>
+    </div>
+                """
 
         _total_chart = mo.Html(
             f"""
-<div class="section-card">
-  <h3>Total Balance Snapshot</h3>
-  <div class="chart-note">Gold marker = expected total ({_expected_total:,}).</div>
-  <div class="bar-chart">
-    {_total_bar("File total", _file_total, _expected_total, "good" if _file_ok else "bad")}
-    {_total_bar("SQLite total", _db_total, _expected_total, "good" if _db_ok else "bad")}
-  </div>
-</div>
-            """
+    <div class="section-card">
+      <h3>Total Balance Snapshot</h3>
+      <div class="chart-note">Gold marker = expected total ({_expected_total:,}).</div>
+      <div class="bar-chart">
+        {_total_bar("File total", _file_total, _expected_total, "good" if _file_ok else "bad")}
+        {_total_bar("SQLite total", _db_total, _expected_total, "good" if _db_ok else "bad")}
+      </div>
+    </div>
+                """
         )
 
         _summary = mo.md(
             f"""
-**Scenario:** {_status}  
-**Expected total:** `{_expected_total}`  
-**File total:** `{_file_total}` → **{_file_status}**  
-**SQLite total:** `{_db_total}` → **{_db_status}**
+    **Scenario:** {_status}  
+    **Expected total:** `{_expected_total}`  
+    **File total:** `{_file_total}` → **{_file_status}**  
+    **SQLite total:** `{_db_total}` → **{_db_status}**
 
-When failure is injected, the file-based ledger can end in a **partial state**,
-while the database rolls back to the consistent total.
-            """
+    When failure is injected, the file-based ledger can end in a **partial state**,
+    while the database rolls back to the consistent total.
+                """
         ).callout(kind="info")
 
         _file_callout = mo.md("File writes are **not atomic**: debit and credit can be split by a crash.").callout(kind=_file_kind)
@@ -1319,167 +1387,169 @@ while the database rolls back to the consistent total.
         )
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _qa_block_concurrency = mo.md(
         """
-<div class="section-card">
-  <h3>Discussion — Atomicity & Concurrency</h3>
-  <details>
-    <summary><strong>Q1:</strong> If only files were available (no database), how can a transfer be made all‑or‑nothing?</summary>
-    <p><strong>Answer:</strong> Write a small log entry first (write‑ahead log, or WAL), or write to a temp file and rename it (an atomic rename).
-    On restart, replay or roll back the log.</p>
-  </details>
-  <details>
-    <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
-    <p><strong>Answer:</strong> The total balance should never change. Build checks/tests that verify this after crashes and retries (invariant checks).</p>
-  </details>
-  <details>
-    <summary><strong>Q3:</strong> Should a system stop on error or allow temporary mismatch?</summary>
-    <p><strong>Answer:</strong> Finance usually prefers fail‑fast (abort immediately on error); analytics may allow temporary inconsistency and repair later (eventual consistency: convergence to a correct state after delay).
-    Choose based on the cost of wrong data vs. downtime.</p>
-  </details>
-</div>
-        """
+    <div class="section-card">
+      <h3>Discussion — Atomicity & Concurrency</h3>
+      <details>
+        <summary><strong>Q1:</strong> If only files were available (no database), how can a transfer be made all‑or‑nothing?</summary>
+        <p><strong>Answer:</strong> Write a small log entry first (write‑ahead log, or WAL), or write to a temp file and rename it (an atomic rename).
+        On restart, replay or roll back the log.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
+        <p><strong>Answer:</strong> The total balance should never change. Build checks/tests that verify this after crashes and retries (invariant checks).</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> Should a system stop on error or allow temporary mismatch?</summary>
+        <p><strong>Answer:</strong> Finance usually prefers fail‑fast (abort immediately on error); analytics may allow temporary inconsistency and repair later (eventual consistency: convergence to a correct state after delay).
+        Choose based on the cost of wrong data vs. downtime.</p>
+      </details>
+    </div>
+            """
     )
     _qa_block_concurrency
-    return (_qa_block_concurrency,)
+    return
 
 
 @app.cell
 def _(mo):
     _conclusion_concurrency = mo.md(
         """
-<div class="section-card">
-  <h3>Chapter 1 Conclusion</h3>
-  <ul>
-    <li>Without proper synchronization, file updates lose increments under concurrency.</li>
-    <li>Atomicity + isolation are easier to enforce with database transactions than plain files.</li>
-    <li>Always track invariants (expected vs actual) to detect correctness issues early.</li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <h3>Chapter 1 Conclusion</h3>
+      <ul>
+        <li>Without proper synchronization, file updates lose increments under concurrency.</li>
+        <li>Atomicity + isolation are easier to enforce with database transactions than plain files.</li>
+        <li>Always track invariants (expected vs actual) to detect correctness issues early.</li>
+      </ul>
+    </div>
+            """
     ).callout(kind="success")
     _conclusion_concurrency
-    return (_conclusion_concurrency,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-The previous section showed a **correctness** problem: many writers can break data if updates are not coordinated.
-Now we switch to a **data representation** problem (serialization format choice): once data is correct, which format should be used to store/send it?
+    The previous section showed a **correctness** problem: many writers can break data if updates are not coordinated.
+    Now we switch to a **data representation** problem (serialization format choice): once data is correct, which format should be used to store/send it?
 
-Simple idea:
+    Simple idea:
 
-$$
-\\text{transfer time} \\approx \\frac{\\text{bytes}}{\\text{throughput}}
-$$
+    $$
+    \\text{transfer time} \\approx \\frac{\\text{bytes}}{\\text{throughput}}
+    $$
 
-So better formats can reduce waiting by shrinking bytes or speeding parsing.
-        """
+    So better formats can reduce waiting by shrinking bytes or speeding parsing.
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 2. Serialization & Deserialization Benchmarks")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter2_guide = mo.md(
         """
-### Chapter 2 Introduction
+    ### Chapter 2 Introduction
 
-> **Key Question:** Which format gives the best trade-off for the workload (actual data + query pattern)?
+    > **Key Question:** Which format gives the best trade-off for the workload (actual data + query pattern)?
 
-Serialization is packaging data for storage or transfer.
-Different packages have different trade-offs (explicit compromises between competing goals):
+    *Still in the **data tier**. Chapter 1 made writes correct; now we choose what those bytes look like.*
 
-- readable vs compact
-- Python-specific vs cross-language
-- fast writes vs fast reads
+    Serialization is packaging data for storage or transfer.
+    Different packages have different trade-offs (explicit compromises between competing goals):
 
-Rule of thumb:
+    - readable vs compact
+    - Python-specific vs cross-language
+    - fast writes vs fast reads
 
-$$
-\\text{end-to-end cost} \\approx \\text{write time} + \\text{read time} + \\text{bytes moved cost}
-$$
-        """
+    Rule of thumb:
+
+    $$
+    \\text{end-to-end cost} \\approx \\text{write time} + \\text{read time} + \\text{bytes moved cost}
+    $$
+            """
     ).callout(kind="neutral")
     _chapter2_guide
-    return (_chapter2_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Serialization = Bytes on Disk (or Wire)
+    ### Serialization = Bytes on Disk (or Wire)
 
-Serialization transforms Python objects into bytes so they can be stored or sent.
-Deserialization rebuilds objects from bytes. The format choice affects speed, file size,
-interoperability, type fidelity, schema evolution, and safety.
+    Serialization transforms Python objects into bytes so they can be stored or sent.
+    Deserialization rebuilds objects from bytes. The format choice affects speed, file size,
+    interoperability, type fidelity, schema evolution, and safety.
 
-**Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
-**What to compare:** speed, size, interop, **type fidelity**, schema evolution, safety.
+    **Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
+    **What to compare:** speed, size, interop, **type fidelity**, schema evolution, safety.
 
-- **Speed**: write + read throughput  
-- **Size**: how many bytes hit disk  
-- **Interop**: language/tool compatibility  
-- **Type fidelity**: do types round-trip cleanly?  
-- **Safety**: Pickle can execute arbitrary code
+    - **Speed**: write + read throughput  
+    - **Size**: how many bytes hit disk  
+    - **Interop**: language/tool compatibility  
+    - **Type fidelity**: do types round-trip cleanly?  
+    - **Safety**: Pickle can execute arbitrary code
 
-A simple performance model (quantitative summary):
+    A simple performance model (quantitative summary):
 
-$$
-\\text{Throughput} = \\frac{\\text{bytes written}}{\\text{write time}}
-\\qquad
-\\text{Latency} = \\text{write time} + \\text{read time}
-$$
+    $$
+    \\text{Throughput} = \\frac{\\text{bytes written}}{\\text{write time}}
+    \\qquad
+    \\text{Latency} = \\text{write time} + \\text{read time}
+    $$
 
-Where:
-- $\\text{bytes written}$: serialized output size on disk  
-- $\\text{write time}$: serialization time  
-- $\\text{Latency}$: total round-trip time (write + read)
+    Where:
+    - $\\text{bytes written}$: serialized output size on disk  
+    - $\\text{write time}$: serialization time  
+    - $\\text{Latency}$: total round-trip time (write + read)
 
-**Format quick reference:**  
-- **JSON/CSV**: human‑readable, row‑oriented  
-- **Avro**: row‑oriented, schema‑driven events  
-- **Arrow/Feather**: columnar interchange (fast analytics)  
-- **Parquet**: columnar on‑disk analytics  
-- **Pickle**: Python‑specific (unsafe for untrusted data)
-        """
+    **Format quick reference:**  
+    - **JSON/CSV**: human‑readable, row‑oriented  
+    - **Avro**: row‑oriented, schema‑driven events  
+    - **Arrow/Feather**: columnar interchange (fast analytics)  
+    - **Parquet**: columnar on‑disk analytics  
+    - **Pickle**: Python‑specific (unsafe for untrusted data)
+            """
     ).callout(kind="neutral")
     _flow = mo.Html(
         """
-<div class="section-card flow-card">
-  <h3>Serialization Pipeline</h3>
-  <div class="flow-diagram">
-    <div class="flow-box">Python object</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Bytes (disk / wire)</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Python object</div>
-  </div>
-  <div class="flow-note">Format choice determines runtime, file size, interoperability, and safety risk.</div>
-</div>
-        """
+    <div class="section-card flow-card">
+      <h3>Serialization Pipeline</h3>
+      <div class="flow-diagram">
+        <div class="flow-box">Python object</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Bytes (disk / wire)</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Python object</div>
+      </div>
+      <div class="flow-note">Format choice determines runtime, file size, interoperability, and safety risk.</div>
+    </div>
+            """
     )
     _panel = mo.vstack([_explanation, _flow], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
@@ -1501,9 +1571,9 @@ def _(mo):
     )
     _note = mo.md(
         """
-Pick a context and goal, then compare the recommendation with the benchmark table below.
-This is a starting heuristic, not a final rule.
-        """
+    Pick a context and goal, then compare the recommendation with the benchmark table below.
+    This is a starting heuristic, not a final rule.
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [mo.md("### Mini-lab: Format Decision Assistant"), format_use_case, format_priority, _note],
@@ -1539,7 +1609,7 @@ def _(format_priority, format_use_case, mo):
         kind="info"
     )
     _text
-    return (_text,)
+    return
 
 
 @app.cell
@@ -1547,7 +1617,7 @@ def _(mo):
     serial_rows = mo.ui.slider(200, 3000, step=200, value=800, label="Rows")
     serial_cols = mo.ui.slider(2, 8, value=5, label="Numeric columns")
     serial_seed = mo.ui.slider(1, 999, value=42, label="Seed")
-    run_serial = mo.ui.button(label="Re-run serialization benchmark", value=1, kind="success")
+    run_serial = mo.ui.button(label="Run serialization benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     _note = mo.md("Includes Arrow, Parquet, and Avro by default (requires `pyarrow` + `fastavro`).")
 
     _controls = mo.vstack(
@@ -1566,6 +1636,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Path,
     csv,
     format_bytes,
     format_ms,
@@ -1671,6 +1742,11 @@ def _(
                 _missing.append("fastavro")
 
             if _pyarrow and _feather:
+                # Pay pyarrow's one-time initialisation before the clock starts,
+                # otherwise the first measurement is ~70x too slow.
+                _feather.write_feather(
+                    _pyarrow.Table.from_pylist([{"warmup": 1}]), (_tmpdir / "_warmup.feather").as_posix()
+                )
 
                 def arrow_write(path):
                     table = _pyarrow.Table.from_pylist(_records)
@@ -1713,9 +1789,9 @@ def _(
                     "fields": [
                         {"name": "id", "type": "int"},
                         {"name": "city", "type": "string"},
-                        {"name": "score", "type": "float"},
+                        {"name": "score", "type": "double"},
                     ]
-                    + [{"name": f"metric_{c}", "type": "float"} for c in range(serial_cols.value)],
+                    + [{"name": f"metric_{c}", "type": "double"} for c in range(serial_cols.value)],
                 }
 
                 def avro_write(path):
@@ -1751,25 +1827,25 @@ def _(
                 pct = min(100.0, (value / max_val) * 100.0)
                 _bars.append(
                     f"""
-<div class="bar-row">
-  <div class="bar-label">{row["format"]}</div>
-  <div class="bar-track">
-    <div class="bar-fill" style="width: {pct:.1f}%"></div>
-  </div>
-  <div class="bar-value">{formatter(value)}</div>
-</div>
-                    """
+    <div class="bar-row">
+      <div class="bar-label">{row["format"]}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {pct:.1f}%"></div>
+      </div>
+      <div class="bar-value">{formatter(value)}</div>
+    </div>
+                        """
                 )
             return mo.Html(
                 f"""
-<div class="section-card">
-  <h3>{title}</h3>
-  <div class="bar-chart">
-    {''.join(_bars)}
-  </div>
-  <div class="chart-note">Higher bars = larger values.</div>
-</div>
-                """
+    <div class="section-card">
+      <h3>{title}</h3>
+      <div class="bar-chart">
+        {''.join(_bars)}
+      </div>
+      <div class="chart-note">Higher bars = larger values.</div>
+    </div>
+                    """
             )
 
         _size_chart = _bar_chart(
@@ -1796,8 +1872,8 @@ def _(
         benchmark_note = mo.md("Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark.").callout(kind="info")
         warning = mo.md(
             """
-**Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources.
-            """
+    **Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources.
+                """
         ).callout(kind="warn")
 
         _items = [sample, results_table, _charts, benchmark_note, warning]
@@ -1806,7 +1882,7 @@ def _(
         _output = mo.vstack(_items, gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
@@ -1852,170 +1928,172 @@ def _(json, mo, pickle):
 
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _qa_block_serialization = mo.md(
         """
-<div class="section-card">
-  <h3>Discussion — Serialization Choices</h3>
-  <details>
-    <summary><strong>Q1:</strong> How is a format selected among JSON, Avro, or Parquet?</summary>
-    <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
-    Avro for event streams with changing schemas (schema evolution),
-    Parquet for analytics scans and compression (columnar).</p>
-  </details>
-  <details>
-    <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
-    <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
-  </details>
-  <details>
-    <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
-    <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline (test environment with production-like traffic), then compare before/after.</p>
-  </details>
-</div>
-        """
+    <div class="section-card">
+      <h3>Discussion — Serialization Choices</h3>
+      <details>
+        <summary><strong>Q1:</strong> How is a format selected among JSON, Avro, or Parquet?</summary>
+        <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
+        Avro for event streams with changing schemas (schema evolution),
+        Parquet for analytics scans and compression (columnar).</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
+        <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
+        <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline (test environment with production-like traffic), then compare before/after.</p>
+      </details>
+    </div>
+            """
     )
     _qa_block_serialization
-    return (_qa_block_serialization,)
+    return
 
 
 @app.cell
 def _(mo):
     _conclusion_serialization = mo.md(
         """
-<div class="section-card">
-  <h3>Chapter 2 Conclusion</h3>
-  <ul>
-    <li>Format choice is a trade-off (explicit compromise) between speed, size, interoperability, and safety.</li>
-    <li>Use benchmarks from a representative workload (actual data + query pattern) to compare latency and storage cost.</li>
-    <li>Pickle preserves Python types but should not be used for untrusted data.</li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <h3>Chapter 2 Conclusion</h3>
+      <ul>
+        <li>Format choice is a trade-off (explicit compromise) between speed, size, interoperability, and safety.</li>
+        <li>Use benchmarks from a representative workload (actual data + query pattern) to compare latency and storage cost.</li>
+        <li>Pickle preserves Python types but should not be used for untrusted data.</li>
+      </ul>
+    </div>
+            """
     ).callout(kind="success")
     _conclusion_serialization
-    return (_conclusion_serialization,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Now that we know how to serialize data, the next question is **how to lay it out** on disk.
+    Now that we know how to serialize data, the next question is **how to lay it out** on disk.
 
-- Row layout: good when queries read one full record at a time.
-- Column layout: good when queries scan a few columns across many rows.
+    - Row layout: good when queries read one full record at a time.
+    - Column layout: good when queries scan a few columns across many rows.
 
-Rule of thumb:
+    Rule of thumb:
 
-$$
-\\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
-$$
-        """
+    $$
+    \\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 3. Column-Based vs Row-Based Storage")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter3_guide = mo.md(
         """
-### Chapter 3 Introduction
+    ### Chapter 3 Introduction
 
-> **Key Question:** Is read work spent on data that queries do not need?
+    > **Key Question:** Is read work spent on data that queries do not need?
 
-Storage layout determines read cost:
+    *Still in the **data tier**. Chapter 2 picked a format; now we choose how it is arranged on disk.*
 
-- Row store: incurs read cost (I/O + CPU) for whole rows
-- Column store: incurs read cost mainly for selected columns
+    Storage layout determines read cost:
 
-Quick mental model:
+    - Row store: incurs read cost (I/O + CPU) for whole rows
+    - Column store: incurs read cost mainly for selected columns
 
-$$
-\\text{cost ratio} \\approx \\frac{C}{k}
-$$
+    Quick mental model:
 
-If a query needs only $k$ of $C$ columns, columnar layout can reduce read work substantially.
-        """
+    $$
+    \\text{cost ratio} \\approx \\frac{C}{k}
+    $$
+
+    If a query needs only $k$ of $C$ columns, columnar layout can reduce read work substantially.
+            """
     ).callout(kind="neutral")
     _chapter3_guide
-    return (_chapter3_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Row Store vs Column Store
+    ### Row Store vs Column Store
 
-**Row stores** keep full records together. Great for OLTP (Online Transaction Processing) and point lookups.  
-**Column stores** group values by column. Great for scans, aggregates, and compression.
+    **Row stores** keep full records together. Great for OLTP (Online Transaction Processing) and point lookups.  
+    **Column stores** group values by column. Great for scans, aggregates, and compression.
 
-If a query scans only *k* columns out of *C*, the I/O pattern changes:
+    If a query scans only *k* columns out of *C*, the I/O pattern changes:
 
-$$
-IO_{row} \\approx N \\times C
-\\qquad
-IO_{col} \\approx N \\times k
-$$
+    $$
+    IO_{row} \\approx N \\times C
+    \\qquad
+    IO_{col} \\approx N \\times k
+    $$
 
-Where:
-- $N$: number of rows  
-- $C$: total columns in the dataset  
-- $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
+    Where:
+    - $N$: number of rows  
+    - $C$: total columns in the dataset  
+    - $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
 
-Below we simulate column selection and filtering to reveal the runtime difference (execution-time gap).
+    Below we simulate column selection and filtering to reveal the runtime difference (execution-time gap).
 
-**Format perspective:** Avro is a row‑based, schema‑driven file format (great for event logs).
-Parquet is a column‑based file format (great for analytics and scans).
-Arrow is columnar in‑memory (fast interchange between systems).
-        """
+    **Format perspective:** Avro is a row‑based, schema‑driven file format (great for event logs).
+    Parquet is a column‑based file format (great for analytics and scans).
+    Arrow is columnar in‑memory (fast interchange between systems).
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
 def _(mo):
     _layout_diagram = mo.md(
         """
-<div class="section-card flow-card">
-  <h3>Visual: Same Table, Two Physical Layouts</h3>
-  <div class="grid-2">
-    <div>
-      <h4>Row layout (record-oriented)</h4>
-      <pre><code>row1: [id, city, sales, qty]
-row2: [id, city, sales, qty]
-row3: [id, city, sales, qty]</code></pre>
-      <div class="flow-note">Good when each request needs most fields of one row.</div>
+    <div class="section-card flow-card">
+      <h3>Visual: Same Table, Two Physical Layouts</h3>
+      <div class="grid-2">
+        <div>
+          <h4>Row layout (record-oriented)</h4>
+          <pre><code>row1: [id, city, sales, qty]
+    row2: [id, city, sales, qty]
+    row3: [id, city, sales, qty]</code></pre>
+          <div class="flow-note">Good when each request needs most fields of one row.</div>
+        </div>
+        <div>
+          <h4>Column layout (analytics-oriented)</h4>
+          <pre><code>id:   [id1, id2, id3, ...]
+    city: [c1,  c2,  c3,  ...]
+    sales:[s1,  s2,  s3,  ...]
+    qty:  [q1,  q2,  q3,  ...]</code></pre>
+          <div class="flow-note">Good when queries touch a few columns across many rows.</div>
+        </div>
+      </div>
     </div>
-    <div>
-      <h4>Column layout (analytics-oriented)</h4>
-      <pre><code>id:   [id1, id2, id3, ...]
-city: [c1,  c2,  c3,  ...]
-sales:[s1,  s2,  s3,  ...]
-qty:  [q1,  q2,  q3,  ...]</code></pre>
-      <div class="flow-note">Good when queries touch a few columns across many rows.</div>
-    </div>
-  </div>
-</div>
-        """
+            """
     )
     _layout_diagram
-    return (_layout_diagram,)
+    return
 
 
 @app.cell
@@ -2025,11 +2103,11 @@ def _(mo):
     io_rows = mo.ui.slider(1_000, 1_000_000, step=1_000, value=100_000, label="Rows (N)")
     _io_note = mo.md(
         """
-I/O = **Input/Output**, meaning data moved between storage and compute.
+    I/O = **Input/Output**, meaning data moved between storage and compute.
 
-This estimator uses simple "work units" (rows x columns touched) to explain why columnar
-layout helps when queries use only a few columns.
-        """
+    This estimator uses simple "work units" (rows x columns touched) to explain why columnar
+    layout helps when queries use only a few columns.
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [
@@ -2063,7 +2141,7 @@ def _(io_needed_cols, io_rows, io_total_cols, mo):
     _note = mo.md("As k gets much smaller than C, columnar advantage increases.").callout(kind="info")
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
@@ -2071,7 +2149,7 @@ def _(mo):
     n_rows = mo.ui.slider(5_000, 50_000, step=5_000, value=15_000, label="Rows")
     n_cols = mo.ui.slider(3, 12, value=6, label="Columns")
     storage_seed = mo.ui.slider(1, 999, value=7, label="Seed")
-    run_storage = mo.ui.button(label="Re-run storage benchmark", value=1, kind="success")
+    run_storage = mo.ui.button(label="Run storage benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack([mo.hstack([n_rows, n_cols], widths="equal"), storage_seed, run_storage], gap=0.6).callout(kind="neutral")
     _controls
@@ -2079,7 +2157,7 @@ def _(mo):
 
 
 @app.cell
-def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
+def _(mo, n_cols, n_rows, random, run_storage, storage_seed, time):
     def build_data(rows, cols, seed_value):
         rng = random.Random(seed_value)
         rows_list = [tuple(rng.random() for _ in range(cols)) for _ in range(rows)]
@@ -2099,9 +2177,6 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
             result = fn()
             return time.perf_counter() - start, result
 
-        row_select_time, row_select = time_it(lambda: [row[0] for row in rows_list])
-        col_select_time, col_select = time_it(lambda: columns[target_col])
-
         row_filter_time, row_filter = time_it(lambda: [row for row in rows_list if row[0] > threshold])
         col_filter_time, col_filter = time_it(lambda: [val for val in columns[target_col] if val > threshold])
 
@@ -2110,159 +2185,167 @@ def _(format_ms, mo, n_cols, n_rows, random, run_storage, storage_seed, time):
 
         _results = [
             {
-                "operation": "Select column",
-                "Avro row (ms)": round(row_select_time * 1000, 3),
-                "Parquet col (ms)": round(col_select_time * 1000, 3),
-            },
-            {
                 "operation": "Filter column > 0.75",
-                "Avro row (ms)": round(row_filter_time * 1000, 3),
-                "Parquet col (ms)": round(col_filter_time * 1000, 3),
+                "Row-style access (ms)": round(row_filter_time * 1000, 3),
+                "Column-style access (ms)": round(col_filter_time * 1000, 3),
             },
             {
                 "operation": "Sum column",
-                "Avro row (ms)": round(row_sum_time * 1000, 3),
-                "Parquet col (ms)": round(col_sum_time * 1000, 3),
+                "Row-style access (ms)": round(row_sum_time * 1000, 3),
+                "Column-style access (ms)": round(col_sum_time * 1000, 3),
             },
         ]
 
         _table = mo.ui.table(_results, label="Row vs Column timing (Python simulation)")
         _note = mo.md(
             """
-**Discussion:** These timings simulate access patterns (row‑style vs column‑style), not actual file I/O.
-Real column formats like Parquet show bigger wins because they avoid reading unused columns from disk.
-            """
+    **Discussion:** These timings simulate the two *access patterns* in plain Python. No file is written
+    and no library is called, so this is not a measurement of Avro against Parquet. Avro stores data the
+    row way and Parquet the column way, which is why the pattern matters.
+
+    Both operations read one column out of many. The row layout still has to step over every other value
+    in each record to reach it; the column layout has that column already lying together. Real column
+    formats like Parquet win by more than this, because they also skip reading the unused columns from
+    disk entirely.
+                """
         ).callout(kind="info")
 
         _output = mo.vstack([_table, _note], gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _qa_block_storage = mo.md(
         """
-<div class="section-card">
-  <h3>Discussion — Row vs Column Storage</h3>
-  <details>
-    <summary><strong>Q1:</strong> When is a row store a better choice?</summary>
-    <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads = Online Transaction Processing).</p>
-  </details>
-  <details>
-    <summary><strong>Q2:</strong> How does reading only needed columns help?</summary>
-    <p><strong>Answer:</strong> Unused columns are skipped, which reduces I/O and speeds up scans. This is called projection pushdown (applying column selection early in query execution).</p>
-  </details>
-  <details>
-    <summary><strong>Q3:</strong> When can compression make things slower?</summary>
-    <p><strong>Answer:</strong> If data is small or CPU is the dominant limiting resource (bottleneck), decompression overhead can outweigh I/O savings (CPU‑bound).</p>
-  </details>
-</div>
-        """
+    <div class="section-card">
+      <h3>Discussion — Row vs Column Storage</h3>
+      <details>
+        <summary><strong>Q1:</strong> When is a row store a better choice?</summary>
+        <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads = Online Transaction Processing).</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> How does reading only needed columns help?</summary>
+        <p><strong>Answer:</strong> Unused columns are skipped, which reduces I/O and speeds up scans. This is called projection pushdown (applying column selection early in query execution).</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> When can compression make things slower?</summary>
+        <p><strong>Answer:</strong> If data is small or CPU is the dominant limiting resource (bottleneck), decompression overhead can outweigh I/O savings (CPU‑bound).</p>
+      </details>
+    </div>
+            """
     )
     _qa_block_storage
-    return (_qa_block_storage,)
+    return
 
 
 @app.cell
 def _(mo):
     _conclusion_storage = mo.md(
         """
-<div class="section-card">
-  <h3>Chapter 3 Conclusion</h3>
-  <ul>
-    <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
-    <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
-    <li>Compression gains depend on which resource is the dominant limiting factor (bottleneck): disk I/O or CPU.</li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <h3>Chapter 3 Conclusion</h3>
+      <ul>
+        <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
+        <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
+        <li>Compression gains depend on which resource is the dominant limiting factor (bottleneck): disk I/O or CPU.</li>
+      </ul>
+    </div>
+            """
     ).callout(kind="success")
     _conclusion_storage
-    return (_conclusion_storage,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Columnar data puts similar values together, and similar values are easier to compress.
-Next we measure how much size reduction we can actually get.
+    Columnar data puts similar values together, and similar values are easier to compress.
+    Next we measure how much size reduction we can actually get.
 
-$$
-\\text{savings} = 1 - \\frac{\\text{compressed size}}{\\text{original size}}
-$$
-        """
+    $$
+    \\text{savings} = 1 - \\frac{\\text{compressed size}}{\\text{original size}}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 4. Compression & Encoding (Parquet, Gzip)")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter4_guide = mo.md(
         """
-### Chapter 4 Introduction
+    ### Chapter 4 Introduction
 
-> **Key Question:** Will compression reduce total query time, not only file size?
+    > **Key Question:** Will compression reduce total query time, not only file size?
 
-Compression is not just about saving disk space.
-It usually also reduces how much data must travel from disk to CPU.
+    *Still in the **data tier**. Chapter 3 put similar values next to each other, which is exactly what makes them squeeze well.*
 
-Two quick checks:
+    Compression is not just about saving disk space.
+    It usually also reduces how much data must travel from disk to CPU.
 
-- Is the workload I/O-bound (limited by data transfer from storage)? Compression helps more.
-- Is CPU already saturated? Heavy codecs can hurt latency.
+    Two quick checks:
 
-Quick timing model:
+    - Is the workload I/O-bound (limited by data transfer from storage)? Compression helps more.
+    - Is CPU already saturated? Heavy codecs can hurt latency.
 
-$$
-T_{total} \\approx T_{io} + T_{decompress} + T_{compute}
-$$
-        """
+    Quick timing model:
+
+    $$
+    T_{total} \\approx T_{io} + T_{decompress} + T_{compute}
+    $$
+            """
     ).callout(kind="neutral")
     _chapter4_guide
-    return (_chapter4_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Compression & Encoding
+    ### Compression & Encoding
 
-Compression reduces storage and I/O. Columnar formats (like Parquet) compress well because
-similar values are adjacent.
+    Compression reduces storage and I/O. Columnar formats (like Parquet) compress well because
+    similar values are adjacent.
 
-Compression ratio (lower is better):
+    Compression ratio (lower is better):
 
-$$
-r = \\frac{\\text{compressed size}}{\\text{original size}}
-\\qquad
-\\text{Savings} = 1 - r
-$$
+    $$
+    r = \\frac{\\text{compressed size}}{\\text{original size}}
+    \\qquad
+    \\text{Savings} = 1 - r
+    $$
 
-Where:
-- $r$: compression ratio  
-- $\\text{compressed size}$: file size after compression  
-- $\\text{original size}$: baseline uncompressed file size  
-- $\\text{Savings}$: fraction of size removed by compression
+    Where:
+    - $r$: compression ratio  
+    - $\\text{compressed size}$: file size after compression  
+    - $\\text{original size}$: baseline uncompressed file size  
+    - $\\text{Savings}$: fraction of size removed by compression
 
-We compare JSON/CSV to gzip and Parquet with different codecs.
-        """
+    We compare JSON/CSV to gzip and Parquet with different codecs.
+
+**Compression level.** gzip takes a level from 1 to 9. Level 1 compresses quickly and
+saves less; level 9 works hardest and saves most; level 6 is the default compromise.
+The gain from 1 to 9 is usually small while the CPU cost is not, which is why almost
+nobody runs level 9 in production. Watch the level rows in the table below.
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
@@ -2302,21 +2385,21 @@ def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
     _note = mo.md("Use this as a first-order estimate before deeper benchmarking.").callout(kind="info")
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _pca_disclaimer = mo.Html(
         """
-<div class="disclaimer-red">
-  Disclaimer: PCA will be discussed in-depth in the <strong>Machine Learning 2</strong> module.
-  Here it is only used as a simple example to illustrate compression ideas.
-</div>
-        """
+    <div class="disclaimer-red">
+      Disclaimer: PCA will be discussed in-depth in the <strong>Machine Learning 2</strong> module.
+      Here it is only used as a simple example to illustrate compression ideas.
+    </div>
+            """
     )
     _pca_disclaimer
-    return (_pca_disclaimer,)
+    return
 
 
 @app.cell
@@ -2584,22 +2667,22 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
         ).callout(kind="info")
         _pipeline = mo.md(
             """
-<div class="section-card flow-card">
-  <div class="flow-diagram">
-    <div class="flow-box">Reference image matrix</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Keep top-k PCA components</div>
-    <div class="flow-arrow">&rarr;</div>
-    <div class="flow-box">Reconstructed image</div>
-  </div>
-</div>
-            """
+    <div class="section-card flow-card">
+      <div class="flow-diagram">
+        <div class="flow-box">Reference image matrix</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Keep top-k PCA components</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Reconstructed image</div>
+      </div>
+    </div>
+                """
         )
 
         _output = mo.vstack([_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
@@ -2607,7 +2690,7 @@ def _(mo):
     compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows")
     compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns")
     compress_seed = mo.ui.slider(1, 999, value=11, label="Seed")
-    run_compress = mo.ui.button(label="Re-run compression benchmark", value=1, kind="success")
+    run_compress = mo.ui.button(label="Run compression benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [mo.hstack([compress_rows, compress_cols], widths="equal"), compress_seed, run_compress],
@@ -2619,11 +2702,12 @@ def _(mo):
 
 @app.cell
 def _(
+    Path,
     compress_cols,
     compress_rows,
     compress_seed,
     csv,
-    format_bytes,
+    gzip,
     json,
     mo,
     optional_import,
@@ -2679,18 +2763,19 @@ def _(
                     }
                 )
 
-            # Gzip compression
+            # Gzip compression. Level 1 is fastest, 9 squeezes hardest, 6 is the default.
             for label, _source_path in [("JSON+gzip", json_path), ("CSV+gzip", _csv_path)]:
-                gz_path = _source_path.with_suffix(_source_path.suffix + ".gz")
-                with _source_path.open("rb") as src, gzip.open(gz_path, "wb") as dst:
-                    dst.write(src.read())
-                _results.append(
-                    {
-                        "format": label,
-                        "size (bytes)": gz_path.stat().st_size,
-                        "ratio vs JSON": round(gz_path.stat().st_size / baseline, 4),
-                    }
-                )
+                for _level in (1, 6, 9):
+                    gz_path = _source_path.with_suffix(f"{_source_path.suffix}.{_level}.gz")
+                    with _source_path.open("rb") as src, gzip.open(gz_path, "wb", compresslevel=_level) as dst:
+                        dst.write(src.read())
+                    _results.append(
+                        {
+                            "format": f"{label} (level {_level})",
+                            "size (bytes)": gz_path.stat().st_size,
+                            "ratio vs JSON": round(gz_path.stat().st_size / baseline, 4),
+                        }
+                    )
 
             _pyarrow = optional_import("pyarrow")
             _parquet = optional_import("pyarrow.parquet")
@@ -2713,24 +2798,24 @@ def _(
         _table = mo.ui.table(_results, label="Compression ratios (baseline: JSON size)")
         _note = mo.md(
             """
-How to read this table:
+    How to read this table:
 
-- `ratio vs JSON = 1.00` means same size as JSON.
-- `< 1.00` means the format is smaller than JSON (good for I/O).
-- `> 1.00` means the format is larger than JSON.
+    - `ratio vs JSON = 1.00` means same size as JSON.
+    - `< 1.00` means the format is smaller than JSON (good for I/O).
+    - `> 1.00` means the format is larger than JSON.
 
-Why this matters:
+    Why this matters:
 
-- In analytics, we often scan many rows and columns.
-- Smaller files mean fewer bytes read from disk/network.
-- Parquet often wins because it is columnar and uses compression codecs effectively.
-            """
+    - In analytics, we often scan many rows and columns.
+    - Smaller files mean fewer bytes read from disk/network.
+    - Parquet often wins because it is columnar and uses compression codecs effectively.
+                """
         ).callout(kind="info")
 
         _output = mo.vstack([_table, _note], gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
@@ -2802,119 +2887,121 @@ def _(dict_rows, dict_unique, dict_value_bytes, math, mo):
     )
     _note = mo.md(
         """
-Interpretation:
+    Interpretation:
 
-- Lower `unique values` usually means fewer bits per code and better compression.
-- If almost every row has a different value, dictionary encoding helps less.
-- Columnar formats often benefit because repeated values are common in a column.
-        """
+    - Lower `unique values` usually means fewer bits per code and better compression.
+    - If almost every row has a different value, dictionary encoding helps less.
+    - Columnar formats often benefit because repeated values are common in a column.
+            """
     ).callout(kind="info")
 
     _panel = mo.vstack([_table, _note], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Smaller files help, but analytics runtime is not only about file size.
-We also need a query engine that avoids unnecessary work.
+    Smaller files help, but analytics runtime is not only about file size.
+    We also need a query engine that avoids unnecessary work.
 
-$$
-\\text{query time} \\approx \\text{I/O time} + \\text{compute time}
-$$
+    $$
+    \\text{query time} \\approx \\text{I/O time} + \\text{compute time}
+    $$
 
-DuckDB helps reduce both parts for many analytical workloads (query/data access patterns).
-        """
+    DuckDB helps reduce both parts for many analytical workloads (query/data access patterns).
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _db_disclaimer = mo.Html(
         """
-<div class="disclaimer-red">
-  Disclaimer: Databases will be discussed in-depth later in the semester in the
-  <strong>Database Management for Data Scientists (DBM)</strong> module.
-  Here we focus only on practical intuition for analytics workflows.
-</div>
-        """
+    <div class="disclaimer-red">
+      Disclaimer: Databases will be discussed in-depth later in the semester in the
+      <strong>Database Management for Data Scientists (DBM)</strong> module.
+      Here we focus only on practical intuition for analytics workflows.
+    </div>
+            """
     )
     _db_disclaimer
-    return (_db_disclaimer,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 5. DuckDB Example (SQL on Files)")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter5_guide = mo.md(
         """
-### Chapter 5 Introduction
+    ### Chapter 5 Introduction
 
-> **Key Question:** How can DuckDB answer a query while reading much less data?
+    > **Key Question:** How can DuckDB answer a query while reading much less data?
 
-DuckDB is a database engine that runs directly inside your Python process.
-No separate server is needed for this lecture demo.
+    *Last stop in the **data tier**. Chapters 1-4 built the files; now something has to read them back.*
 
-Two key ideas:
+    DuckDB is a database engine that runs directly inside your Python process.
+    No separate server is needed for this lecture demo.
 
-- **Predicate pushdown**: filters are applied early, so rows that do not match are skipped.
-- **Projection pushdown**: only needed columns are read, unused columns are skipped.
+    Two key ideas:
 
-Main idea:
+    - **Predicate pushdown**: filters are applied early, so rows that do not match are skipped.
+    - **Projection pushdown**: only needed columns are read, unused columns are skipped.
 
-$$
-\\text{work units} \\approx N \\times \\text{selectivity} \\times C_{needed}
-$$
+    Main idea:
 
-Lower selectivity and fewer needed columns usually mean less total work.
-        """
+    $$
+    \\text{work units} \\approx N \\times \\text{selectivity} \\times C_{needed}
+    $$
+
+    Lower selectivity and fewer needed columns usually mean less total work.
+            """
     ).callout(kind="neutral")
     _chapter5_guide
-    return (_chapter5_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### DuckDB: SQL on Files, Zero Server
+    ### DuckDB: SQL on Files, Zero Server
 
-DuckDB is an **embedded analytical database**:
+    DuckDB is an **embedded analytical database**:
 
-- **Embedded** means it runs in your app process (like a library).
-- **Analytical** means it is optimized for scans, filters, GROUP BY, joins, and aggregates.
+    - **Embedded** means it runs in your app process (like a library).
+    - **Analytical** means it is optimized for scans, filters, GROUP BY, joins, and aggregates.
 
-For this notebook, think of DuckDB as a fast SQL engine for local files.
+    For this notebook, think of DuckDB as a fast SQL engine for local files.
 
-What "pushdown" means in plain words:
+    What "pushdown" means in plain words:
 
-- Predicate pushdown: if query says `WHERE amount > 600`, DuckDB tries to skip rows/blocks that cannot match.
-- Projection pushdown: if query only needs `region` and `amount`, DuckDB avoids reading irrelevant columns.
+    - Predicate pushdown: if query says `WHERE amount > 600`, DuckDB tries to skip rows/blocks that cannot match.
+    - Projection pushdown: if query only needs `region` and `amount`, DuckDB avoids reading irrelevant columns.
 
-Why it often outperforms direct plain-file scans for analytics (lower query runtime):
+    Why it often outperforms direct plain-file scans for analytics (lower query runtime):
 
-- Query optimizer + vectorized execution
-- Columnar reads + pushdown
-- Fast joins and aggregations without standing up a server process
+    - Query optimizer + vectorized execution
+    - Columnar reads + pushdown
+    - Fast joins and aggregations without standing up a server process
 
-The mini-labs below first estimate skipped work, then run an actual query timing demo.
-        """
+    The mini-labs below first estimate skipped work, then run an actual query timing demo.
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
@@ -2925,14 +3012,14 @@ def _(mo):
     push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query")
     _push_note = mo.md(
         """
-Model used in this mini-lab:
+    Model used in this mini-lab:
 
-- Without pushdown, approximate work is `rows x total_columns`.
-- With predicate + projection pushdown, approximate work is
-  `rows x selectivity x needed_columns`.
+    - Without pushdown, approximate work is `rows x total_columns`.
+    - With predicate + projection pushdown, approximate work is
+      `rows x selectivity x needed_columns`.
 
-So this is a simplified *relative work* estimate, not exact runtime.
-        """
+    So this is a simplified *relative work* estimate, not exact runtime.
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [
@@ -2986,7 +3073,7 @@ def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
         gap=0.6,
     )
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
@@ -2998,7 +3085,7 @@ def _(mo):
         value="CSV + DuckDB table",
         label="Storage path",
     )
-    run_duck = mo.ui.button(label="Re-run DuckDB demo", value=1, kind="success")
+    run_duck = mo.ui.button(label="Run DuckDB demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [
@@ -3015,14 +3102,15 @@ def _(mo):
 
 @app.cell
 def _(
+    Path,
     csv,
+    duck_rows,
+    duck_storage,
+    duck_threshold,
     format_ms,
     mo,
     optional_import,
     random,
-    duck_rows,
-    duck_storage,
-    duck_threshold,
     run_duck,
     tempfile,
     time,
@@ -3147,31 +3235,31 @@ def _(
             _output = mo.vstack([_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _index_intro = mo.md(
         """
-### Indexing Demo: Full Scan vs Indexed Search
+    ### Indexing Demo: Full Scan vs Indexed Search
 
-So far, DuckDB pushdown helped by skipping work during scans.
-Indexes solve a related but different problem:
+    So far, DuckDB pushdown helped by skipping work during scans.
+    Indexes solve a related but different problem:
 
-- Pushdown: reduce work while scanning large datasets.
-- Index: jump directly to matching rows for selective filters.
+    - Pushdown: reduce work while scanning large datasets.
+    - Index: jump directly to matching rows for selective filters.
 
-Now we compare:
+    Now we compare:
 
-- **Full table scan** (no index)
-- **Indexed lookup** (index on `category` + `value`)
+    - **Full table scan** (no index)
+    - **Indexed lookup** (index on `category` + `value`)
 
-We also show the query plan to make the optimization explicit.
-        """
+    We also show the query plan to make the optimization explicit.
+            """
     ).callout(kind="neutral")
     _index_intro
-    return (_index_intro,)
+    return
 
 
 @app.cell
@@ -3180,7 +3268,7 @@ def _(mo):
     idx_selectivity = mo.ui.slider(0.05, 0.9, step=0.05, value=0.2, label="Share of category = 'C'")
     idx_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Value threshold")
     idx_seed = mo.ui.slider(1, 999, value=17, label="Seed")
-    run_index = mo.ui.button(label="Re-run indexing demo", value=1, kind="success")
+    run_index = mo.ui.button(label="Run indexing demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [
@@ -3197,6 +3285,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Path,
     idx_rows,
     idx_seed,
     idx_selectivity,
@@ -3209,7 +3298,7 @@ def _(
     time,
 ):
     if run_index.value == 0:
-        _output = mo.md("Click **Re-run indexing demo** to execute.").callout(kind="neutral")
+        _output = mo.md("Click **Run indexing demo** to execute.").callout(kind="neutral")
     else:
         _rng = random.Random(idx_seed.value)
         _rows = []
@@ -3281,51 +3370,51 @@ def _(
         )
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _schema_section = mo.md("### Schema-on-Read vs Schema-on-Write (DuckDB)")
     _schema_section
-    return (_schema_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _schema_expl = mo.md(
         """
-DuckDB can **infer datatypes** when reading a file (schema-on-read).
+    DuckDB can **infer datatypes** when reading a file (schema-on-read).
 
-What "infer datatype" means:
+    What "infer datatype" means:
 
-- DuckDB looks at values in a column and guesses a type such as `INTEGER`, `DOUBLE`, `VARCHAR`, or `DATE`.
-- Example: values `10, 20, 31` are inferred as numeric.
-- Example: values `10, N/A, 31` may be inferred as text (`VARCHAR`) because of mixed content.
+    - DuckDB looks at values in a column and guesses a type such as `INTEGER`, `DOUBLE`, `VARCHAR`, or `DATE`.
+    - Example: values `10, 20, 31` are inferred as numeric.
+    - Example: values `10, N/A, 31` may be inferred as text (`VARCHAR`) because of mixed content.
 
-Alternative: **schema-on-write** means you explicitly enforce the types during loading.
+    Alternative: **schema-on-write** means you explicitly enforce the types during loading.
 
-With messy data, these choices change:
+    With messy data, these choices change:
 
-- the inferred column types  
-- how many values become `NULL`  
-- whether errors are surfaced early
+    - the inferred column types  
+    - how many values become `NULL`  
+    - whether errors are surfaced early
 
-Example of a messy column:
+    Example of a messy column:
 
-```
-amount
-120.5
-N/A
-87.0
-```
+    ```
+    amount
+    120.5
+    N/A
+    87.0
+    ```
 
-**Watch for:** the inferred type of `amount`, how many values become `NULL` after casting,
-and whether numeric aggregates require explicit conversion (`TRY_CAST`).
-        """
+    **Watch for:** the inferred type of `amount`, how many values become `NULL` after casting,
+    and whether numeric aggregates require explicit conversion (`TRY_CAST`).
+            """
     ).callout(kind="neutral")
     _schema_expl
-    return (_schema_expl,)
+    return
 
 
 @app.cell
@@ -3333,7 +3422,7 @@ def _(mo):
     schema_rows = mo.ui.slider(500, 8000, step=500, value=3000, label="Rows")
     schema_dirty = mo.ui.slider(0.0, 0.6, step=0.05, value=0.2, label="Dirty rate")
     schema_seed = mo.ui.slider(1, 999, value=29, label="Seed")
-    run_schema = mo.ui.button(label="Re-run schema demo", value=1, kind="success")
+    run_schema = mo.ui.button(label="Run schema demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [
@@ -3349,6 +3438,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Path,
     csv,
     mo,
     optional_import,
@@ -3360,7 +3450,7 @@ def _(
     tempfile,
 ):
     if run_schema.value == 0:
-        _output = mo.md("Click **Re-run schema demo** to execute.").callout(kind="neutral")
+        _output = mo.md("Click **Run schema demo** to execute.").callout(kind="neutral")
     else:
         _duckdb = optional_import("duckdb")
         if not _duckdb:
@@ -3448,16 +3538,16 @@ def _(
 
             def _render_sample_table(rows):
                 header = """
-<thead>
-  <tr>
-    <th>id</th>
-    <th>category</th>
-    <th>amount</th>
-    <th>dirty</th>
-    <th>day</th>
-  </tr>
-</thead>
-                """
+    <thead>
+      <tr>
+        <th>id</th>
+        <th>category</th>
+        <th>amount</th>
+        <th>dirty</th>
+        <th>day</th>
+      </tr>
+    </thead>
+                    """
                 body_rows = []
                 for row in rows:
                     dirty = bool(row["dirty"])
@@ -3465,27 +3555,27 @@ def _(
                     amount_cell = f'<td class="dirty-cell">{row["amount"]}</td>' if dirty else f"<td>{row['amount']}</td>"
                     body_rows.append(
                         f"""
-  <tr class="{cls}">
-    <td>{row["id"]}</td>
-    <td>{row["category"]}</td>
-    {amount_cell}
-    <td>{str(row["dirty"]).lower()}</td>
-    <td>{row["day"]}</td>
-  </tr>
-                        """
+      <tr class="{cls}">
+        <td>{row["id"]}</td>
+        <td>{row["category"]}</td>
+        {amount_cell}
+        <td>{str(row["dirty"]).lower()}</td>
+        <td>{row["day"]}</td>
+      </tr>
+                            """
                     )
                 body = "<tbody>" + "".join(body_rows) + "</tbody>"
                 return mo.Html(
                     f"""
-<div class="section-card">
-  <h3>Sample rows (dirty values highlighted)</h3>
-  <table>
-    {header}
-    {body}
-  </table>
-  <div class="chart-note">Rows with non-numeric amounts are shaded.</div>
-</div>
-                    """
+    <div class="section-card">
+      <h3>Sample rows (dirty values highlighted)</h3>
+      <table>
+        {header}
+        {body}
+      </table>
+      <div class="chart-note">Rows with non-numeric amounts are shaded.</div>
+    </div>
+                        """
                 )
 
             _sample_table = _render_sample_table(_sample_rows)
@@ -3531,9 +3621,9 @@ def _(
 
             _note = mo.md(
                 """
-**What to notice:** when `amount` is inferred as `VARCHAR`, numeric calculations require `TRY_CAST`.
-Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
-                """
+    **What to notice:** when `amount` is inferred as `VARCHAR`, numeric calculations require `TRY_CAST`.
+    Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
+                    """
             ).callout(kind="info")
 
             _output = mo.vstack(
@@ -3550,145 +3640,160 @@ Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
             )
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _qa_block_duckdb = mo.md(
         """
-<div class="section-card">
-  <h3>Discussion — DuckDB & Schema</h3>
-  <details>
-    <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
-    <p><strong>Answer:</strong> If the same queries or joins run repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization = storing structured intermediate data for reuse).</p>
-  </details>
-  <details>
-    <summary><strong>Q2:</strong> What risk appears with schema‑on‑read?</summary>
-    <p><strong>Answer:</strong> Bad types can slip through; errors show up later as `NULL`s or wrong totals (schema‑on‑read).</p>
-  </details>
-  <details>
-    <summary><strong>Q3:</strong> How can data drift be detected over time?</summary>
-    <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
-  </details>
-</div>
-        """
+    <div class="section-card">
+      <h3>Discussion — DuckDB & Schema</h3>
+      <details>
+        <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
+        <p><strong>Answer:</strong> If the same queries or joins run repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization = storing structured intermediate data for reuse).</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> What risk appears with schema‑on‑read?</summary>
+        <p><strong>Answer:</strong> Bad types can slip through; errors show up later as `NULL`s or wrong totals (schema‑on‑read).</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> How can data drift be detected over time?</summary>
+        <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
+      </details>
+    </div>
+            """
     )
     _qa_block_duckdb
-    return (_qa_block_duckdb,)
+    return
 
 
 @app.cell
 def _(mo):
     _conclusion_duckdb = mo.md(
         """
-<div class="section-card">
-  <h3>Chapter 5 Conclusion</h3>
-  <ul>
-    <li>DuckDB gives SQL analytics directly on files with strong performance for scans and aggregates.</li>
-    <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
-    <li>Track null rates and inferred types over time to detect data quality drift (distribution/type changes in incoming data).</li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <h3>Chapter 5 Conclusion</h3>
+      <ul>
+        <li>DuckDB gives SQL analytics directly on files with strong performance for scans and aggregates.</li>
+        <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
+        <li>Track null rates and inferred types over time to detect data quality drift (distribution/type changes in incoming data).</li>
+      </ul>
+    </div>
+            """
     ).callout(kind="success")
     _conclusion_duckdb
-    return (_conclusion_duckdb,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-So far, we worked locally with files and SQL.
-Now we expose data to other programs through APIs.
+    So far, we worked locally with files and SQL.
+    Now we expose data to other programs through APIs.
 
-API exchange model:
-- request = client-sent input message
-- response = server-returned output message
+    API exchange model:
+    - request = client-sent input message
+    - response = server-returned output message
 
-$$
-\\text{API latency} = \\text{network} + \\text{server processing}
-$$
-        """
+    $$
+    \\text{API latency} = \\text{network} + \\text{server processing}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter6_guide = mo.md(
         """
-### Chapter 6 Introduction
+    ### Chapter 6 Introduction
 
-> **Key Question:** Did the client and server agree on the same contract?
+    > **Key Question:** Did the client and server agree on the same contract?
 
-An API is a contract between systems.
-Most API bugs are contract mismatches (interface mismatches): wrong path, wrong payload shape, or wrong status handling.
+    *We move up to the **logic tier**. The data tier is finished; now other programs need to ask for that data.*
 
-Quick basics:
+    An API is a contract between systems.
+    Most API bugs are contract mismatches (interface mismatches): wrong path, wrong payload shape, or wrong status handling.
 
-- **HTTP** is the message protocol used by clients and servers on the web.
-- **HTTPS** is HTTP with encryption (TLS), so data is protected in transit.
-- In practice: same API idea, but HTTPS is the secure default.
+    Quick basics:
 
-Keep this mapping in mind:
+    - **HTTP** is the message protocol used by clients and servers on the web.
+    - **HTTPS** is HTTP with encryption (TLS), so data is protected in transit.
+    - In practice: same API idea, but HTTPS is the secure default.
 
-- 2xx: success
-- 4xx: client-side issue
-- 5xx: server-side issue
+    Keep this mapping in mind:
 
-Reference list of status codes:
-https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
+    - 2xx: success
+    - 4xx: client-side issue
+    - 5xx: server-side issue
 
-Status family is computed from the code:
+    Reference list of status codes:
+    https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
 
-$$
-\\text{family} = \\left\\lfloor \\frac{\\text{status code}}{100} \\right\\rfloor
-$$
-        """
+    Status family is computed from the code:
+
+    $$
+    \\text{family} = \\left\\lfloor \\frac{\\text{status code}}{100} \\right\\rfloor
+    $$
+            """
     ).callout(kind="neutral")
     _chapter6_guide
-    return (_chapter6_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     rest = mo.md(
         """
-### REST Principles (Quick Recap)
+    ### REST Principles (Quick Recap)
 
-- **GET**: fetch a resource  
-- **POST**: create a new resource  
-- **PUT**: update/replace a resource  
-- **DELETE**: remove a resource  
+    First the four words this whole chapter is built from:
 
-Core REST constraints (why it scales):
+    - A **resource** is one thing the server knows about, like a product or a sale.
+    - A **path** is the address of a resource, like `/products/8`.
+    - An **endpoint** is one path combined with one verb, like `GET /products/8`.
+    - A **payload** is the data you send along with a request, written as JSON.
 
-- **Stateless** requests (no server session state)  
-- **Uniform interface** (resources + verbs)  
-- **Cacheable** responses  
-- **Layered** architecture  
+    The four verbs say what you want done to a resource:
 
-In a JSON API, the payload is the state representation:
+    - **GET**: fetch a resource  
+    - **POST**: create a new resource  
+    - **PUT**: update a resource  
+    - **DELETE**: remove a resource  
 
-$$
-\\text{Resource} \\xleftrightarrow[\\text{response}]{\\text{request}} \\text{Representation}
-$$
-        """
+    Core REST constraints (why it scales):
+
+    - **Stateless** — every request carries everything the server needs. The server
+      remembers nothing between your requests, so any copy of it can answer the next one.
+    - **Uniform interface** — the same four verbs work on every resource, so once you
+      can read one endpoint you can read all of them.
+    - **Cacheable** — a response may say "this stays valid for a while", so the answer
+      can be reused instead of recomputed.
+    - **Layered** — the client talks only to the next layer, never past it. That is the
+      tier idea from the start of this notebook, applied to the network.
+
+    In a JSON API, the payload is the state representation:
+
+    $$
+    \\text{Resource} \\xleftrightarrow[\\text{response}]{\\text{request}} \\text{Representation}
+    $$
+            """
     ).callout(kind="neutral")
     rest
-    return (rest,)
+    return
 
 
 @app.cell
@@ -3701,12 +3806,12 @@ def _(mo):
     )
     _note = mo.md(
         """
-Try `200`, `201`, `404`, `409`, and `500` to see how client behavior should change.
+    Try `200`, `201`, `404`, `409`, and `500` to see how client behavior should change.
 
-$$
-\\text{status family} = \\left\\lfloor \\frac{\\text{code}}{100} \\right\\rfloor
-$$
-        """
+    $$
+    \\text{status family} = \\left\\lfloor \\frac{\\text{code}}{100} \\right\\rfloor
+    $$
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [mo.md("### Mini-lab: HTTP Status Interpreter"), http_code, http_method_hint, _note],
@@ -3745,7 +3850,7 @@ def _(http_code, http_method_hint, mo):
     )
     _msg = mo.md(f"Status **{code}** belongs to **{family}**.\n\n{retry_note}").callout(kind=kind)
     _msg
-    return (_msg,)
+    return
 
 
 @app.cell
@@ -3756,7 +3861,7 @@ def _(mo):
     payload = mo.ui.text_area(value='{"message": "hello"}', label="JSON payload (for POST/PUT)")
     use_live_http = mo.ui.switch(value=False, label="Use live HTTP (requires internet)")
     mock_latency = mo.ui.slider(0, 1500, step=100, value=200, label="Mock latency (ms)")
-    send = mo.ui.button(label="Send request", value=1, kind="success")
+    send = mo.ui.button(label="Send request", value=0, on_click=lambda clicks: clicks + 1, kind="success")
 
     _controls = mo.vstack(
         [
@@ -3778,8 +3883,8 @@ def _(
     base_url,
     json,
     method,
-    mock_latency,
     mo,
+    mock_latency,
     path,
     payload,
     send,
@@ -3854,16 +3959,21 @@ def _(
             return status, body
 
         if _response_panel is None:
-            req = url_request.Request(url, data=data_bytes, headers=headers, method=method.value)
-
             if use_live_http.value:
                 try:
+                    req = url_request.Request(url, data=data_bytes, headers=headers, method=method.value)
                     with url_request.urlopen(req, timeout=10) as _response:
                         body = _response.read().decode("utf-8", errors="replace")
                         status = _response.status
+                except url_error.HTTPError as http_error:
+                    # 404, 409, 500 ... are real answers from the server, not failures.
+                    body = http_error.read().decode("utf-8", errors="replace")
+                    status = http_error.code
                 except Exception as exc:
-                    _response_panel = mo.md(f"Request failed: `{exc}`").callout(kind="danger")
-                else:
+                    _response_panel = mo.md(
+                        f"Could not reach `{url}`: `{exc}`. Check the base URL and that the server is running."
+                    ).callout(kind="danger")
+                if _response_panel is None:
                     try:
                         parsed = json.loads(body)
                         preview = json.dumps(parsed, indent=2)[:1200]
@@ -3872,12 +3982,12 @@ def _(
 
                     _response_panel = mo.md(
                         f"""
-**Status:** `{status}` · **Source:** `live`
+    **Status:** `{status}` · **Source:** `live`
 
-```json
-{preview}
-```
-        """
+    ```json
+    {preview}
+    ```
+            """
                     )
             else:
                 status, body = _simulate_response()
@@ -3887,133 +3997,146 @@ def _(
                     preview = json.dumps(body, indent=2)[:1200]
                 _response_panel = mo.md(
                     f"""
-**Status:** `{status}` · **Source:** `simulated`
+    **Status:** `{status}` · **Source:** `simulated`
 
-```json
-{preview}
-```
-        """
+    ```json
+    {preview}
+    ```
+            """
                 )
 
         _output = mo.vstack([_meta, _response_panel], gap=0.5)
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _qa_block_api = mo.md(
         """
-<div class="section-card">
-  <h3>Discussion — APIs & Validation</h3>
-  <details>
-    <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
-    <p><strong>Answer:</strong> If repeating it produces the same result (e.g., client supplies a unique ID), then it’s idempotent.
-    This prevents duplicate records on retries.</p>
-  </details>
-  <details>
-    <summary><strong>Q2:</strong> Where should validation happen: client, server, or both?</summary>
-    <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server‑side validation).</p>
-  </details>
-  <details>
-    <summary><strong>Q3:</strong> How can an API evolve without breaking clients?</summary>
-    <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
-  </details>
-</div>
-        """
+    <div class="section-card">
+      <h3>Discussion — APIs & Validation</h3>
+      <details>
+        <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
+        <p><strong>Answer:</strong> If repeating it produces the same result (e.g., client supplies a unique ID), then it’s idempotent.
+        This prevents duplicate records on retries.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> Where should validation happen: client, server, or both?</summary>
+        <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server‑side validation).</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> How can an API evolve without breaking clients?</summary>
+        <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
+      </details>
+    </div>
+            """
     )
     _qa_block_api
-    return (_qa_block_api,)
+    return
 
 
 @app.cell
 def _(mo):
     _conclusion_api = mo.md(
         """
-<div class="section-card">
-  <h3>Chapter 6 Conclusion</h3>
-  <ul>
-    <li>Use HTTP method semantics intentionally (GET/POST/PUT/DELETE) and design for retries.</li>
-    <li>Validation belongs on both client and server, with server validation as the final guard.</li>
-    <li>Backward-compatible evolution and explicit versioning reduce integration breakage.</li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <h3>Chapter 6 Conclusion</h3>
+      <ul>
+        <li>Use HTTP method semantics intentionally (GET/POST/PUT/DELETE) and design for retries.</li>
+        <li>Validation belongs on both client and server, with server validation as the final guard.</li>
+        <li>Backward-compatible evolution and explicit versioning reduce integration breakage.</li>
+      </ul>
+    </div>
+            """
     ).callout(kind="success")
     _conclusion_api
-    return (_conclusion_api,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-APIs fail when input data shape is wrong.
-Pydantic acts as an input-validation checkpoint: required fields and types are checked before business logic runs.
+    APIs fail when input data shape is wrong.
+    Pydantic acts as an input-validation checkpoint: required fields and types are checked before business logic runs.
 
-$$
-\\text{valid request} \\Rightarrow \\text{schema checks pass}
-$$
-        """
+    $$
+    \\text{valid request} \\Rightarrow \\text{schema checks pass}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 7. Pydantic Models")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter7_guide = mo.md(
         """
-### Chapter 7 Introduction
+    ### Chapter 7 Introduction
 
-> **Key Question:** Which inputs are allowed into the trusted system boundary?
+    > **Key Question:** Which inputs are allowed into the trusted system boundary?
 
-Validation is the system's input acceptance policy (formal schema enforcement rules).
-With early validation, downstream code becomes simpler and safer.
+    *Still in the **logic tier**. Chapter 6 agreed on a contract; now we enforce it.*
 
-Formal model:
+    Validation is the system's input acceptance policy (formal schema enforcement rules).
+    With early validation, downstream code becomes simpler and safer.
 
-$$
-\\text{trusted internal data} = \\text{untrusted input} + \\text{validation rules}
-$$
-        """
+    Formal model:
+
+    $$
+    \\text{trusted internal data} = \\text{untrusted input} + \\text{validation rules}
+    $$
+            """
     ).callout(kind="neutral")
     _chapter7_guide
-    return (_chapter7_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Pydantic = Validated Data Models
+    ### Pydantic = Validated Data Models
 
-Pydantic turns raw data into **validated Python objects**, guided by type hints.
+    Pydantic turns raw data into **validated Python objects**, guided by type hints.
 
-Example constraint:
+    A **type hint** is the note after a colon that says what kind of value a name should hold:
 
-$$
-0 \\leq \\text{gpa} \\leq 4
-$$
+    ```python
+    name: str        # this should be text
+    age: int         # this should be a whole number
+    gpa: float       # this should be a decimal number
+    ```
 
-Where:
-- $gpa$: grade-point average score constrained to the valid range
+    Plain Python does not enforce these; they are documentation. Pydantic reads the same
+    hints and *does* enforce them, which is why one line of description becomes a real check.
 
-Try editing the JSON below to trigger validation errors and see the message structure.
-        """
+    Example constraint:
+
+    $$
+    0 \\leq \\text{gpa} \\leq 4
+    $$
+
+    Where:
+    - $gpa$: grade-point average score constrained to the valid range
+
+    Try editing the JSON below to trigger validation errors and see the message structure.
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
@@ -4050,18 +4173,18 @@ def _(mo):
     }
     _model_code = mo.md(
         """
-### Pydantic model used in this mini-lab
+    ### Pydantic model used in this mini-lab
 
-```python
-from pydantic import BaseModel, Field
+    ```python
+    from pydantic import BaseModel, Field
 
-class Student(BaseModel):
-    id: int
-    name: str
-    gpa: float = Field(ge=0.0, le=4.0)
-    email: str
-```
-        """
+    class Student(BaseModel):
+        id: int
+        name: str
+        gpa: float = Field(ge=0.0, le=4.0)
+        email: str
+    ```
+            """
     ).callout(kind="neutral")
     _panel = mo.vstack(
         [
@@ -4089,12 +4212,12 @@ def _(json, mo, payload_case, payload_templates):
 
     _preview = mo.md(
         f"""
-Selected preset expectation: **{expected_result}**
+    Selected preset expectation: **{expected_result}**
 
-```json
-{selected_payload_text}
-```
-        """
+    ```json
+    {selected_payload_text}
+    ```
+            """
     ).callout(kind="info")
     _preview
     return (selected_payload_text,)
@@ -4106,7 +4229,7 @@ def _(mo, selected_payload_text):
         value=selected_payload_text,
         label="Student JSON",
     )
-    validate = mo.ui.button(label="Validate with Pydantic", value=1, kind="success")
+    validate = mo.ui.button(label="Validate with Pydantic", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     _controls = mo.vstack([input_data, validate], gap=0.6).callout(kind="neutral")
     _controls
     return input_data, validate
@@ -4133,189 +4256,214 @@ def _(input_data, json, mo, optional_import, validate):
 
             try:
                 raw = json.loads(input_data.value)
-                if hasattr(Student, "model_validate"):
-                    obj = Student.model_validate(raw)
-                    data = obj.model_dump()
-                else:
-                    obj = Student.parse_obj(raw)
-                    data = obj.dict()
+                obj = Student.model_validate(raw)   # raises if the data breaks a rule
+                data = obj.model_dump()             # back to a plain dictionary
                 _output = mo.md(
                     f"""
-**Validated object:**
+    **Validated object:**
 
-```json
-{json.dumps(data, indent=2)}
-```
-                    """
+    ```json
+    {json.dumps(data, indent=2)}
+    ```
+                        """
                 ).callout(kind="success")
             except _ValidationError as exc:
                 _output = mo.md(
                     f"""
-Validation error:
+    Validation error:
 
-```
-{exc}
-```
-                    """
+    ```
+    {exc}
+    ```
+                        """
                 ).callout(kind="danger")
             except json.JSONDecodeError as exc:
                 _output = mo.md(f"Invalid JSON: `{exc}`").callout(kind="danger")
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Once models are defined, FastAPI can use them to:
-- validate inputs,
-- power endpoints,
-- generate docs automatically.
+    Once models are defined, FastAPI can use them to:
+    - validate inputs,
+    - power endpoints,
+    - generate docs automatically.
 
-$$
-\\text{Python types + models} \\rightarrow \\text{OpenAPI schema} \\rightarrow \\text{interactive docs}
-$$
-        """
+    $$
+    \\text{Python types + models} \\rightarrow \\text{OpenAPI schema} \\rightarrow \\text{interactive docs}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 8. FastAPI Demo + Automatic Docs")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter8_guide = mo.md(
         """
-### Chapter 8 Introduction
+    ### Chapter 8 Introduction
 
-> **Key Question:** How do we keep implementation and API documentation in sync?
+    > **Key Question:** How do we keep implementation and API documentation in sync?
 
-FastAPI turns validated models into executable API endpoints plus shared docs.
-This reduces mismatch between implementation and documentation.
+    *Last stop in the **logic tier**. We turn the rules from chapter 7 into a running server.*
 
-Lifecycle:
+    FastAPI turns validated models into executable API endpoints plus shared docs.
+    This reduces mismatch between implementation and documentation.
 
-1. Define model
-2. Attach model to endpoint
-3. FastAPI emits OpenAPI
-4. Tools consume docs automatically
+    Lifecycle:
 
-$$
-\\text{Type Hints} + \\text{Validation Models} \\rightarrow \\text{Machine-readable API contract}
-$$
-        """
+    1. Define model
+    2. Attach model to endpoint
+    3. FastAPI emits OpenAPI
+    4. Tools consume docs automatically
+
+    $$
+    \\text{Type Hints} + \\text{Validation Models} \\rightarrow \\text{Machine-readable API contract}
+    $$
+            """
     ).callout(kind="neutral")
     _chapter8_guide
-    return (_chapter8_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### FastAPI = Type Hints → OpenAPI
+    ### FastAPI = Type Hints → OpenAPI
 
-FastAPI uses Python type hints + Pydantic to build validated endpoints. It automatically generates:
+    FastAPI uses the type hints from chapter 7 plus Pydantic to build validated endpoints.
+    Write the model once and the documentation comes out for free:
 
-- OpenAPI schema (`/openapi.json`)  
-- Swagger UI (`/docs`)  
-- ReDoc (`/redoc`)
+    - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint
+      an API has, in a way other programs can read. FastAPI writes it for you.
+    - **Swagger UI** (`/docs`) is a web page that reads that file and turns it into buttons
+      you can click to try each endpoint. This is the page we use below.
+    - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual instead.
 
-The type hints become a formal schema:
+    You start the server with **uvicorn**, the program that actually listens on a port and
+    hands incoming requests to your FastAPI code:
 
-$$
-\\text{Python Types} \\rightarrow \\text{JSON Schema} \\rightarrow \\text{Interactive Docs}
-$$
-        """
+    ```bash
+    uvicorn sw03_demo_api:app --reload
+    ```
+
+    `sw03_demo_api` is the file, `app` is the variable inside it, and `--reload` restarts the
+    server whenever you save a change.
+
+    The type hints become a formal schema:
+
+    $$
+    \\text{Python Types} \\rightarrow \\text{JSON Schema} \\rightarrow \\text{Interactive Docs}
+    $$
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
 def _(mo):
     fastapi_code = mo.md(
         """
-```python
-# file: sw03_demo_api.py
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
+    ```python
+    # file: sw03_demo_api.py
+    from fastapi import FastAPI
+    from pydantic import BaseModel, Field
 
-app = FastAPI(title="Sales Analysis API", version="2.0.0")
+    app = FastAPI(title="Sales Analysis API", version="3.0.0")
 
-class ProductCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    price: float = Field(gt=0)
-    description: str = Field(min_length=1, max_length=300)
-    category_id: int = Field(ge=1)
+    class ProductCreate(BaseModel):          # what the client is allowed to send
+        name: str = Field(min_length=1, max_length=120)
+        price: float = Field(gt=0)
+        description: str = Field(min_length=1, max_length=300)
+        category_id: int = Field(ge=1)
 
-@app.get("/products/{product_id}")
-def get_product(product_id: int):
-    # simplified snippet: full implementation is in sw03_demo_api.py
-    ...
+    class Product(ProductCreate):            # what the server sends back
+        product_id: int
+        category_name: str
 
-@app.post("/products", status_code=201)
-def create_product(payload: ProductCreate):
-    ...
-```
+    @app.get("/products/{product_id}", response_model=Product, tags=["Products"])
+    def get_product(product_id: int) -> Product:
+        'Fetch one product by id.'         # this line becomes the description in /docs
+        ...                                 # full implementation is in sw03_demo_api.py
 
-This repo includes the full implementation in `sw03_demo_api.py`.
+    @app.post("/products", response_model=Product, status_code=201, tags=["Products"])
+    def create_product(payload: ProductCreate) -> Product:
+        'Create a product.'
+        ...
 
-Run from the project root with:
+    @app.delete("/products/{product_id}", status_code=204, tags=["Products"])
+    def delete_product(product_id: int) -> None:
+        'Delete a product. Refused while sales still reference it.'
+        ...
+    ```
 
-```
-uvicorn sw03_demo_api:app --reload
-```
+    Read the three decorators as a sentence: *verb*, *path*, and the shape of the answer.
+    The `tags` group the endpoints in `/docs`, and the docstring under each function becomes
+    its description there. Nothing else had to be written to get documentation.
 
-Then open `http://127.0.0.1:8000/docs`.
-        """
+    This repo includes the full implementation in `sw03_demo_api.py`.
+
+    Run from the project root with:
+
+    ```
+    uvicorn sw03_demo_api:app --reload
+    ```
+
+    Then open `http://127.0.0.1:8000/docs`.
+            """
     )
     fastapi_code
-    return (fastapi_code,)
+    return
 
 
 @app.cell
 def _(mo):
     _workflow = mo.md(
         """
-### Live API Workflow
+    ### Live API Workflow
 
-1. Start the API in a terminal:
+    1. Start the API in a terminal:
 
-   ```bash
-   uvicorn sw03_demo_api:app --reload
-   ```
+       ```bash
+       uvicorn sw03_demo_api:app --reload
+       ```
 
-2. Click **1) Check API status** to verify the server is reachable.  
-3. Edit the JSON payload and click **2) POST /products**.  
-4. Choose a product id and click **3) GET /products/{id}** to compare results.
-        """
+    2. Click **1) Check API status** to verify the server is reachable.  
+    3. Edit the JSON payload and click **2) POST /products**.  
+    4. Choose a product id and click **3) GET /products/{id}** to compare results.
+            """
     ).callout(kind="info")
     _workflow
-    return (_workflow,)
+    return
 
 
 @app.cell
 def _(mo):
     fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
-    fastapi_check = mo.ui.button(label="1) Check API status", kind="neutral")
+    fastapi_check = mo.ui.button(label="1) Check API status", value=0, on_click=lambda clicks: clicks + 1, kind="neutral")
     fastapi_payload = mo.ui.text_area(
-        value='{"name": "Notebook Pro", "price": 99.9, "description": "Lecture demo product", "category_id": 1}',
+        value='{"name": "Lecture Demo Widget", "price": 99.9, "description": "Created live in Chapter 8", "category_id": 1}',
         label="POST /products payload (JSON)",
     )
-    fastapi_post = mo.ui.button(label="2) POST /products", kind="success")
+    fastapi_post = mo.ui.button(label="2) POST /products", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     fastapi_item_id = mo.ui.text(value="1", label="Product id for GET /products/{id}")
-    fastapi_get = mo.ui.button(label="3) GET /products/{id}", kind="neutral")
+    fastapi_get = mo.ui.button(label="3) GET /products/{id}", value=0, on_click=lambda clicks: clicks + 1, kind="neutral")
 
     _controls = mo.vstack(
         [
@@ -4353,14 +4501,14 @@ def _(fastapi_base_url, fastapi_check, json, mo, url_request):
         except Exception as exc:
             _output = mo.md(
                 f"""
-API check failed for `{_url}`.
+    API check failed for `{_url}`.
 
-Error:
+    Error:
 
-```
-{exc}
-```
-                """
+    ```
+    {exc}
+    ```
+                    """
             ).callout(kind="danger")
         else:
             try:
@@ -4374,26 +4522,34 @@ Error:
 
             _output = mo.md(
                 f"""
-API is running.
+    API is running.
 
-- Status: `{_status}`
-- Title: `{_title}`
-- Docs: `{fastapi_base_url.value.rstrip('/')}/docs`
+    - Status: `{_status}`
+    - Title: `{_title}`
+    - Docs: `{fastapi_base_url.value.rstrip('/')}/docs`
 
-Known routes (preview):
+    Known routes (preview):
 
-```json
-{_preview}
-```
-                """
+    ```json
+    {_preview}
+    ```
+                    """
             ).callout(kind="success")
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
-def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_request):
+def _(
+    fastapi_base_url,
+    fastapi_payload,
+    fastapi_post,
+    json,
+    mo,
+    url_error,
+    url_request,
+):
     _output = mo.md("Waiting for POST request...").callout(kind="neutral")
     if fastapi_post.value == 0:
         _output = mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral")
@@ -4427,14 +4583,14 @@ def _(fastapi_base_url, fastapi_payload, fastapi_post, json, mo, url_error, url_
             except Exception as exc:
                 _output = mo.md(
                     f"""
-POST request failed for `{_url}`.
+    POST request failed for `{_url}`.
 
-Error:
+    Error:
 
-```
-{exc}
-```
-                    """
+    ```
+    {exc}
+    ```
+                        """
                 ).callout(kind="danger")
             if _status is not None:
                 try:
@@ -4445,20 +4601,28 @@ Error:
 
                 _output = mo.md(
                     f"""
-`POST /products` returned status `{_status}`.
+    `POST /products` returned status `{_status}`.
 
-```json
-{_preview}
-```
-                    """
+    ```json
+    {_preview}
+    ```
+                        """
                 ).callout(kind="success" if _status < 400 else "danger")
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
-def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_request):
+def _(
+    fastapi_base_url,
+    fastapi_get,
+    fastapi_item_id,
+    json,
+    mo,
+    url_error,
+    url_request,
+):
     _output = mo.md("Waiting for GET request...").callout(kind="neutral")
     if fastapi_get.value == 0:
         _output = mo.md("Click **3) GET /products/{id}** to fetch a product.").callout(kind="neutral")
@@ -4482,14 +4646,14 @@ def _(fastapi_base_url, fastapi_get, fastapi_item_id, json, mo, url_error, url_r
             except Exception as exc:
                 _output = mo.md(
                     f"""
-GET request failed for `{_url}`.
+    GET request failed for `{_url}`.
 
-Error:
+    Error:
 
-```
-{exc}
-```
-                    """
+    ```
+    {exc}
+    ```
+                        """
                 ).callout(kind="danger")
             if _status is not None:
                 try:
@@ -4500,68 +4664,70 @@ Error:
 
                 _output = mo.md(
                     f"""
-`GET /products/{_item_id}` returned status `{_status}`.
+    `GET /products/{_item_id}` returned status `{_status}`.
 
-```json
-{_preview}
-```
-                    """
+    ```json
+    {_preview}
+    ```
+                        """
                 ).callout(kind="success" if _status < 400 else "danger")
 
     _output
-    return (_output,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Backend answers are useful, but users still need a clear interface.
-Now we compare frontend options and their trade-offs (explicit compromises between speed, control, and complexity).
+    Backend answers are useful, but users still need a clear interface.
+    Now we compare frontend options and their trade-offs (explicit compromises between speed, control, and complexity).
 
-$$
-\\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
-$$
-        """
+    $$
+    \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 9. Frontend Framework Comparison")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter9_guide = mo.md(
         """
-### Chapter 9 Introduction
+    ### Chapter 9 Introduction
 
-> **Key Question:** Which frontend maximizes delivery speed without exceeding complexity?
+    > **Key Question:** Which frontend maximizes delivery speed without exceeding complexity?
 
-Framework choice is a product decision, not only a technical preference.
-Pick the tool that best matches team skill and delivery constraints.
+    *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
 
-Common axes:
-- speed of iteration
-- UI control depth
-- long-term maintainability
+    Framework choice is a product decision, not only a technical preference.
+    Pick the tool that best matches team skill and delivery constraints.
 
-Heuristic framing:
+    Common axes:
+    - speed of iteration
+    - UI control depth
+    - long-term maintainability
 
-$$
-\\text{fit score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{control} + w_j \\cdot \\text{team JS readiness}
-$$
-        """
+    Heuristic framing:
+
+    $$
+    \\text{fit score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{control} + w_j \\cdot \\text{team JS readiness}
+    $$
+            """
     ).callout(kind="neutral")
     _chapter9_guide
-    return (_chapter9_guide,)
+    return
 
 
 @app.cell
@@ -4601,31 +4767,31 @@ def _(mo):
 
     _framework_note = mo.md(
         """
-### Choosing a Frontend Stack
+    ### Choosing a Frontend Stack
 
-Think in terms of trade‑offs (explicit engineering compromises): speed vs. control, Python‑native vs. JS ecosystems, and expected scale.
+    Think in terms of trade‑offs (explicit engineering compromises): speed vs. control, Python‑native vs. JS ecosystems, and expected scale.
 
-A simple framing:
+    A simple framing:
 
-$$
-\\text{Iteration Speed} \\uparrow \\quad \\Rightarrow \\quad \\text{UI Control} \\downarrow
-$$
+    $$
+    \\text{Iteration Speed} \\uparrow \\quad \\Rightarrow \\quad \\text{UI Control} \\downarrow
+    $$
 
-Interpretation:
-- faster iteration often comes with less low-level UI control; more control usually needs more engineering effort
+    Interpretation:
+    - faster iteration often comes with less low-level UI control; more control usually needs more engineering effort
 
-Useful showcase/example pages:
-- Marimo gallery: https://marimo.io/gallery
-- Dash examples: https://dash.plotly.com/examples
-- React community/resources: https://react.dev/community
-- Flask patterns/tutorial examples: https://flask.palletsprojects.com/en/stable/patterns/
-        """
+    Useful showcase/example pages:
+    - Marimo gallery: https://marimo.io/gallery
+    - Dash example gallery: https://dash.gallery/Portal/
+    - React community/resources: https://react.dev/community
+    - Flask patterns/tutorial examples: https://flask.palletsprojects.com/en/stable/patterns/
+            """
     ).callout(kind="neutral")
 
     _framework_table = mo.ui.table(framework_rows, label="Framework comparison")
     _panel = mo.vstack([_framework_note, _framework_table], gap=0.6)
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
@@ -4635,12 +4801,24 @@ def _(mo):
     fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength")
     _note = mo.md(
         """
-Higher scores are teaching heuristics only. Validate against real team constraints.
+    Set three numbers about *your team*, not about the frameworks.
 
-$$
-\\text{fit} = w_s s + w_c c + w_j j
-$$
-        """
+    **JavaScript** is the programming language browsers run. Marimo and Streamlit let you
+    avoid it and stay in Python; React is written in it. So a low score here is not a
+    weakness, it just points at different tools.
+
+    Each framework scores the three inputs with its own weights, and every weight row adds
+    up to the same total (3.0) so the scores stay comparable:
+
+    $$
+    \\text{fit}_f = w^f_s \\cdot s + w^f_c \\cdot c + w^f_j \\cdot j_f
+    \\qquad \\text{with} \\quad w^f_s + w^f_c + w^f_j = 3
+    $$
+
+    For the two Python-native tools, $j_f = 6 - j$: they get *more* attractive when the team
+    knows *less* JavaScript. For the others $j_f = j$. Heuristic only - validate against
+    real team constraints.
+            """
     ).callout(kind="info")
     _panel = mo.vstack(
         [mo.md("### Mini-lab: Framework Fit Assistant"), fw_speed, fw_control, fw_js, _note],
@@ -4652,92 +4830,110 @@ $$
 
 @app.cell
 def _(fw_control, fw_js, fw_speed, mo):
-    # Simple weighted scoring for teaching, not a strict recommendation engine.
+    # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
+    # so no framework wins just by carrying more weight than the others.
+    _weights = {
+        # framework:   (fast iteration, fine UI control, JavaScript), python_native
+        "Marimo":      ((1.4, 0.6, 1.0), True),
+        "Streamlit":   ((1.6, 0.4, 1.0), True),
+        "Dash":        ((1.0, 1.0, 1.0), False),
+        "Flask":       ((0.6, 1.6, 0.8), False),
+        "React":       ((0.4, 1.4, 1.2), False),
+    }
+    # Python-native tools benefit from a team that knows LITTLE JavaScript, hence 6 - j.
     _framework_scores = {
-        "Marimo": fw_speed.value * 1.2 + (6 - fw_js.value) * 0.8 + fw_control.value * 0.6,
-        "Streamlit": fw_speed.value * 1.3 + (6 - fw_js.value) * 0.7 + fw_control.value * 0.5,
-        "Dash": fw_speed.value * 0.9 + fw_js.value * 0.4 + fw_control.value * 0.8,
-        "Flask": fw_speed.value * 0.6 + fw_js.value * 0.5 + fw_control.value * 1.2,
-        "React": fw_speed.value * 0.5 + fw_js.value * 1.4 + fw_control.value * 1.3,
+        name: w_s * fw_speed.value
+        + w_c * fw_control.value
+        + w_j * ((6 - fw_js.value) if python_native else fw_js.value)
+        for name, ((w_s, w_c, w_j), python_native) in _weights.items()
     }
     _ranked_frameworks = sorted(_framework_scores.items(), key=lambda x: x[1], reverse=True)
     _fit_table = mo.ui.table(
-        [{"framework": name, "score": round(score, 2)} for name, score in _ranked_frameworks],
+        [
+            {
+                "framework": name,
+                "score": round(score, 2),
+                "weights (speed / control / JS)": " / ".join(str(w) for w in _weights[name][0]),
+            }
+            for name, score in _ranked_frameworks
+        ],
         label="Teaching score (higher = better fit)",
     )
     _fit_message = mo.md(f"Current top fit: **{_ranked_frameworks[0][0]}**").callout(kind="info")
     _fit_panel = mo.vstack([_fit_table, _fit_message], gap=0.6)
     _fit_panel
-    return (_fit_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Bridge to Next Chapter
+    ### Bridge to Next Chapter
 
-Tables show exact values; charts show patterns faster.
-We close with visual analysis so trends and relationships are easier to explain.
+    Tables show exact values; charts show patterns faster.
+    We close with visual analysis so trends and relationships are easier to explain.
 
-A key model we will visualize:
+    A key model we will visualize:
 
-$$
-y = \\alpha + \\beta x
-$$
-        """
+    $$
+    y = \\alpha + \\beta x
+    $$
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _section = mo.md("## 10. Marimo Charts Lab")
     _section
-    return (_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _chapter10_guide = mo.md(
         """
-### Chapter 10 Introduction
+    ### Chapter 10 Introduction
 
-> **Key Question:** Which pattern is signal, and which is noise?
+    > **Key Question:** Which pattern is signal, and which is noise?
 
-Charts help humans detect patterns quickly.
-Regression summarizes trend direction with two numbers:
+    *Still in the **presentation tier**, and the last decision of the whole stack: what a chart claims is what people believe.*
 
-$$
-y = \\alpha + \\beta x
-$$
+    Charts help humans detect patterns quickly.
+    Regression summarizes trend direction with two numbers:
 
-- $\\alpha$: baseline level
-- $\\beta$: change in y for one unit change in x
-        """
+    $$
+    y = \\alpha + \\beta x
+    $$
+
+    - $\\alpha$: baseline level
+    - $\\beta$: change in y for one unit change in x
+            """
     ).callout(kind="neutral")
     _chapter10_guide
-    return (_chapter10_guide,)
+    return
 
 
 @app.cell
 def _(mo):
     _explanation = mo.md(
         """
-### Marimo Charts Lab
+    ### Marimo Charts Lab
 
-Use the controls below to generate a dataset and explore it with:
+    Use the controls below to generate a dataset and explore it with:
 
-- **XY scatter + linear regression** (equation updates automatically)  
-- **2D scatter by category** (four colors)  
-- **Two trend lines** to compare upward trajectories
+    - **XY scatter + linear regression** (equation updates automatically)  
+    - **2D scatter by category** (four colors)  
+    - **Two trend lines** to compare two trajectories that move at slightly different rates
 
-We also compute summary statistics to make the patterns quantitative.
-        """
+    We also compute summary statistics to make the patterns quantitative.
+            """
     ).callout(kind="neutral")
     _explanation
-    return (_explanation,)
+    return
 
 
 @app.cell
@@ -4768,7 +4964,7 @@ def _(mo, reg_alpha, reg_beta, reg_x):
     _regression_note = mo.md("Adjust beta and observe how quickly y changes. " "Large |beta| means stronger trend sensitivity.").callout(kind="info")
     _regression_panel = mo.vstack([_regression_table, _regression_note], gap=0.6)
     _regression_panel
-    return (_regression_panel,)
+    return
 
 
 @app.cell
@@ -4856,7 +5052,10 @@ def _(
             _cov = sum((x - _mean_x) * (y - _mean_y) for x, y in zip(xs, ys))
             _slope = _cov / _var_x
             _intercept = _mean_y - _slope * _mean_x
-            return _slope, _intercept
+            # R^2: the share of the up-and-down in y that the line actually explains.
+            _var_y = sum((y - _mean_y) ** 2 for y in ys)
+            _r_squared = (_cov * _cov) / (_var_x * _var_y) if _var_y else 0.0
+            return _slope, _intercept, _r_squared
 
         _scatter = (
             _alt.Chart(_df)
@@ -4874,7 +5073,7 @@ def _(
         _formula = None
         _lr = _linear_regression(_x_vals, _y_vals)
         if _lr:
-            _beta, _alpha = _lr[0], _lr[1]
+            _beta, _alpha, _r2 = _lr
             _x_min = min(_x_vals)
             _x_max = max(_x_vals)
             _reg_df = _pd.DataFrame(
@@ -4885,8 +5084,26 @@ def _(
             )
             _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(x=_alt.X("x:Q"), y=_alt.Y("y:Q"))
             _scatter_layers = _scatter + _reg_line
-            _formula = mo.md(f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n" f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$").callout(
-                kind="info"
+            # A line can always be drawn. R^2 says whether it means anything.
+            if _r2 >= 0.5:
+                _verdict = f"R&sup2; = {_r2:.2f} - the line explains most of the spread. This looks like **signal**."
+                _verdict_kind = "success"
+            elif _r2 >= 0.15:
+                _verdict = f"R&sup2; = {_r2:.2f} - the line explains only part of the spread. **Weak** evidence."
+                _verdict_kind = "info"
+            else:
+                _verdict = f"R&sup2; = {_r2:.2f} - the line explains almost nothing. This is **noise**, even though the equation looks confident."
+                _verdict_kind = "warn"
+            _formula = mo.vstack(
+                [
+                    mo.md(
+                        f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
+                        f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$, "
+                        f"$R^2$ = ${_r2:.3f}$"
+                    ).callout(kind="info"),
+                    mo.md(_verdict).callout(kind=_verdict_kind),
+                ],
+                gap=0.4,
             )
         else:
             _formula = mo.md("Regression could not be computed for this sample.").callout(kind="warn")
@@ -4912,7 +5129,9 @@ def _(
 
         _line_len = min(chart_rows.value, 200)
         _line_rows = []
-        _base_slope = abs(chart_slope.value) * 0.05 + 0.02
+        # Keep the sign: a negative slope must trend downward here too, or this chart
+        # contradicts the scatter above it that uses the same slider.
+        _base_slope = chart_slope.value * 0.05
         _slope_a = _base_slope
         _slope_b = _base_slope + 0.015
         _noise_scale = chart_noise.value * 0.2
@@ -4973,68 +5192,80 @@ def _(
         )
 
     _panel
-    return (_panel,)
+    return
 
 
 @app.cell
 def _(mo):
     _transition = mo.md(
         """
-### Wrap-up
+    ### Wrap-up
 
-The notebook covered one full data-product workflow sequence (ordered implementation stages):
+    We built one data product, one tier at a time. This is the map from the start of the notebook,
+    now filled in:
 
-1. Keep writes correct under concurrency
-2. Choose efficient serialization formats
-3. Use columnar layout and compression for analytics
-4. Query files with DuckDB
-5. Expose data through REST APIs
-6. Validate contracts with Pydantic and FastAPI
-7. Present results in frontends and charts
+    **Data tier — where the bytes rest**
 
-If students remember one thing: correctness first, then performance, then usability.
-        """
+    1. Keep writes correct under concurrency (ch. 1)
+    2. Choose efficient serialization formats (ch. 2)
+    3. Use columnar layout and compression for analytics (ch. 3-4)
+    4. Query files with DuckDB (ch. 5)
+
+    **Logic tier — the rules and the API**
+
+    5. Expose data through REST APIs (ch. 6)
+    6. Validate contracts with Pydantic, then serve them with FastAPI (ch. 7-8)
+
+    **Presentation tier — what people actually see**
+
+    7. Choose a frontend and present results in charts (ch. 9-10)
+
+    Each tier only talks to its neighbour. That is what let us swap Parquet for DuckDB without
+    touching the API, and what would let you swap Streamlit for React without touching either.
+
+    If students remember one thing: correctness first, then performance, then usability.
+            """
     ).callout(kind="neutral")
     _transition
-    return (_transition,)
+    return
 
 
 @app.cell
 def _(mo):
     _links_section = mo.md("## Some Useful Links")
     _links_section
-    return (_links_section,)
+    return
 
 
 @app.cell
 def _(mo):
     _links = mo.md(
         """
-<div class="section-card">
-  <p>Reference material for deeper dives and lookup:</p>
-  <ul>
-    <li>Marimo documentation: <code>https://marimo.io</code></li>
-    <li>Marimo gallery: <code>https://marimo.io/gallery</code></li>
-    <li>DuckDB documentation: <code>https://duckdb.org/docs</code></li>
-    <li>SQLite documentation: <code>https://www.sqlite.org/docs.html</code></li>
-    <li>Apache Parquet: <code>https://parquet.apache.org</code></li>
-    <li>Apache Arrow: <code>https://arrow.apache.org</code></li>
-    <li>Apache Avro: <code>https://avro.apache.org</code></li>
-    <li>FastAPI documentation: <code>https://fastapi.tiangolo.com</code></li>
-    <li>Streamlit documentation: <code>https://docs.streamlit.io</code></li>
-    <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
-    <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
-    <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>
-    <li>HTTP status code reference: <code>https://en.wikipedia.org/wiki/List_of_HTTP_status_codes</code></li>
-    <li>Dash examples: <code>https://dash.plotly.com/examples</code></li>
-    <li>React community/resources: <code>https://react.dev/community</code></li>
-    <li>Flask patterns/tutorial examples: <code>https://flask.palletsprojects.com/en/stable/patterns/</code></li>
-  </ul>
-</div>
-        """
+    <div class="section-card">
+      <p>Reference material for deeper dives and lookup:</p>
+      <ul>
+        <li>Marimo documentation: <code>https://marimo.io</code></li>
+        <li>Marimo gallery: <code>https://marimo.io/gallery</code></li>
+        <li>DuckDB documentation: <code>https://duckdb.org/docs</code></li>
+        <li>SQLite documentation: <code>https://www.sqlite.org/docs.html</code></li>
+        <li>Apache Parquet: <code>https://parquet.apache.org</code></li>
+        <li>Apache Arrow: <code>https://arrow.apache.org</code></li>
+        <li>Apache Avro: <code>https://avro.apache.org</code></li>
+        <li>FastAPI documentation: <code>https://fastapi.tiangolo.com</code></li>
+        <li>Streamlit documentation: <code>https://docs.streamlit.io</code></li>
+        <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
+        <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
+        <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>
+        <li>HTTP status code reference: <code>https://en.wikipedia.org/wiki/List_of_HTTP_status_codes</code></li>
+        <li>Dash examples: <code>https://dash.plotly.com/examples</code></li>
+        <li>React community/resources: <code>https://react.dev/community</code></li>
+        <li>Flask patterns/tutorial examples: <code>https://flask.palletsprojects.com/en/stable/patterns/</code></li>
+      </ul>
+    </div>
+            """
     )
     _links
-    return (_links,)
+    return
 
 
 if __name__ == "__main__":

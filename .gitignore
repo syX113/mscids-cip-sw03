@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# SW03: the working parquet files are rebuilt from data/seed/ every time the API
+# starts, so tracking them only produces a permanently dirty working tree.
+# The seed files stay in git - they are the real source data.
+/data/*.parquet
+!/data/seed/

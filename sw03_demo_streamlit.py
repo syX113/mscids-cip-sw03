@@ -6,7 +6,6 @@ Run with:
 
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
 from typing import Any
 
@@ -15,8 +14,6 @@ import numpy as np
 import pandas as pd
 import requests
 
-# Fallback compatibility for environments with protobuf/streamlit mismatch.
-os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 import streamlit as st
 
 st.set_page_config(
@@ -149,10 +146,6 @@ def inject_theme() -> None:
             padding-bottom: 0.3rem;
           }
 
-          [data-testid="stTabs"] div[data-baseweb="tab-highlight"] {
-            display: none !important;
-          }
-
           [data-testid="stTabs"] button[role="tab"] {
             white-space: nowrap !important;
             width: auto !important;
@@ -183,90 +176,6 @@ def inject_theme() -> None:
             font-size: 0.95rem !important;
           }
 
-          [data-baseweb="input"] > div,
-          [data-baseweb="base-input"] > div,
-          [data-baseweb="textarea"] > div,
-          [data-baseweb="select"] > div {
-            background: #ffffff !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px !important;
-            color: var(--text) !important;
-            transition: border-color 140ms ease, box-shadow 140ms ease;
-          }
-
-          [data-baseweb="input"] input,
-          [data-baseweb="base-input"] input,
-          [data-baseweb="textarea"] textarea,
-          [data-baseweb="select"] input {
-            color: var(--text) !important;
-            background: #ffffff !important;
-            font-weight: 400;
-          }
-
-          [data-baseweb="input"] > div:focus-within,
-          [data-baseweb="base-input"] > div:focus-within,
-          [data-baseweb="textarea"] > div:focus-within,
-          [data-baseweb="select"] > div:focus-within {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 0.16rem rgba(118, 201, 207, 0.25) !important;
-          }
-
-          [data-baseweb="popover"] [role="listbox"] {
-            background: #ffffff !important;
-            border: 1px solid var(--border) !important;
-            color: var(--text) !important;
-          }
-
-          [data-baseweb="popover"] [role="option"],
-          [data-baseweb="popover"] [role="option"] * {
-            color: var(--text) !important;
-            background: #ffffff !important;
-          }
-
-          [data-baseweb="popover"] [aria-selected="true"] {
-            background: #e5f5f6 !important;
-          }
-
-          div[data-baseweb="popover"] [data-baseweb="calendar"] {
-            background: #ffffff !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px !important;
-            box-shadow: 0 6px 18px rgba(61, 113, 123, 0.12) !important;
-          }
-
-          div[data-baseweb="popover"] [data-baseweb="calendar"] * {
-            color: var(--text) !important;
-            fill: var(--text) !important;
-            background: transparent !important;
-            font-weight: 400 !important;
-          }
-
-          div[data-baseweb="popover"] [data-baseweb="calendar"] button {
-            background: #ffffff !important;
-            color: var(--text) !important;
-          }
-
-          div[data-baseweb="popover"] [data-baseweb="calendar"] [aria-selected="true"],
-          div[data-baseweb="popover"] [data-baseweb="calendar"] [aria-pressed="true"] {
-            background: #dff3f4 !important;
-            color: var(--text) !important;
-          }
-
-          div[data-baseweb="popover"] [data-baseweb="calendar"] [aria-label*="keyboard selected"] {
-            background: #eaf7f8 !important;
-          }
-
-          [data-baseweb="tag"] {
-            background: linear-gradient(135deg, #e5f6f7, #effbf4) !important;
-            border: 1px solid #b8dde0 !important;
-            border-radius: 9px !important;
-          }
-
-          [data-baseweb="tag"] * {
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
           [data-testid="stNumberInputContainer"] button {
             background: linear-gradient(145deg, #e4f6f7, #f3faec) !important;
             border-left: 1px solid var(--border) !important;
@@ -275,23 +184,6 @@ def inject_theme() -> None:
 
           [data-testid="stDateInput"] * {
             color: var(--text) !important;
-          }
-
-          [data-testid="stDateInput"] [data-baseweb="input"] > div,
-          [data-testid="stDateInput"] [data-baseweb="base-input"] > div,
-          [data-testid="stDateInput"] input {
-            background: #ffffff !important;
-            color: var(--text) !important;
-            border: 1px solid var(--border) !important;
-          }
-
-          [data-baseweb="slider"] [role="slider"] {
-            background: var(--accent) !important;
-            border-color: var(--accent) !important;
-          }
-
-          [data-baseweb="slider"] [data-testid="stTickBarMin"] {
-            background: var(--accent) !important;
           }
 
           .stButton > button,
@@ -960,10 +852,16 @@ api_base_url = str(st.session_state.api_base_url)
 
 try:
     health = _safe_get(api_base_url, "/health")
-    if health.get("status") == "ok":
-        st.sidebar.success("API is reachable")
+    if not isinstance(health, dict) or health.get("status") != "ok":
+        raise RuntimeError(f"{api_base_url} answered, but it is not the Sales Analysis API.")
+    st.sidebar.success("API is reachable")
 except RuntimeError as exc:
     st.sidebar.error(f"API connection failed: {exc}")
+    st.sidebar.info(
+        "Start the API in another terminal:\n\n"
+        "`uvicorn sw03_demo_api:app --reload`\n\n"
+        "then check the base URL above is `http://127.0.0.1:8000`."
+    )
     st.stop()
 
 
@@ -1439,20 +1337,18 @@ with records_tab:
                 create_sale_country = st.selectbox("Country", country_labels, key="create_sale_country")
                 create_sale_units = st.number_input("Units sold", min_value=1, value=10, step=1)
                 create_sale_rating = st.slider("Customer rating", min_value=1, max_value=5, value=4)
-                create_override_total = st.checkbox("Override total price", value=False, key="create_override_total")
-
                 selected_create_product = product_by_label[create_sale_product]
-                computed_total = round(float(selected_create_product["price"]) * int(create_sale_units), 2)
-                st.caption(f"Computed total from product price: ${computed_total:,.2f}")
-
-                override_total_value = computed_total
-                if create_override_total:
-                    override_total_value = st.number_input(
-                        "Total price",
-                        min_value=0.01,
-                        value=float(computed_total),
-                        step=1.0,
-                    )
+                st.caption(
+                    f"Unit price: ${float(selected_create_product['price']):,.2f}. "
+                    "Leave the override unticked and the API computes units x unit price."
+                )
+                create_override_total = st.checkbox("Override total price", value=False, key="create_override_total")
+                override_total_value = st.number_input(
+                    "Total price (only used when the override is ticked)",
+                    min_value=0.01,
+                    value=float(selected_create_product["price"]),
+                    step=1.0,
+                )
 
                 create_sale_submitted = st.form_submit_button("Create sale")
 
@@ -1478,7 +1374,15 @@ with records_tab:
         if sales_for_records.empty or not products or not countries:
             st.info("No sales available for updating.")
         else:
-            editable_sales = sales_for_records.sort_values("sale_date", ascending=False).copy()
+            EDITABLE_SALES_LIMIT = 200
+            editable_sales = sales_for_records.sort_values(
+                ["sale_date", "sale_id"], ascending=False
+            ).head(EDITABLE_SALES_LIMIT).copy()
+            if len(sales_for_records) > EDITABLE_SALES_LIMIT:
+                st.caption(
+                    f"Showing the {EDITABLE_SALES_LIMIT} most recent sales "
+                    f"of {len(sales_for_records):,}."
+                )
             sales_options = []
             sale_by_label: dict[str, dict[str, Any]] = {}
             for row in editable_sales.to_dict(orient="records"):
@@ -1535,21 +1439,18 @@ with records_tab:
                 )
 
                 selected_upd_product = product_by_label[upd_sale_product]
-                computed_upd_total = round(float(selected_upd_product["price"]) * int(upd_sale_units), 2)
                 st.caption(
                     f"Current stored total: ${float(selected_sale['total_price']):,.2f}. "
-                    f"Computed from selected product price: ${computed_upd_total:,.2f}"
+                    f"Unit price: ${float(selected_upd_product['price']):,.2f}. "
+                    "Leave the override unticked and the API recomputes the total."
                 )
-
-                upd_total_value = computed_upd_total
-                if upd_override_total:
-                    upd_total_value = st.number_input(
-                        "Total price",
-                        min_value=0.01,
-                        value=float(selected_sale["total_price"]),
-                        step=1.0,
-                        key=f"upd_total_value_{int(selected_sale['sale_id'])}",
-                    )
+                upd_total_value = st.number_input(
+                    "Total price (only used when the override is ticked)",
+                    min_value=0.01,
+                    value=float(selected_sale["total_price"]),
+                    step=1.0,
+                    key=f"upd_total_value_{int(selected_sale['sale_id'])}",
+                )
 
                 upd_sale_submitted = st.form_submit_button("Update sale")
 
