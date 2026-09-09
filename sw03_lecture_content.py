@@ -4300,10 +4300,27 @@ def _(mo):
     - **PUT**: update a resource  
     - **DELETE**: remove a resource  
 
+    One more word, because the next mini-lab turns on it. **Idempotent** means pressing it twice
+    changes nothing more than pressing it once. The button to call a lift is idempotent: jab it
+    ten times, one lift comes. A ticket dispenser is not: press it ten times and you are holding
+    ten tickets.
+
+    GET, PUT and DELETE are lift buttons. POST is a ticket dispenser. That is the whole reason a
+    failed POST is frightening to retry and a failed PUT is not: when the network drops before
+    the answer arrives, you cannot tell whether the server acted, and only for POST does guessing
+    wrong cost you a duplicate.
+
+    *The lift button suggests nothing happens on the second press, and something does.* The
+    request really is sent and really is processed. Idempotent means the **end state** is the
+    same, not that the work is skipped.
+
     Core REST constraints (why it scales):
 
-    - **Stateless** — every request carries everything the server needs. The server
-      remembers nothing between your requests, so any copy of it can answer the next one.
+    - **Stateless** — the server keeps no memory of *you* between requests: no notion of where
+      you are in a conversation, what you asked last, or which page you were on. Every request
+      must carry everything needed to answer it. It absolutely does remember your **data**, which
+      is what the whole data tier was for. Session state no, resource state yes. That distinction
+      is what lets a second copy of the server answer your next request without anyone noticing.
     - **Uniform interface** — the same four verbs work on every resource, so once you
       can read one endpoint you can read all of them.
     - **Cacheable** — a response may say "this stays valid for a while", so the answer
@@ -4659,6 +4676,21 @@ def _(mo):
     - $gpa$: grade-point average score constrained to the valid range
 
     Try editing the JSON below to trigger validation errors and see the message structure.
+
+    **Then run the last two presets, which are the point of this chapter.**
+
+    `garbage_that_passes` sends a negative id, a name of three spaces, a gpa of 0.0 and
+    `"definitely not an email"`. Every field is the declared type and inside its declared range,
+    so pydantic **accepts all of it**.
+
+    `silently_coerced` sends `"42"` and `"3.5"` as text. Pydantic does not reject them; it
+    converts them and hands you numbers.
+
+    So validation checks **shape**, not **truth**. It is a bouncer with a list of rules, not a
+    person who knows whether the answer makes sense. A negative id and a blank name are shaped
+    correctly and are still garbage, and the only way to stop them is to write the rule down:
+    `id: int = Field(gt=0)`, `name: str = Field(min_length=1)`, `email: EmailStr`. Validation is
+    exactly as good as the rules you thought to write.
             """
     ).callout(kind="neutral")
     _explanation
@@ -4668,7 +4700,14 @@ def _(mo):
 @app.cell
 def _(mo):
     payload_case = mo.ui.dropdown(
-        options=["valid", "missing_email", "gpa_out_of_range", "wrong_type"],
+        options=[
+            "valid",
+            "missing_email",
+            "gpa_out_of_range",
+            "wrong_type",
+            "garbage_that_passes",
+            "silently_coerced",
+        ],
         value="valid",
         label="Preset payload scenario",
     )
@@ -4695,6 +4734,21 @@ def _(mo):
             "name": "Sam",
             "gpa": "high",
             "email": "sam@example.com",
+        },
+        # Every field is the declared type and inside its declared range.
+        # Every field is also nonsense. Pydantic accepts all of it.
+        "garbage_that_passes": {
+            "id": -7,
+            "name": "   ",
+            "gpa": 0.0,
+            "email": "definitely not an email",
+        },
+        # Nothing here is the declared type, and nothing is rejected either.
+        "silently_coerced": {
+            "id": "42",
+            "name": "Ada",
+            "gpa": "3.5",
+            "email": "ada@example.com",
         },
     }
     _model_code = mo.md(
@@ -4874,6 +4928,16 @@ def _(mo):
 
     FastAPI uses the type hints from chapter 7 plus Pydantic to build validated endpoints.
     Write the model once and the documentation comes out for free:
+
+    Most restaurants write the menu by hand. Then the kitchen changes a recipe and the menu
+    quietly starts lying, and every customer who orders from it is disappointed. FastAPI does not
+    let that happen, because **the menu is printed from the recipes**. You wrote
+    `customer_rating: int = Field(ge=1, le=5)` once, in the model. That one line becomes the
+    machine-readable menu, the buttons a human clicks, and the rule the server enforces. Change
+    the 5 to a 10 and all three change together, because there is only one 5.
+
+    *What the menu cannot tell you* is whether the food is good. It describes shapes, not
+    behaviour: nothing in it says that `total_price` is recomputed when you change `units_sold`.
 
     - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint
       an API has, in a way other programs can read. FastAPI writes it for you.
@@ -5198,6 +5262,108 @@ def _(
                         """
                 ).callout(kind="success" if _status < 400 else "danger")
 
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_two_analysts = mo.ui.button(label="Run the two-analyst test", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Two People, One Product, Both Click Save"),
+            mo.md(
+                """
+    **Predict first, then run it.**
+
+    Anna and Ben both open product 1 in a browser tab, at the same starting price. Anna applies a
+    10% raise. Ben adds a 20 franc surcharge. Both click save. Both see "saved", and both get
+    `200 OK` from the API you built.
+
+    **What is the price afterwards?**
+                """
+            ).callout(kind="info"),
+            run_two_analysts,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_two_analysts,)
+
+
+@app.cell
+def _(fastapi_base_url, json, mo, run_two_analysts, url_error, url_request):
+    if run_two_analysts.value == 0:
+        _output = mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral")
+    else:
+        _base = fastapi_base_url.value.rstrip("/")
+
+        def _read_price():
+            with url_request.urlopen(f"{_base}/products/1", timeout=10) as _r:
+                return float(json.loads(_r.read())["price"])
+
+        def _save_price(_new_price):
+            _req = url_request.Request(
+                f"{_base}/products/1",
+                data=json.dumps({"price": _new_price}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="PUT",
+            )
+            with url_request.urlopen(_req, timeout=10) as _r:
+                return _r.status, float(json.loads(_r.read())["price"])
+
+        try:
+            _start = _read_price()
+            # Both analysts open the page. Two ordinary GETs, nothing concurrent.
+            _anna_sees = _read_price()
+            _ben_sees = _read_price()
+            # Both save, strictly one after the other.
+            _anna_status, _after_anna = _save_price(round(_anna_sees * 1.10, 2))
+            _ben_status, _after_ben = _save_price(round(_ben_sees + 20, 2))
+            _final = _read_price()
+            _correct = round(round(_start * 1.10, 2) + 20, 2)
+
+            _steps = [
+                {"step": "1. price before anyone touches it", "value": _start, "server said": "-"},
+                {"step": "2. Anna opens the product", "value": _anna_sees, "server said": "200 OK"},
+                {"step": "3. Ben opens the same product", "value": _ben_sees, "server said": "200 OK"},
+                {"step": "4. Anna saves a 10% raise", "value": _after_anna, "server said": f"{_anna_status} OK"},
+                {"step": "5. Ben saves a 20 surcharge", "value": _after_ben, "server said": f"{_ben_status} OK"},
+                {"step": "6. price afterwards", "value": _final, "server said": "-"},
+                {"step": "what it should have been", "value": _correct, "server said": "-"},
+            ]
+            _lost = round(_correct - _final, 2)
+            _note = mo.md(
+                f"""
+    **Anna's raise is gone. {_lost:.2f} of it, and nobody was told.**
+
+    Look at what did *not* happen. No error. No warning. No conflict. Two `200 OK` responses, two
+    users who saw "saved", and a price that is simply wrong.
+
+    Now look back at **chapter 1**. This is the same lost update as the shared counter, the one we
+    watched disappear from a text file, and it survived everything we have built since. It is not
+    a threading accident either: these six requests ran strictly one after another, so this fails
+    identically every single time you click the button. The bug is structural, not a timing fluke.
+
+    Why did the database not save us? Because *there is no transaction around what actually
+    happened here*. The read and the write were two separate HTTP requests, minutes apart in real
+    life, and the API has no idea they were meant to belong together. Ben's `PUT` carried a price
+    computed from a page he opened before Anna saved. Chapter 1's lesson holds exactly as stated:
+    a transaction protects the steps you put inside it, and nothing else.
+
+    **The fix is not more locking.** It is to stop sending *the answer* and start sending *the
+    change* (`{{"raise_percent": 10}}`), or to make the client say which version it read and let
+    the server refuse if that version is stale. This is the one thing the whole day has been
+    circling: correctness is a property of the design, not of the tools.
+                """
+            ).callout(kind="danger")
+            _output = mo.vstack(
+                [mo.ui.table(_steps, label="Six requests, strictly in order"), _note], gap=0.6
+            )
+        except url_error.URLError as _exc:
+            _output = mo.md(
+                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
+            ).callout(kind="danger")
     _output
     return
 
