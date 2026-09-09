@@ -5268,6 +5268,235 @@ def _(
 
 @app.cell
 def _(mo):
+    run_twice = mo.ui.button(label="Press every verb twice", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Press It Twice"),
+            mo.md(
+                "The lift button or the ticket dispenser? Let us stop asserting it. Each verb is "
+                "sent to the running API **twice in a row**, against one sale, and we look at what "
+                "changed. Needs the API from chapter 8."
+            ).callout(kind="info"),
+            run_twice,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_twice,)
+
+
+@app.cell
+def _(fastapi_base_url, json, mo, run_twice, url_error, url_request):
+    if run_twice.value == 0:
+        _output = mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral")
+    else:
+        _base = fastapi_base_url.value.rstrip("/")
+
+        def _call(_method, _path, _body=None):
+            _data = json.dumps(_body).encode("utf-8") if _body is not None else None
+            _req = url_request.Request(
+                f"{_base}{_path}", data=_data, headers={"Content-Type": "application/json"}, method=_method
+            )
+            try:
+                with url_request.urlopen(_req, timeout=10) as _r:
+                    return _r.status, (json.loads(_r.read()) if _r.status != 204 else None)
+            except url_error.HTTPError as _err:
+                return _err.code, None
+
+        _sale = {
+            "sale_date": "2026-03-01",
+            "product_id": 1,
+            "country_id": 3,
+            "units_sold": 10,
+            "customer_rating": 5,
+        }
+
+        try:
+            def _sales_count():
+                return len(_call("GET", "/sales?limit=20000")[1])
+
+            _before = _sales_count()
+            _post1, _first = _call("POST", "/sales", _sale)
+            _post2, _second = _call("POST", "/sales", _sale)
+            _after = _sales_count()
+            _sale_id = _first["sale_id"]
+
+            _put1, _ = _call("PUT", f"/sales/{_sale_id}", {"units_sold": 25})
+            _put2, _ = _call("PUT", f"/sales/{_sale_id}", {"units_sold": 25})
+            _units = _call("GET", f"/sales/{_sale_id}")[1]["units_sold"]
+
+            _get1, _ = _call("GET", f"/sales/{_sale_id}")
+            _get2, _ = _call("GET", f"/sales/{_sale_id}")
+
+            _del1, _ = _call("DELETE", f"/sales/{_sale_id}")
+            _del2, _ = _call("DELETE", f"/sales/{_sale_id}")
+
+            _call("DELETE", f"/sales/{_second['sale_id']}")  # tidy up the duplicate
+
+            _rows = [
+                {
+                    "verb": "GET",
+                    "first press": _get1,
+                    "second press": _get2,
+                    "what changed in the world": "nothing",
+                    "lift button?": "yes",
+                },
+                {
+                    "verb": "POST",
+                    "first press": _post1,
+                    "second press": _post2,
+                    "what changed in the world": f"sales went {_before} to {_after}: a SECOND sale was booked",
+                    "lift button?": "NO",
+                },
+                {
+                    "verb": "PUT",
+                    "first press": _put1,
+                    "second press": _put2,
+                    "what changed in the world": f"units_sold is {_units} either way",
+                    "lift button?": "yes",
+                },
+                {
+                    "verb": "DELETE",
+                    "first press": _del1,
+                    "second press": _del2,
+                    "what changed in the world": "the sale is gone, both times",
+                    "lift button?": "yes",
+                },
+            ]
+            _note = mo.md(
+                """
+    **GET, PUT and DELETE are safe to press twice. The world ends up the same.** POST is not: the
+    second press booked a second sale. That is exactly why a checkout page begs you not to hit
+    refresh, and why a payment that times out is frightening in a way a profile edit is not.
+
+    **Now the trap.** The second DELETE answered `404`, not `204`. That looks like a
+    contradiction, and it is not. Idempotent is a promise about the **effect on the world**, not
+    about the status code. The sale is equally gone after one press or five; only the answer to
+    "did *you* delete it" changed.
+
+    One more honest note: idempotence is a promise the API author makes, not something HTTP
+    enforces. A carelessly written `PUT` can behave exactly like `POST`. It holds here because
+    this server updates a row you named by id, not because the word PUT is magic.
+                """
+            ).callout(kind="info")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="Each verb, sent twice"), _note], gap=0.6
+            )
+        except url_error.URLError as _exc:
+            _output = mo.md(
+                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
+            ).callout(kind="danger")
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_follow = mo.ui.button(label="Follow the sale into the file", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Where Does a POST Actually Go?"),
+            mo.md(
+                "We count the rows in `data/sales.parquet`, POST one sale through the API, count "
+                "again, and then put the row that landed in the file next to the JSON that came "
+                "back. Needs the API running."
+            ).callout(kind="info"),
+            run_follow,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_follow,)
+
+
+@app.cell
+def _(Path, fastapi_base_url, json, mo, optional_import, run_follow, url_error, url_request):
+    if run_follow.value == 0:
+        _output = mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral")
+    else:
+        _duckdb = optional_import("duckdb")
+        _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
+        if _duckdb is None or not _sales_file.exists():
+            _output = mo.md("Needs `duckdb` and a running API (which creates `data/sales.parquet`).").callout(kind="warn")
+        else:
+            _base = fastapi_base_url.value.rstrip("/")
+
+            def _call(_method, _path, _body=None):
+                _data = json.dumps(_body).encode("utf-8") if _body is not None else None
+                _req = url_request.Request(
+                    f"{_base}{_path}", data=_data, headers={"Content-Type": "application/json"}, method=_method
+                )
+                with url_request.urlopen(_req, timeout=10) as _r:
+                    return json.loads(_r.read()) if _r.status != 204 else None
+
+            try:
+                _con = _duckdb.connect()
+                _url = _sales_file.as_posix()
+                _before = _con.execute(f"SELECT count(*) FROM '{_url}'").fetchone()[0]
+                _created = _call(
+                    "POST",
+                    "/sales",
+                    {
+                        "sale_date": "2026-03-01",
+                        "product_id": 1,
+                        "country_id": 3,
+                        "units_sold": 10,
+                        "customer_rating": 5,
+                    },
+                )
+                _after = _con.execute(f"SELECT count(*) FROM '{_url}'").fetchone()[0]
+                _stored = _con.execute(
+                    f"SELECT * FROM '{_url}' WHERE sale_id = {int(_created['sale_id'])}"
+                ).df()
+                _file_cols = list(_stored.columns)
+                _call("DELETE", f"/sales/{int(_created['sale_id'])}")  # leave the file as we found it
+
+                _rows = [
+                    {
+                        "": "what the FILE keeps",
+                        "fields": len(_file_cols),
+                        "names of things": "none, only ids",
+                        "shape": ", ".join(_file_cols),
+                    },
+                    {
+                        "": "what the API RETURNS",
+                        "fields": len(_created),
+                        "names of things": "product, category, country, region",
+                        "shape": ", ".join(list(_created)),
+                    },
+                ]
+                _note = mo.md(
+                    f"""
+    **The file grew by one: {_before:,} rows to {_after:,}.**
+
+    The logic tier did not invent a database. It wrote to the same Parquet file you compressed in
+    chapter 4 and queried in chapter 5. Your POST travelled all the way down.
+
+    Now compare the two shapes, because this is what a tier is *for*. The **file** keeps
+    {len(_file_cols)} columns and stores `product_id 1`, `country_id 3`: ids, no names, every fact
+    written exactly once. That is the normalisation the data tier cares about. The **response**
+    has {len(_created)} fields, with "Edge Sensor X1", "Germany" and "Europe" spelled out. The
+    logic tier did the joining, so the chart in chapter 10 does not have to.
+
+    **One honest callback.** We just read that file while a server might have been writing it.
+    Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant could
+    catch it half-written. That is precisely the isolation problem from chapter 1, and it is the
+    reason a real system puts a database at the bottom of the data tier rather than a file.
+                    """
+                ).callout(kind="info")
+                _output = mo.vstack(
+                    [mo.ui.table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6
+                )
+            except url_error.URLError as _exc:
+                _output = mo.md(
+                    f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
+                ).callout(kind="danger")
+    _output
+    return
+
+
+@app.cell
+def _(mo):
     run_two_analysts = mo.ui.button(label="Run the two-analyst test", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     _panel = mo.vstack(
         [
