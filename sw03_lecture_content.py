@@ -49,6 +49,15 @@ def _():
 
 
 @app.cell
+def _(Path, mo):
+    # The repo ships 3360 real sales rows. Until now every chapter invented random
+    # floats instead; several labs below read this file.
+    SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
+    SALES_SEED = SEED_DIR / "sales.parquet"
+    return SALES_SEED, SEED_DIR
+
+
+@app.cell
 def _(importlib):
     def optional_import(module_name):
         """Import a module if available; return None otherwise."""
@@ -840,66 +849,47 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    lu_workers = mo.ui.slider(1, 20, value=5, label="Workers (concurrent updaters)")
-    lu_iterations = mo.ui.slider(10, 2000, step=10, value=400, label="Iterations per worker")
-    lu_observed = mo.ui.number(value=1800, label="Observed final counter (actual result)")
-    _lu_note = mo.md(
+    _lock_metaphor = mo.md(
         """
-    `Expected counter = workers x iterations per worker`
+### What a Lock Actually Is
 
-    Enter the **actual value** observed after a run.  
-    If observed < expected, those are lost updates.
-            """
-    ).callout(kind="info")
-    _panel = mo.vstack(
-        [
-            mo.md("### Mini-lab: Lost Update Sanity Check"),
-            mo.hstack([lu_workers, lu_iterations], widths="equal"),
-            lu_observed,
-            _lu_note,
-        ],
-        gap=0.6,
+Four flatmates share one bathroom. **There is no lock on the door.** Instead a single key hangs
+on a hook in the hall, and the house rule is: do not go in unless you are holding the key.
+If everyone follows the rule, nobody is ever walked in on.
+
+Notice what is doing the work. Not the door, which has no lock and never did. **The agreement**
+is doing the work.
+
+That is exactly what an operating-system file lock is. The OS hands out one key per file and
+makes everyone else wait at the hook. It does not touch the door. Any program that opens the file
+without reaching for the key walks straight in and overwrites whatever it likes.
+
+Three things the picture gets right, and one it does not:
+
+- The OS empties the pockets of anyone who leaves the building, so a program that crashes while
+  holding the key does **not** wedge the file forever.
+- There is a second kind of key that many people may hold at once, for looking but not touching.
+  The code below asks for the exclusive one, `LOCK_EX`.
+- The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
+  which is why this technique stops working across a network filesystem.
+- **Where it breaks:** the flatmate rule is only as good as the flatmates. A database does not
+  rely on an agreement - it refuses to hand out the data in the first place. That is the
+  difference you are about to measure.
+        """
     ).callout(kind="neutral")
-    _panel
-    return lu_iterations, lu_observed, lu_workers
-
-
-@app.cell
-def _(lu_iterations, lu_observed, lu_workers, mo):
-    _expected_value = lu_workers.value * lu_iterations.value
-    _observed_value = int(lu_observed.value or 0)
-    _observed_value = max(0, min(_observed_value, _expected_value))
-    _lost_value = _expected_value - _observed_value
-    _lost_rate = (_lost_value / _expected_value) if _expected_value else 0.0
-    _summary = mo.ui.table(
-        [
-            {"metric": "expected", "value": _expected_value},
-            {"metric": "observed", "value": _observed_value},
-            {"metric": "lost updates", "value": _lost_value},
-            {"metric": "lost update rate (E-A)/E", "value": round(_lost_rate, 3)},
-            {"metric": "lost update rate (%)", "value": round(_lost_rate * 100, 1)},
-        ],
-        label="Consistency check",
-    )
-    _interpretation = mo.md(
-        "Some updates disappeared: the writes are racing. Add locking or transactional updates."
-        if _lost_value > 0
-        else "No updates were lost. Either the workers never overlapped, or something is serialising them."
-    ).callout(kind="info" if _lost_value > 0 else "success")
-    _panel = mo.vstack([_summary, _interpretation], gap=0.6)
-    _panel
+    _lock_metaphor
     return
 
 
 @app.cell
 def _(mo):
     strategies = mo.ui.multiselect(
-        options=["no_lock", "thread_lock", "file_lock", "sqlite"],
-        value=["no_lock", "file_lock", "sqlite"],
+        options=["no_lock", "thread_lock", "file_lock", "sqlite_naive", "sqlite"],
+        value=["no_lock", "file_lock", "sqlite_naive", "sqlite"],
         label="Strategies to run",
     )
     workers = mo.ui.slider(2, 8, value=4, label="Concurrent workers")
-    iterations = mo.ui.slider(50, 600, step=50, value=300, label="Increments per worker")
+    iterations = mo.ui.slider(20, 600, step=20, value=60, label="Increments per worker")
     jitter = mo.ui.slider(0, 5, value=1, step=1, label="Artificial jitter (ms) per update")
     run_race = mo.ui.button(label="Run counter experiment", value=0, on_click=lambda clicks: clicks + 1, kind="success")
     _term_note = mo.md(
@@ -907,8 +897,15 @@ def _(mo):
     **Strategy notes**
     - `no_lock`: plain file writes, race conditions likely (overlapping unsynchronized updates)
     - `thread_lock`: Python lock in one process
-    - `file_lock`: OS file lock around write
-    - `sqlite`: transactional database updates (ACID behavior)
+    - `file_lock`: OS file lock around write, the key on the hook from the section above
+    - `sqlite_naive`: a real database, used the way most people first use one. Read the value,
+      add one in Python, write it back.
+    - `sqlite`: the same database, one statement, `UPDATE counter SET value = value + 1`,
+      inside a transaction
+
+    **Compare the last two rows.** Both are SQLite. The difference is not the database, it is
+    whether the read and the write were locked together as one step. A transaction protects the
+    steps you actually put inside it, and nothing else.
 
     **Jitter (ms)** adds delay to each update, which increases overlap between workers.
             """
@@ -992,6 +989,34 @@ def _(
         duration = time.perf_counter() - start
         final_value = int(path.read_text().strip() or "0")
         return final_value, duration, file_lock_supported
+
+    def _run_sqlite_naive_counter(db_path, iterations, workers):
+        """The way most people first use a database: read it, add one in Python, write it back."""
+        con = sqlite3.connect(db_path)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("CREATE TABLE counter (value INTEGER NOT NULL)")
+        con.execute("INSERT INTO counter VALUES (0)")
+        con.commit()
+        con.close()
+
+        def worker():
+            conn = sqlite3.connect(db_path, timeout=5, isolation_level=None)
+            for _ in range(iterations):
+                current = conn.execute("SELECT value FROM counter").fetchone()[0]
+                conn.execute("UPDATE counter SET value = ?", (current + 1,))
+            conn.close()
+
+        threads = [threading.Thread(target=worker) for _ in range(workers)]
+        start = time.perf_counter()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        duration = time.perf_counter() - start
+        conn = sqlite3.connect(db_path)
+        final_value = conn.execute("SELECT value FROM counter").fetchone()[0]
+        conn.close()
+        return final_value, duration
 
     def _run_sqlite_counter(db_path, iterations, workers):
         """Increment a counter inside SQLite with transactions."""
@@ -1093,6 +1118,22 @@ def _(
                     }
                 )
 
+            if "sqlite_naive" in strategies.value:
+                value, _duration = _run_sqlite_naive_counter(
+                    str(_tmp_path / "counter_naive.db"),
+                    iterations.value,
+                    workers.value,
+                )
+                race_rows.append(
+                    {
+                        "strategy": "sqlite (read, +1 in Python, write)",
+                        "expected": _expected_counter,
+                        "actual": value,
+                        "lost updates": _expected_counter - value,
+                        "duration (ms)": round(_duration * 1000, 2),
+                    }
+                )
+
             if "sqlite" in strategies.value:
                 value, _duration = _run_sqlite_counter(
                     str(_tmp_path / "counter.db"),
@@ -1115,8 +1156,14 @@ def _(
     **How to read the table**
 
     - **No lock**: often lowest wall-clock runtime, but can be incorrect (lost updates).
-    - **File lock**: usually correct, but can be higher latency (serializes access).
-    - **SQLite**: transactional and usually correct; runtime can remain competitive.
+    - **File lock**: correct here, but at a cost, because writers queue and latency rises.
+    - **SQLite, read-modify-write in Python**: a real database, and it still loses updates.
+      Watch how close the final value lands to *one* worker's total, as if the others never ran.
+    - **SQLite, one statement in a transaction**: correct, because the read and the write are a
+      single indivisible step no other writer can interleave with.
+
+    The lost-update counts for the unlocked rows will not repeat between runs. That is the lesson,
+    not a flaw: a race has no fixed answer.
                 """
         ).callout(kind="info")
 
@@ -1591,6 +1638,26 @@ def _(mo):
     Deserialization rebuilds objects from bytes. The format choice affects speed, file size,
     interoperability, type fidelity, schema evolution, and safety.
 
+    **First, one word we will use all day.** A **schema** is the blank form. Not the answers,
+    the printed boxes: what fields exist, in what order, and what kind of thing goes in each one.
+    `sale_id` a whole number, `sale_date` a date, `total_price` a decimal.
+
+    JSON is longhand on blank paper. Anyone can read it, and nothing stops you writing
+    "about forty" in the price box. Avro is a **pre-printed form**: compact, because the labels
+    live on the form instead of being repeated on every sheet, but you must keep the form to read
+    the sheets back.
+
+    **Schema evolution** is what happens when the office adds a box to the form. Do last year's
+    sheets, printed on the old form, still get read? We will test exactly that below.
+
+    *Where the picture breaks:* a paper form is inseparable from its answers, which is true for
+    Avro and false for JSON and CSV. There the form exists only in the mind of whoever reads the
+    file, which is why two teams can disagree about what the same sheet means. That is the reason
+    chapter 7 exists.
+
+    You will meet this blank form three more times today: DuckDB **guesses** it in chapter 5,
+    Pydantic **enforces** it in chapter 7, FastAPI **publishes** it in chapter 8.
+
     **Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
     **What to compare:** speed, size, interop, **type fidelity**, schema evolution, safety.
 
@@ -1608,10 +1675,19 @@ def _(mo):
     \\text{Latency} = \\text{write time} + \\text{read time}
     $$
 
-    Where:
-    - $\\text{bytes written}$: serialized output size on disk  
-    - $\\text{write time}$: serialization time  
-    - $\\text{Latency}$: total round-trip time (write + read)
+    Two words that sound alike and are not.
+
+    **Latency** is how long *one* thing takes, end to end. Post a letter to Vienna: two days.
+
+    **Throughput** is how much gets through per unit of time. The van leaving the depot each
+    night carries 40,000 letters.
+
+    They trade against each other, and this is the part people get wrong. Waiting to fill the van
+    raises throughput and *hurts* the latency of the first letter that boarded it. A container
+    ship has appalling latency and colossal throughput. When someone says a system is fast, ask
+    which one they mean. In the benchmark below we measure both, and they do not rank the same way.
+
+    *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
 
     **Format quick reference:**  
     - **JSON/CSV**: human‑readable, row‑oriented  
@@ -1975,47 +2051,152 @@ def _(
 
 
 @app.cell
-def _(json, mo, pickle):
-    _safe_obj = {"coords": (3, 4), "active": True, "count": 7}
-    _unsafe_obj = {"tags": {"blue", "green"}}
+def _(SALES_SEED, mo, optional_import, tempfile, Path):
+    _pd = optional_import("pandas")
+    if _pd is None or not SALES_SEED.exists():
+        _panel = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
+    else:
+        _src = _pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500).copy()
+        _src["sale_date"] = _pd.to_datetime(_src["sale_date"])
+        # Store codes are the classic case: they look like numbers and are not.
+        _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
 
-    _json_roundtrip = json.loads(json.dumps(_safe_obj))
-    _pickle_roundtrip = pickle.loads(pickle.dumps(_safe_obj))
+        with tempfile.TemporaryDirectory() as _td:
+            _csv_p = Path(_td) / "sales.csv"
+            _pq_p = Path(_td) / "sales.parquet"
+            _src.to_csv(_csv_p, index=False)
+            _src.to_parquet(_pq_p, index=False)
+            _from_csv = _pd.read_csv(_csv_p)
+            _from_pq = _pd.read_parquet(_pq_p)
 
-    _rows = [
-        {
-            "case": "Tuple in JSON",
-            "original_type": type(_safe_obj["coords"]).__name__,
-            "after_roundtrip": type(_json_roundtrip["coords"]).__name__,
-            "note": "tuple becomes list (type loss)",
-        },
-        {
-            "case": "Tuple in Pickle",
-            "original_type": type(_safe_obj["coords"]).__name__,
-            "after_roundtrip": type(_pickle_roundtrip["coords"]).__name__,
-            "note": "tuple preserved",
-        },
-    ]
+        _dtypes = [
+            {
+                "column": _c,
+                "wrote": str(_src[_c].dtype),
+                "back from CSV": str(_from_csv[_c].dtype),
+                "back from Parquet": str(_from_pq[_c].dtype),
+            }
+            for _c in _src.columns
+        ]
 
-    try:
-        json.dumps(_unsafe_obj)
-        _error_note = "no error"
-    except TypeError as exc:
-        _error_note = f"TypeError: {exc}"
+        def _span(_df):
+            try:
+                return str(_df["sale_date"].max() - _df["sale_date"].min())
+            except Exception as _exc:
+                return f"{type(_exc).__name__}: {_exc}"
 
-    _rows.append(
-        {
-            "case": "Set in JSON",
-            "original_type": type(_unsafe_obj["tags"]).__name__,
-            "after_roundtrip": "n/a",
-            "note": _error_note,
+        _answers = [
+            {
+                "question": "How long did sales run?",
+                "via Parquet": _span(_from_pq),
+                "via CSV": _span(_from_csv),
+            },
+            {
+                "question": "First three store codes",
+                "via Parquet": str(list(_from_pq["store_code"].head(3))),
+                "via CSV": str(list(_from_csv["store_code"].head(3))),
+            },
+        ]
+
+        _note = mo.md(
+            """
+    Open both files in a text editor and the date looks identical in each: `2024-03-07`.
+    The bytes did not lose the date. The file lost **the note saying it was a date**, and that
+    note is what your analysis was standing on.
+
+    The first failure shouted. The second did not: the store codes came back as `7, 10, 42`
+    with no error, no warning and nothing in the log. That is the one that ends up in a report.
+            """
+        ).callout(kind="warn")
+
+        _panel = mo.vstack(
+            [
+                mo.ui.table(_dtypes, label="Same 500 rows, written two ways and read back"),
+                mo.ui.table(_answers, label="Now ask the data a question"),
+                _note,
+            ],
+            gap=0.6,
+        )
+    _panel
+    return
+
+
+@app.cell
+def _(csv, io, mo, optional_import):
+    _fastavro = optional_import("fastavro")
+    if _fastavro is None:
+        _panel = mo.md("Needs `fastavro`.").callout(kind="warn")
+    else:
+        # It is next March. Your team adds a `channel` field to the sales event.
+        # Two years of old files sit on disk, and one old program nobody redeployed
+        # is still running in production. What happens?
+        _v1 = {
+            "type": "record",
+            "name": "Sale",
+            "fields": [{"name": "sale_id", "type": "int"}, {"name": "total_price", "type": "double"}],
         }
-    )
+        _v2 = {
+            "type": "record",
+            "name": "Sale",
+            "fields": [
+                {"name": "sale_id", "type": "int"},
+                {"name": "total_price", "type": "double"},
+                {"name": "channel", "type": "string", "default": "in-store"},
+            ],
+        }
 
-    _table = mo.ui.table(_rows, label="Type fidelity: JSON vs Pickle")
-    _note = mo.md("JSON is interoperable but can lose types; Pickle preserves Python types but is unsafe for untrusted data.").callout(kind="info")
+        def _avro_bytes(_schema, _rows):
+            _buf = io.BytesIO()
+            _fastavro.writer(_buf, _schema, _rows)
+            return _buf.getvalue()
 
-    _panel = mo.vstack([_table, _note], gap=0.6)
+        _old_file = _avro_bytes(_v1, [{"sale_id": 1, "total_price": 4034.91}])
+        _new_file = _avro_bytes(_v2, [{"sale_id": 3, "total_price": 99.0, "channel": "online"}])
+
+        _old_by_new = list(_fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
+        _new_by_old = list(_fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
+
+        _csv_buf = io.StringIO()
+        _writer = csv.DictWriter(_csv_buf, fieldnames=["sale_id", "total_price"])
+        _writer.writeheader()
+        _writer.writerow({"sale_id": 1, "total_price": 4034.91})
+        _csv_row = next(csv.DictReader(io.StringIO(_csv_buf.getvalue())))
+        try:
+            _csv_row["channel"]
+            _csv_result = "no error"
+        except KeyError as _exc:
+            _csv_result = f"KeyError: {_exc}"
+
+        _rows = [
+            {
+                "situation": "Last year's Avro file, read by this year's code",
+                "result": str(_old_by_new[0]),
+                "verdict": "works: the reader supplied the default the writer never wrote",
+            },
+            {
+                "situation": "This year's Avro file, read by the old program",
+                "result": str(_new_by_old[0]),
+                "verdict": "works: the extra field is skipped, nothing crashes",
+            },
+            {
+                "situation": "Last year's CSV file, read by this year's code",
+                "result": _csv_result,
+                "verdict": "breaks: the only fix is changing every program that reads it",
+            },
+        ]
+        _note = mo.md(
+            "The packing list on the box is not decoration. It is what lets a file written last "
+            "year and a program written this morning still agree. CSV has no packing list, so "
+            "the agreement lives only in someone's memory."
+        ).callout(kind="info")
+        _panel = mo.vstack(
+            [
+                mo.md("### Schema Evolution: the office adds a box to the form"),
+                mo.ui.table(_rows, label="Same change, three situations"),
+                _note,
+            ],
+            gap=0.6,
+        )
     _panel
     return
 
