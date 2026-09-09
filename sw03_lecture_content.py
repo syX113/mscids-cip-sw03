@@ -3840,31 +3840,51 @@ def _(
 
             _query = "SELECT COUNT(*), AVG(value) FROM events " f"WHERE category = 'C' AND value > {idx_threshold.value}"
 
-            _plan_scan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
-            _start = time.perf_counter()
-            _scan_result = _con.execute(_query).fetchone()
-            _scan_time = time.perf_counter() - _start
+            def _time_query():
+                _best = None
+                for _ in range(5):
+                    _t0 = time.perf_counter()
+                    _res = _con.execute(_query).fetchone()
+                    _el = time.perf_counter() - _t0
+                    _best = _el if _best is None else min(_best, _el)
+                return _res, _best
 
-            _con.execute("CREATE INDEX idx_cat_val ON events(category, value)")
-            _plan_idx = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
-            _start = time.perf_counter()
-            _idx_result = _con.execute(_query).fetchone()
-            _idx_time = time.perf_counter() - _start
+            _states = []
+            _plan_scan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
+            _scan_result, _scan_time = _time_query()
+            _states.append(("no index", 0.0, _scan_time, _plan_scan[0], _scan_result))
+
+            for _name, _sql in (
+                ("index on (category)", "CREATE INDEX idx_cat ON events(category)"),
+                ("index on (category, value)", "CREATE INDEX idx_cat_val ON events(category, value)"),
+            ):
+                _t0 = time.perf_counter()
+                _con.execute(_sql)
+                _con.commit()
+                _build = time.perf_counter() - _t0
+                _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
+                _res, _el = _time_query()
+                _states.append((_name, _build, _el, _plan[0], _res))
+
+            _idx_time = _states[-1][2]
+            _idx_result = _states[-1][4]
             _con.close()
 
         _timing_table = mo.ui.table(
             [
-                {"mode": "full scan", "query_ms": round(_scan_time * 1000, 3)},
-                {"mode": "indexed", "query_ms": round(_idx_time * 1000, 3)},
+                {
+                    "state": _name,
+                    "build time (ms)": round(_build * 1000, 1),
+                    "query time (ms)": round(_el * 1000, 3),
+                    "faster than no index": "-" if _build == 0 else f"{_scan_time / _el:.1f}x",
+                }
+                for _name, _build, _el, _plan, _res in _states
             ],
-            label="Query timings",
+            label="What the index costs, and what it buys",
         )
 
         _plan_table = mo.ui.table(
-            [
-                {"plan": "scan", "detail": str(_plan_scan[0])},
-                {"plan": "index", "detail": str(_plan_idx[0])},
-            ],
+            [{"state": _name, "SQLite plan": str(_plan[-1])} for _name, _build, _el, _plan, _res in _states],
             label="Query plan (SQLite)",
         )
 
@@ -3880,12 +3900,29 @@ def _(
             label="Query results",
         )
 
-        _speedup = (_scan_time / _idx_time) if _idx_time else None
-        _speedup_note = mo.md(f"Observed speedup: **{_speedup:.2f}x**" if _speedup else "Observed speedup: **n/a**").callout(kind="info")
-        _note = mo.md("Look for the plan to switch from **SCAN** to **SEARCH** when the index is present.").callout(kind="info")
+        _note = mo.md(
+            """
+    **An index is not a speed setting.** It is a second copy of some of your columns, and three
+    things in this table say so.
+
+    - **It is not free.** Look at the build column. That cost is paid once here, but in a real
+      system it is paid again on **every insert, update and delete**, forever. A table with six
+      indexes is a table where every write does seven pieces of work.
+    - **Width matters more than existence.** The narrow index knows only the category, so once it
+      has found the matching rows it must still visit the table to read each `value`. The wide one
+      contains both columns the query asked for, so the answer never touches the table at all.
+      Watch the plan say **COVERING INDEX**: that word is the whole difference.
+    - **The planner decides, not you.** `CREATE INDEX` is a suggestion. SQLite looks at each
+      index, estimates the cost, and is free to ignore it and scan anyway, which it will do when
+      a query matches a large share of the rows. Widen the selectivity slider and watch.
+
+    So the honest rule is not "add an index to make it fast". It is: an index pays when it holds
+    what the query asks for, and the query asks for **few** rows.
+            """
+        ).callout(kind="info")
 
         _output = mo.vstack(
-            [_timing_table, _plan_table, _result_table, _speedup_note, _note],
+            [_timing_table, _plan_table, _result_table, _note],
             gap=0.6,
         )
 
@@ -3904,33 +3941,17 @@ def _(mo):
 def _(mo):
     _schema_expl = mo.md(
         """
-    DuckDB can **infer datatypes** when reading a file (schema-on-read).
+    Two ways to deal with the fact that a file has no types of its own.
 
-    What "infer datatype" means:
+    **Schema-on-read** means you point a tool at the file and let it guess. DuckDB looks at the
+    values and picks `INTEGER`, `DOUBLE`, `DATE` or `VARCHAR`. Fast to start, and forgiving: one
+    bad value in a column and the whole column becomes text.
 
-    - DuckDB looks at values in a column and guesses a type such as `INTEGER`, `DOUBLE`, `VARCHAR`, or `DATE`.
-    - Example: values `10, 20, 31` are inferred as numeric.
-    - Example: values `10, N/A, 31` may be inferred as text (`VARCHAR`) because of mixed content.
+    **Schema-on-write** means you declare the blank form *first*, with its types and its rules,
+    and then load into it. Slower to start, and unforgiving on purpose.
 
-    Alternative: **schema-on-write** means you explicitly enforce the types during loading.
-
-    With messy data, these choices change:
-
-    - the inferred column types  
-    - how many values become `NULL`  
-    - whether errors are surfaced early
-
-    Example of a messy column:
-
-    ```
-    amount
-    120.5
-    N/A
-    87.0
-    ```
-
-    **Watch for:** the inferred type of `amount`, how many values become `NULL` after casting,
-    and whether numeric aggregates require explicit conversion (`TRY_CAST`).
+    The difference is not which one uses a cast. It is **when the check happens, and who gets
+    told.** Below, the same messy export goes down both lanes. Watch what each one reports.
             """
     ).callout(kind="neutral")
     _schema_expl
@@ -3939,226 +3960,211 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    schema_rows = mo.ui.slider(500, 8000, step=500, value=3000, label="Rows")
-    schema_dirty = mo.ui.slider(0.0, 0.6, step=0.05, value=0.2, label="Dirty rate")
-    schema_seed = mo.ui.slider(1, 999, value=29, label="Seed")
     run_schema = mo.ui.button(label="Run schema demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
     _controls = mo.vstack(
         [
-            mo.hstack([schema_rows, schema_dirty], widths="equal"),
-            mo.hstack([schema_seed, run_schema], widths="equal"),
+            mo.md(
+                "We take 400 real sales, export them to CSV, and corrupt 5% of `total_price` with "
+                "the things that actually appear in real exports: `n/a`, an empty cell, a European "
+                "decimal comma (`1 234,50`), and a currency inside the value (`EUR 900`)."
+            ).callout(kind="info"),
+            run_schema,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
     _controls
-    return run_schema, schema_dirty, schema_rows, schema_seed
+    return (run_schema,)
 
 
 @app.cell
-def _(
-    Path,
-    csv,
-    mo,
-    optional_import,
-    random,
-    run_schema,
-    schema_dirty,
-    schema_rows,
-    schema_seed,
-    tempfile,
-):
+def _(Path, SALES_SEED, mo, optional_import, random, run_schema, tempfile):
     if run_schema.value == 0:
-        _output = mo.md("Click **Run schema demo** to execute.").callout(kind="neutral")
+        _output = mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral")
     else:
+        _pd = optional_import("pandas")
         _duckdb = optional_import("duckdb")
-        if not _duckdb:
-            _output = mo.md("DuckDB is not installed. Install with `pip install duckdb` to run this demo.").callout(kind="warn")
+        if _pd is None or _duckdb is None or not SALES_SEED.exists():
+            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
         else:
-            _rng = random.Random(schema_seed.value)
-            _rows = []
-            _dirty_count = 0
-            for idx in range(schema_rows.value):
-                amount = round(_rng.random() * 1000, 2)
-                if schema_dirty.value > 0 and idx == 0:
-                    amount = "N/A"
-                elif _rng.random() < schema_dirty.value:
-                    amount = _rng.choice(["N/A", "", "oops"])
-                if isinstance(amount, str):
-                    _dirty_count += 1
-                _rows.append(
-                    {
-                        "id": idx,
-                        "category": _rng.choice(["A", "B", "C"]),
-                        "amount": amount,
-                        "day": _rng.randint(1, 30),
-                    }
-                )
+            _src = _pd.read_parquet(SALES_SEED).head(400).copy()
+            _src["sale_date"] = _pd.to_datetime(_src["sale_date"]).dt.date
+            _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype(
+                {"total_price": str}
+            )
+            _rng = random.Random(5)
+            _dirty_values = ["", "1 234,50", "EUR 900", "n/a"]
+            _prices = _export["total_price"].tolist()
+            for _k, _row in enumerate(_rng.sample(range(len(_prices)), 20)):
+                _prices[_row] = _dirty_values[_k % 4]
+            _export["total_price"] = _prices
 
-            with tempfile.TemporaryDirectory() as _tmpdir:
-                _tmpdir = Path(_tmpdir)
-                _csv_path = _tmpdir / "dirty.csv"
-                with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                    _writer = csv.DictWriter(_f, fieldnames=["id", "category", "amount", "day"])
-                    _writer.writeheader()
-                    _writer.writerows(_rows)
-
+            with tempfile.TemporaryDirectory() as _td:
+                _csv = Path(_td) / "sales_export.csv"
+                _export.to_csv(_csv, index=False)
+                _url = _csv.as_posix()
                 _con = _duckdb.connect()
-                _inferred = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_csv_path}')").fetchall()
-                _explicit = _con.execute(
-                    "DESCRIBE SELECT "
-                    "CAST(id AS INTEGER) AS id, "
-                    "CAST(category AS VARCHAR) AS category, "
-                    "TRY_CAST(amount AS DOUBLE) AS amount, "
-                    "CAST(day AS INTEGER) AS day "
-                    f"FROM read_csv_auto('{_csv_path}', all_varchar=true)"
-                ).fetchall()
 
-                _inferred_bad = _con.execute("SELECT SUM(TRY_CAST(amount AS DOUBLE) IS NULL AND amount IS NOT NULL) " f"FROM read_csv_auto('{_csv_path}')").fetchone()[0]
-                _num_avg = _con.execute(f"SELECT AVG(TRY_CAST(amount AS DOUBLE)) FROM read_csv_auto('{_csv_path}')").fetchone()[0]
-                _lex_min = _con.execute(f"SELECT MIN(amount) FROM read_csv_auto('{_csv_path}')").fetchone()[0]
-                _explicit_nulls = _con.execute(
-                    "SELECT SUM(amount IS NULL) FROM (" "SELECT TRY_CAST(amount AS DOUBLE) AS amount " f"FROM read_csv_auto('{_csv_path}', all_varchar=true)" ")"
-                ).fetchone()[0]
-                _con.close()
+                # Lane 1: let DuckDB guess the types, then do what a student would do next.
+                _described = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_url}')").df()
+                _inferred = _described.set_index("column_name").loc["total_price", "column_type"]
+                _counts = _con.execute(
+                    "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
+                    "round(sum(TRY_CAST(total_price AS DOUBLE)), 2) "
+                    f"FROM read_csv_auto('{_url}')"
+                ).fetchone()
 
-            _inferred_amount_type = next((row[1] for row in _inferred if row[0] == "amount"), "unknown")
-            _dirty_pct = (_dirty_count / schema_rows.value * 100) if schema_rows.value else 0
-
-            _dirty_rows = [row for row in _rows if isinstance(row["amount"], str)]
-            _clean_rows = [row for row in _rows if not isinstance(row["amount"], str)]
-            _sample_size = 12
-            _sample_dirty = []
-            _sample_clean = []
-            if _dirty_rows:
-                _target_dirty = min(len(_dirty_rows), max(1, _sample_size // 2))
-                _sample_dirty = _rng.sample(_dirty_rows, _target_dirty)
-            if _clean_rows:
-                _target_clean = _sample_size - len(_sample_dirty)
-                if _target_clean == 0:
-                    _target_clean = 1
-                    _sample_dirty = _sample_dirty[: max(1, _sample_size - 1)]
-                _sample_clean = _rng.sample(_clean_rows, min(len(_clean_rows), _target_clean))
-
-            _sample_source = sorted(_sample_dirty + _sample_clean, key=lambda row: row["id"])
-            if not _sample_source:
-                _sample_source = _rows[:_sample_size]
-
-            _sample_rows = [
-                {
-                    "id": row["id"],
-                    "category": row["category"],
-                    "amount": row["amount"],
-                    "dirty": isinstance(row["amount"], str),
-                    "day": row["day"],
-                }
-                for row in _sample_source
-            ]
-
-            def _render_sample_table(rows):
-                header = """
-    <thead>
-      <tr>
-        <th>id</th>
-        <th>category</th>
-        <th>amount</th>
-        <th>dirty</th>
-        <th>day</th>
-      </tr>
-    </thead>
+                # Lane 2: declare the form first, with its rules, then try to load into it.
+                _con.execute(
                     """
-                body_rows = []
-                for row in rows:
-                    dirty = bool(row["dirty"])
-                    cls = "dirty-row" if dirty else ""
-                    amount_cell = f'<td class="dirty-cell">{row["amount"]}</td>' if dirty else f"<td>{row['amount']}</td>"
-                    body_rows.append(
-                        f"""
-      <tr class="{cls}">
-        <td>{row["id"]}</td>
-        <td>{row["category"]}</td>
-        {amount_cell}
-        <td>{str(row["dirty"]).lower()}</td>
-        <td>{row["day"]}</td>
-      </tr>
-                            """
+                    CREATE TABLE sales_clean (
+                        sale_id     INTEGER PRIMARY KEY,
+                        sale_date   DATE    NOT NULL,
+                        product_id  INTEGER NOT NULL,
+                        units_sold  INTEGER NOT NULL,
+                        total_price DOUBLE  NOT NULL CHECK (total_price > 0)
                     )
-                body = "<tbody>" + "".join(body_rows) + "</tbody>"
-                return mo.Html(
-                    f"""
-    <div class="section-card">
-      <h3>Sample rows (dirty values highlighted)</h3>
-      <table>
-        {header}
-        {body}
-      </table>
-      <div class="chart-note">Rows with non-numeric amounts are shaded.</div>
-    </div>
-                        """
+                    """
                 )
+                try:
+                    _con.execute(f"INSERT INTO sales_clean SELECT * FROM read_csv_auto('{_url}')")
+                    _write_result = "loaded without complaint"
+                except Exception as _exc:
+                    _write_result = f"{type(_exc).__name__}: {str(_exc).splitlines()[0]}"
+                _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
 
-            _sample_table = _render_sample_table(_sample_rows)
+            _rows = [
+                {
+                    "lane": "schema-on-read (guess the types)",
+                    "type of total_price": str(_inferred),
+                    "rows in the file": _counts[0],
+                    "rows that reached the answer": _counts[1],
+                    "what you are told": "nothing at all",
+                    "revenue reported": _counts[2],
+                },
+                {
+                    "lane": "schema-on-write (declare, then load)",
+                    "type of total_price": "DOUBLE NOT NULL CHECK (> 0)",
+                    "rows in the file": _counts[0],
+                    "rows that reached the answer": _loaded,
+                    "what you are told": _write_result[:90],
+                    "revenue reported": "none, the load stopped",
+                },
+            ]
+            _note = mo.md(
+                f"""
+    **Same file. Same 20 bad values. Two completely different days at work.**
 
-            _inferred_table = mo.ui.table(
-                [{"column": row[0], "inferred_type": row[1]} for row in _inferred],
-                label="Schema-on-read (inferred types)",
-            )
-            _explicit_table = mo.ui.table(
-                [{"column": row[0], "explicit_type": row[1]} for row in _explicit],
-                label="Schema-on-write (explicit types)",
-            )
-            _quality_table = mo.ui.table(
-                [
-                    {"metric": "non-numeric amount (inferred)", "value": _inferred_bad},
-                    {"metric": "NULLs after explicit cast", "value": _explicit_nulls},
-                ],
-                label="Data quality impact",
-            )
+    Schema-on-read gave you a number, and it is wrong. {_counts[0] - _counts[1]} of {_counts[0]}
+    rows were silently discarded, because `TRY_CAST` turns anything it cannot convert into `NULL`
+    and `SUM` skips nulls. Nothing raised, nothing warned. The figure looks completely ordinary
+    and would go straight into a report.
 
-            _metrics_table = mo.ui.table(
-                [
+    Schema-on-write refused to load and named the line it choked on. You have no number yet, and
+    that is the point: you have a **problem you know about** instead of an answer you trust by
+    mistake.
+
+    Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you
+    have just been handed. Schema-on-write is right for anything a decision rests on.
+                """
+            ).callout(kind="warn")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="One messy export, two lanes"), _note], gap=0.6
+            )
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_evolution = mo.ui.button(label="Run schema evolution demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Add One Column, Then Read Last Year's Files"),
+            mo.md(
+                "Chapter 2 showed a *format* handling a changed form. This is the same problem one "
+                "tier up, where you keep one file per year in a folder and read them together. "
+                "We split the real sales into `sales_2024.parquet`, written **before** anyone "
+                "thought of `customer_rating`, and `sales_2025.parquet`, written after."
+            ).callout(kind="info"),
+            run_evolution,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_evolution,)
+
+
+@app.cell
+def _(Path, SALES_SEED, mo, optional_import, run_evolution, tempfile):
+    if run_evolution.value == 0:
+        _output = mo.md("Click **Run schema evolution demo** to ask the same question three ways.").callout(kind="neutral")
+    else:
+        _pd = optional_import("pandas")
+        _duckdb = optional_import("duckdb")
+        if _pd is None or _duckdb is None or not SALES_SEED.exists():
+            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
+        else:
+            _all = _pd.read_parquet(SALES_SEED)
+            _all["sale_date"] = _pd.to_datetime(_all["sale_date"])
+            _old = _all[_all["sale_date"] < "2025-01-01"].drop(columns=["customer_rating"])
+            _new = _all[_all["sale_date"] >= "2025-01-01"]
+
+            with tempfile.TemporaryDirectory() as _td:
+                _dir = Path(_td)
+                _f2024 = _dir / "sales_2024.parquet"
+                _f2025 = _dir / "sales_2025.parquet"
+                _old.to_parquet(_f2024, index=False)
+                _new.to_parquet(_f2025, index=False)
+                _con = _duckdb.connect()
+                _question = "SELECT count(*) AS rows, round(avg(customer_rating), 3) AS avg_rating FROM "
+
+                def _try(_from_clause):
+                    try:
+                        _r = _con.execute(_question + _from_clause).fetchone()
+                        return f"rows {_r[0]}, average rating {_r[1]}"
+                    except Exception as _exc:
+                        return f"{type(_exc).__name__}: {str(_exc).splitlines()[0][:95]}"
+
+                _list_old_first = f"read_parquet(['{_f2024.as_posix()}', '{_f2025.as_posix()}'])"
+                _list_new_first = f"read_parquet(['{_f2025.as_posix()}', '{_f2024.as_posix()}'])"
+                _by_name = f"read_parquet('{(_dir / 'sales_*.parquet').as_posix()}', union_by_name=true)"
+
+                _rows = [
                     {
-                        "rows": schema_rows.value,
-                        "dirty_rows": _dirty_count,
-                        "dirty_rate_pct": round(_dirty_pct, 2),
-                        "inferred_non_numeric": _inferred_bad,
-                        "explicit_nulls": _explicit_nulls,
-                        "avg_amount_try_cast": round(_num_avg, 3) if _num_avg is not None else None,
-                    }
-                ],
-                label="Why schema choice matters (numeric)",
-            )
-            _types_table = mo.ui.table(
-                [
+                        "how you read the folder": "old file first",
+                        "what happens": _try(_list_old_first),
+                        "why": "the first file sets the shape, so the newer column is simply not there",
+                    },
                     {
-                        "amount_inferred_type": _inferred_amount_type,
-                        "lexicographic_min_amount": str(_lex_min),
-                    }
-                ],
-                label="Schema observations (text)",
-            )
+                        "how you read the folder": "new file first",
+                        "what happens": _try(_list_new_first),
+                        "why": "now the shapes disagree and the read is refused outright",
+                    },
+                    {
+                        "how you read the folder": "union_by_name=true",
+                        "what happens": _try(_by_name),
+                        "why": "match columns by name, fill the missing ones with NULL",
+                    },
+                ]
 
             _note = mo.md(
                 """
-    **What to notice:** when `amount` is inferred as `VARCHAR`, numeric calculations require `TRY_CAST`.
-    Schema‑on‑write forces a numeric type and surfaces dirty values as `NULL`.
-                    """
-            ).callout(kind="info")
+    **Same data, same question, three different answers, and only one is right.**
 
+    The first is the dangerous one. Nothing failed: you asked for the average rating and the
+    column had quietly vanished, because the first file read decided what the shape was. The
+    second at least had the decency to shout. Only the third gives the honest answer, over the
+    rows that actually have a rating.
+
+    This is what "schema evolution" means once your data lives in more than one file. The rule to
+    take away: **when a folder of files has grown new columns over time, say so when you read
+    it.** The default is not to guess kindly.
+                """
+            ).callout(kind="warn")
             _output = mo.vstack(
-                [
-                    _sample_table,
-                    _metrics_table,
-                    _types_table,
-                    _inferred_table,
-                    _explicit_table,
-                    _quality_table,
-                    _note,
-                ],
+                [mo.ui.table(_rows, label="One folder, two file shapes, three readings"), _note],
                 gap=0.6,
             )
-
     _output
     return
 
