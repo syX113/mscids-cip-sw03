@@ -2806,7 +2806,7 @@ def _(mo):
 
 
 @app.cell
-def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
+def _(gzip, image_demo_rank, image_demo_width, io, math, mo, optional_import):
     _pil_image = optional_import("PIL.Image")
     _pil_draw = optional_import("PIL.ImageDraw")
     _np = optional_import("numpy")
@@ -3037,19 +3037,48 @@ def _(image_demo_rank, image_demo_width, io, math, mo, optional_import):
         _pca_ratio = _pca_npz16_bytes / max(1, _raw_rgb_bytes)
         _psnr_display = "infinite" if _psnr == float("inf") else round(_psnr, 2)
 
+        # The same image, squeezed losslessly, so the two kinds sit in one table.
+        _orig_u8 = (_arr * 255.0).astype(_np.uint8)
+        _gz_bytes = gzip.compress(_orig_u8.tobytes(), 6)
+        _gz_back = _np.frombuffer(gzip.decompress(_gz_bytes), dtype=_np.uint8).reshape(_orig_u8.shape)
+        _gz_identical = bool(_np.array_equal(_gz_back, _orig_u8))
+        _pca_worst = int(_np.max(_np.abs(_rec_uint8.astype(int) - _orig_u8.astype(int))))
+
         _comparison_table = mo.ui.table(
             [
-                {"metric": "PCA components kept (k)", "value": _rank},
-                {"metric": "raw image bytes (RGB matrix)", "value": _raw_rgb_bytes},
-                {"metric": "compressed PCA payload bytes", "value": _pca_npz16_bytes},
-                {"metric": "compression ratio (compressed/raw)", "value": round(_pca_ratio, 4)},
-                {"metric": "quality (PSNR, dB)", "value": _psnr_display},
+                {
+                    "method": "gzip (lossless)",
+                    "bytes": len(_gz_bytes),
+                    "ratio (compressed/raw)": round(len(_gz_bytes) / max(1, _raw_rgb_bytes), 4),
+                    "identical to the original?": "yes" if _gz_identical else "no",
+                    "worst pixel off by (of 255)": 0,
+                },
+                {
+                    "method": f"PCA k={_rank} (lossy)",
+                    "bytes": _pca_npz16_bytes,
+                    "ratio (compressed/raw)": round(_pca_ratio, 4),
+                    "identical to the original?": "no",
+                    "worst pixel off by (of 255)": _pca_worst,
+                },
             ],
-            label="Image compression summary",
+            label=f"Same {_raw_rgb_bytes:,}-byte image, two kinds of compression",
         )
         _comparison_note = mo.md(
-            "Lower rank keeps fewer principal components, so storage drops but detail also drops.\n\n"
-            "Summary compares **raw RGB data** vs **PCA payload**. Preview PNG sizes are not used as compression metrics."
+            """
+    **Two different promises, and confusing them is expensive.**
+
+    **Lossless** is a photocopy shrunk to fit A5. Every word is still there; enlarge it and you
+    get the original back exactly, byte for byte. gzip, PNG and Parquet are lossless. This is the
+    only kind you may use on a sales ledger.
+
+    **Lossy** is a summary. Much smaller, still useful, and the original is gone forever. PCA
+    here, JPEG and MP3 in the world. Fine for a photo, where nobody can tell. Never fine for a price.
+
+    The `identical` column is the whole difference, and it is why gzip has no quality score:
+    there is no quality to score. Notice which row is actually smaller, too. On this image the
+    lossless method wins, because a smooth drawing repeats itself enormously and repetition is
+    exactly what lossless compression removes.
+            """
         ).callout(kind="info")
         _pipeline = mo.md(
             """
@@ -3194,12 +3223,117 @@ def _(
 
     - In analytics, we often scan many rows and columns.
     - Smaller files mean fewer bytes read from disk/network.
-    - Parquet often wins because it is columnar and uses compression codecs effectively.
+
+    **And why the ranking is not a law.** Compression does not make files smaller; it removes
+    **repetition**. So the winner depends on your columns, not on the format's reputation.
+    On 2,000 rows of six columns, measured with this same code:
+
+    - columns of distinct measurements: Parquet 125,490 bytes, JSON+gzip 131,586. Parquet wins.
+    - the same shape, but each column holding five repeated values: Parquet 17,622 bytes,
+      JSON+gzip 15,650. Parquet **loses**.
+
+    Nothing about Parquet changed. What changed is how much repetition there was to remove.
+    A column of 2,000 different measurements has almost none. Before you pick a format, look at
+    your columns.
                 """
         ).callout(kind="info")
 
         _output = mo.vstack([_table, _note], gap=0.6)
 
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_ctime = mo.ui.button(label="Run compression timing", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Does Compression Make the Query *Faster*?"),
+            mo.md(
+                "This chapter opened by asking whether compression cuts total query time, not just "
+                "file size. So far we have only measured size. Now we time the whole job: read the "
+                "file, parse it, and sum one column. Best of 7 runs."
+            ).callout(kind="info"),
+            run_ctime,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_ctime,)
+
+
+@app.cell
+def _(SALES_SEED, gzip, io, mo, optional_import, run_ctime, time):
+    if run_ctime.value == 0:
+        _output = mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral")
+    else:
+        _pd = optional_import("pandas")
+        if _pd is None or not SALES_SEED.exists():
+            _output = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
+        else:
+            _raw = _pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
+
+            def _best(_fn, _n=7):
+                _times = []
+                for _ in range(_n):
+                    _t0 = time.perf_counter()
+                    _fn()
+                    _times.append(time.perf_counter() - _t0)
+                return min(_times)
+
+            def _answer(_blob, _gzipped):
+                _data = gzip.decompress(_blob) if _gzipped else _blob
+                return _pd.read_csv(io.BytesIO(_data))["total_price"].sum()
+
+            _plain_time = _best(lambda: _answer(_raw, False))
+            _rows = [
+                {
+                    "variant": "plain CSV",
+                    "bytes": len(_raw),
+                    "read + parse + sum (ms)": round(_plain_time * 1000, 2),
+                    "vs plain": "1.00x",
+                    "compress (ms)": "-",
+                    "decompress (ms)": "-",
+                }
+            ]
+            for _level in (1, 6, 9):
+                _t0 = time.perf_counter()
+                _blob = gzip.compress(_raw, _level)
+                _ctime = time.perf_counter() - _t0
+                _rtime = _best(lambda _b=_blob: _answer(_b, True))
+                _dtime = _best(lambda _b=_blob: gzip.decompress(_b))
+                _rows.append(
+                    {
+                        "variant": f"gzip level {_level}",
+                        "bytes": len(_blob),
+                        "read + parse + sum (ms)": round(_rtime * 1000, 2),
+                        "vs plain": f"{_rtime / _plain_time:.2f}x",
+                        "compress (ms)": round(_ctime * 1000, 2),
+                        "decompress (ms)": round(_dtime * 1000, 2),
+                    }
+                )
+
+            _note = mo.md(
+                """
+    **The answer is no, not here.** The gzipped file is roughly a third of the size and takes
+    *longer* to answer the same question.
+
+    Compression trades CPU for I/O. The bytes it saved were bytes the operating system had
+    already cached, so reading them was nearly free, and the CPU work to unpack them was not.
+    When I/O is already cheap, that is a bad trade. Send the same file across a network and the
+    trade flips, which is why compression is normal for transfer and a judgement call on a local
+    disk.
+
+    Look at levels 6 and 9 too. They land a few dozen bytes apart, and level 9 spent roughly
+    twice the CPU to find them. Decompression costs about the same at every level, so **the
+    level you pick is a decision about writing, not reading.**
+                """
+            ).callout(kind="warn")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="Same question, four ways to store the file"), _note],
+                gap=0.6,
+            )
     _output
     return
 
