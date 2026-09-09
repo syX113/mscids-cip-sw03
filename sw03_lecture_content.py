@@ -3102,6 +3102,102 @@ def _(gzip, image_demo_rank, image_demo_width, io, math, mo, optional_import):
 
 @app.cell
 def _(mo):
+    run_lossy_money = mo.ui.button(label="Run lossy vs lossless on money", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: The Cat Trick, Applied to the Sales Ledger"),
+            mo.md(
+                """
+    Blurring a cat is fine because nobody can tell. So try the same idea on the real sales file:
+    store the prices less precisely and see how much smaller it gets.
+
+    **Predict first.** Which file is smallest, and which ones still add up to the right total?
+                """
+            ).callout(kind="info"),
+            run_lossy_money,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_lossy_money,)
+
+
+@app.cell
+def _(Path, SALES_SEED, mo, optional_import, run_lossy_money, tempfile):
+    if run_lossy_money.value == 0:
+        _output = mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral")
+    else:
+        _pd = optional_import("pandas")
+        if _pd is None or not SALES_SEED.exists():
+            _output = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
+        else:
+            _src = _pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
+            _truth = round(float(_src["total_price"].sum()), 2)
+
+            with tempfile.TemporaryDirectory() as _td:
+                _dir = Path(_td)
+
+                def _store(_frame, _name, **_kw):
+                    _path = _dir / _name
+                    _frame.to_parquet(_path, index=False, **_kw)
+                    _back = _pd.read_parquet(_path)
+                    return _path.stat().st_size, round(float(_back["total_price"].sum()), 2)
+
+                _rows = []
+                for _label, _frame, _kw in (
+                    ("exact", _src, {}),
+                    ("exact + gzip", _src, {"compression": "gzip"}),
+                ):
+                    _bytes, _total = _store(_frame, f"{_label}.parquet", **_kw)
+                    _rows.append(
+                        {
+                            "how the prices are stored": f"{_label} (lossless)",
+                            "bytes": _bytes,
+                            "total revenue it reports": _total,
+                            "off by": round(_total - _truth, 2),
+                        }
+                    )
+                for _digits, _label in ((0, "rounded to the franc"), (-1, "rounded to 10 francs"), (-2, "rounded to 100 francs")):
+                    _lossy = _src.copy()
+                    _lossy["total_price"] = _lossy["total_price"].round(_digits)
+                    _bytes, _total = _store(_lossy, f"lossy{_digits}.parquet", compression="gzip")
+                    _rows.append(
+                        {
+                            "how the prices are stored": f"{_label} (lossy)",
+                            "bytes": _bytes,
+                            "total revenue it reports": _total,
+                            "off by": round(_total - _truth, 2),
+                        }
+                    )
+
+            _note = mo.md(
+                f"""
+    **The lossy files really are smaller.** Rounding to the nearest 100 francs saves roughly 40%
+    of the bytes, which is a bigger win than gzip managed on the exact data.
+
+    **And the last column is why nobody does this.** The true total is
+    `{_truth:,.2f}`. Every lossy row reports a different number, and none of them is flagged: the
+    file loads cleanly, the column is still a decimal, every tool downstream is perfectly happy.
+
+    This is the same trick that was completely acceptable on the cat. The difference is not the
+    technique, it is **what the numbers mean**. Nobody can see a pixel that is 5 shades off. Every
+    accountant can see a total that is off by hundreds of francs, and by then the original is
+    gone.
+
+    So the rule is not "lossy compression is bad". It is: **lossy compression is a decision about
+    whether an approximation of this particular value is still the truth you need.** For a photo,
+    usually yes. For money, an identifier or a date, never.
+                """
+            ).callout(kind="danger")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="Same 3,360 prices, stored five ways"), _note], gap=0.6
+            )
+    _output
+    return
+
+
+@app.cell
+def _(mo):
     compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows")
     compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns")
     compress_seed = mo.ui.slider(1, 999, value=11, label="Seed")
@@ -4341,58 +4437,31 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    http_code = mo.ui.number(value=201, label="HTTP status code")
-    http_method_hint = mo.ui.dropdown(
-        options=["GET", "POST", "PUT", "DELETE"],
-        value="POST",
-        label="Method context",
-    )
-    _note = mo.md(
+    _status_real = mo.md(
         """
-    Try `200`, `201`, `404`, `409`, and `500` to see how client behavior should change.
+    ### Four Real Answers From Our Own API
 
-    $$
-    \\text{status family} = \\left\\lfloor \\frac{\\text{code}}{100} \\right\\rfloor
-    $$
-            """
-    ).callout(kind="info")
-    _panel = mo.vstack(
-        [mo.md("### Mini-lab: HTTP Status Interpreter"), http_code, http_method_hint, _note],
-        gap=0.5,
+    Not a lookup table. These are the actual replies `sw03_demo_api.py` gives, and the difference
+    between the three failures is the part worth learning.
+
+    | You send | You get | Why |
+    | --- | --- | --- |
+    | `POST /sales` with a valid sale | **201 Created** | it worked, and a new thing now exists |
+    | `GET /sales/999999` | **404 Not Found** | the address is fine, nothing lives there |
+    | `POST /countries` with `region_id: 999` | **400 Bad Request** | the form is fine, what it asks for is impossible |
+    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable** | the form itself is malformed, the server never looked |
+
+    All three failures are **4xx**, and that first digit is the instruction: *you* must change the
+    request. Retrying it unchanged will fail identically forever. A **5xx** is the opposite
+    message: the request was fine and the server broke, so retrying may well work.
+
+    The distinction between 400 and 422 is the one students trip on. 422 means the request never
+    reached your logic, because Pydantic rejected the shape at the door, which is chapter 7 doing
+    its job. 400 means it got through the door and then broke a rule of the business, like
+    pointing at a region that does not exist.
+        """
     ).callout(kind="neutral")
-    _panel
-    return http_code, http_method_hint
-
-
-@app.cell
-def _(http_code, http_method_hint, mo):
-    code = int(http_code.value or 0)
-    if 100 <= code < 200:
-        family = "Informational"
-        kind = "info"
-    elif 200 <= code < 300:
-        family = "Success"
-        kind = "success"
-    elif 300 <= code < 400:
-        family = "Redirection"
-        kind = "info"
-    elif 400 <= code < 500:
-        family = "Client error"
-        kind = "warn"
-    elif 500 <= code < 600:
-        family = "Server error"
-        kind = "danger"
-    else:
-        family = "Invalid/unknown"
-        kind = "warn"
-
-    retry_note = (
-        "Safe retries are easiest for idempotent methods like GET/PUT/DELETE."
-        if http_method_hint.value in {"GET", "PUT", "DELETE"}
-        else "POST may create duplicates unless idempotency keys are used."
-    )
-    _msg = mo.md(f"Status **{code}** belongs to **{family}**.\n\n{retry_note}").callout(kind=kind)
-    _msg
+    _status_real
     return
 
 
@@ -5262,6 +5331,125 @@ def _(
                         """
                 ).callout(kind="success" if _status < 400 else "danger")
 
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_gates = mo.ui.button(label="Send six slips through both gates", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Six Sale Slips, One Model, Two Gates"),
+            mo.md(
+                """
+    Chapter 7 validated a payload on your laptop with no network at all, because Pydantic is just
+    Python. Chapter 8 put the very same kind of model on a server. So what is the difference?
+
+    Six slips go through **gate 1** here in the notebook, and then the identical six are sent to
+    the running API for **gate 2**. Read the table across.
+                """
+            ).callout(kind="info"),
+            run_gates,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_gates,)
+
+
+@app.cell
+def _(fastapi_base_url, json, mo, optional_import, run_gates, url_error, url_request):
+    if run_gates.value == 0:
+        _output = mo.md("Click **Send six slips through both gates** to compare them.").callout(kind="neutral")
+    else:
+        _pydantic = optional_import("pydantic")
+        if _pydantic is None:
+            _output = mo.md("Needs `pydantic`.").callout(kind="warn")
+        else:
+            from datetime import date as _date
+
+            class _SaleCreate(_pydantic.BaseModel):
+                # The same shape sw03_demo_api.py declares, running here on your laptop.
+                sale_date: _date
+                product_id: int = _pydantic.Field(ge=1)
+                country_id: int = _pydantic.Field(ge=1)
+                units_sold: int = _pydantic.Field(ge=1, le=100000)
+                customer_rating: int = _pydantic.Field(ge=1, le=5)
+
+            _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
+            _slips = {
+                "a good sale": _ok,
+                "rating of 9": {**_ok, "customer_rating": 9},
+                "zero units sold": {**_ok, "units_sold": 0},
+                "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
+                "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
+                "product 9999": {**_ok, "product_id": 9999},
+            }
+
+            _base = fastapi_base_url.value.rstrip("/")
+            _created, _rows = [], []
+            try:
+                for _name, _slip in _slips.items():
+                    try:
+                        _SaleCreate.model_validate(_slip)
+                        _gate1 = "passes"
+                    except Exception as _exc:
+                        _err = _exc.errors()[0]
+                        _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
+                    try:
+                        _req = url_request.Request(
+                            f"{_base}/sales",
+                            data=json.dumps(_slip).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with url_request.urlopen(_req, timeout=10) as _r:
+                            _body = json.loads(_r.read())
+                            _created.append(_body["sale_id"])
+                            _gate2 = f"{_r.status} created — {len(_body)} fields back, total_price {_body['total_price']}"
+                    except url_error.HTTPError as _http:
+                        _detail = json.loads(_http.read()).get("detail")
+                        _msg = _detail if isinstance(_detail, str) else _detail[0]["msg"]
+                        _gate2 = f"{_http.code} — {_msg}"
+                    _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+
+                for _sid in _created:
+                    try:
+                        url_request.urlopen(
+                            url_request.Request(f"{_base}/sales/{_sid}", method="DELETE"), timeout=10
+                        )
+                    except Exception:
+                        pass
+
+                _note = mo.md(
+                    """
+    **Read the last column down.** Four slips die at gate 1 and would have died at gate 2 too,
+    with `422` and the *same message*, because it is the same model in both places. One slip,
+    `product 9999`, sails through gate 1 and dies at gate 2 with `400`. And one gets `201`.
+
+    That difference is the whole lesson. Gate 1 can check **shape**: is this a date, is the rating
+    between 1 and 5. Only gate 2 can check **facts**, because only the server can open the filing
+    cabinet and discover there is no product 9999. Your laptop had no way to know.
+
+    **Then look at the successful row.** We sent five fields and got thirteen back, and we never
+    sent `total_price` at all: the server computed 10 x 195.00 itself. A price the client is
+    allowed to invent is a price the client can lie about.
+
+    Two fences. Validating on the laptop is a **courtesy** to the user, instant feedback with no
+    round trip, and never a substitute for the server's check, because anyone can bypass this
+    notebook and post directly with `curl`. And the split between 422 and 400 is this API's
+    convention, not a law of HTTP: FastAPI produces the 422 automatically from the model, while
+    the 400s are business rules somebody wrote by hand.
+                    """
+                ).callout(kind="info")
+                _output = mo.vstack(
+                    [mo.ui.table(_rows, label="The same six slips, checked twice"), _note], gap=0.6
+                )
+            except url_error.URLError as _exc:
+                _output = mo.md(
+                    f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
+                ).callout(kind="danger")
     _output
     return
 
