@@ -2325,6 +2325,27 @@ def _(mo):
     - $C$: total columns in the dataset  
     - $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
 
+    A shop keeps its sales two ways.
+
+    **The shoebox.** Every sale is one till receipt: date, product, country, units, price and
+    rating printed together on one slip. To answer *what did we take in January 2026?* you pick up
+    all 3,360 slips one at a time, read the date, read the price, and put down the other four
+    fields untouched. You handled every field of every sale to use two of them. That is a **row
+    store**, and it is exactly the right shape for *show me sale 2,914*: one slip, one grab.
+
+    **The ledger.** The same sales copied into a bookkeeper's ledger, one field per page: a long
+    page of dates, a long page of prices, a long page of product codes. The same question now
+    means taking down two pages and leaving the other five on the shelf. That is a **column
+    store**. It is the wrong shape for *show me sale 2,914*, which is now line 2,914 of seven
+    different pages.
+
+    Same sales, same shop. The cost of a question changed because the paper was arranged
+    differently.
+
+    *Two things the picture does not show.* The ledger pages are written in shorthand, so they are
+    not all the same size, which is chapter 4. And the ledger is not one endless page per field,
+    which is the next cell.
+
     Below we simulate column selection and filtering to reveal the runtime difference (execution-time gap).
 
     **Format perspective:** Avro is a row‑based, schema‑driven file format (great for event logs).
@@ -2368,49 +2389,51 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    io_total_cols = mo.ui.slider(2, 30, value=12, label="Total columns (C)")
-    io_needed_cols = mo.ui.slider(1, 12, value=3, label="Columns needed (k)")
-    io_rows = mo.ui.slider(1_000, 1_000_000, step=1_000, value=100_000, label="Rows (N)")
-    _io_note = mo.md(
+    _binder = mo.md(
         """
-    I/O = **Input/Output**, meaning data moved between storage and compute.
+    ### The Binder and the Index Card
 
-    This estimator uses simple "work units" (rows x columns touched) to explain why columnar
-    layout helps when queries use only a few columns.
-            """
-    ).callout(kind="info")
-    _panel = mo.vstack(
-        [
-            mo.md("### Mini-lab: I/O (Input/Output) Work Estimator"),
-            mo.hstack([io_total_cols, io_needed_cols], widths="equal"),
-            io_rows,
-            _io_note,
-        ],
-        gap=0.6,
+    The ledger is not seven endless pages. It is a **binder**.
+
+    The binder is divided into **sections**. Each section holds a horizontal slice of the shop's
+    sales, say 420 of them, and inside a section each field still gets its own page. So section 3
+    holds a dates page, a prices page and a countries page, all covering the same 420 sales.
+    Parquet calls a section a **row group**.
+
+    At the very back of the binder is an **index card**. For every section and every field it
+    records two numbers and nothing else: the smallest value in that section and the largest.
+    Parquet calls this the **footer**, and those two numbers the **column statistics**.
+
+    Now watch what the index card buys. Someone asks for revenue in 2026. You read the card first
+    and it says:
+
+    ```
+    section 0   dates 2024-03-01 .. 2024-05-27
+    section 1   dates 2024-06-01 .. 2024-08-27
+    ...
+    section 6   dates 2025-09-01 .. 2025-11-27
+    section 7   dates 2025-12-01 .. 2026-02-27
+    ```
+
+    Sections 0 to 6 end before 2026 began. Not *probably*. **Provably**: their latest date is
+    earlier than your earliest date, so no page inside them can hold a 2026 sale. You leave seven
+    sections closed, open section 7, and take out 2 of its 7 pages.
+
+    That is how a program skips data it never read. It read the index card.
+
+    **Two fences, and the second one matters more than it looks.**
+
+    - The card can prove a section is **hopeless**. It can never prove a section is **useful**.
+      A section labelled `2024-03-01 .. 2026-02-27` must be opened even if it holds one match.
+      Min and max are a rejection test, not a search.
+    - This is why the order rows were written in is not cosmetic. Drop the sales into the binder
+      in random order and every section's card reads roughly `2024-03-01 .. 2026-02-27`. Every
+      label spans everything, every label is useless, and you open all eight sections. The
+      mechanism did not fail. You gave it nothing to work with. The next cell measures exactly
+      that, on the real file.
+        """
     ).callout(kind="neutral")
-    _panel
-    return io_needed_cols, io_rows, io_total_cols
-
-
-@app.cell
-def _(io_needed_cols, io_rows, io_total_cols, mo):
-    c = io_total_cols.value
-    k = min(io_needed_cols.value, c)
-    n = io_rows.value
-    io_row = n * c
-    io_col = n * k
-    _row_col_ratio = io_row / max(1, io_col)
-    _table = mo.ui.table(
-        [
-            {"metric": "row-store work units", "value": io_row},
-            {"metric": "column-store work units", "value": io_col},
-            {"metric": "row/column ratio", "value": round(_row_col_ratio, 2)},
-        ],
-        label="Estimated read effort",
-    )
-    _note = mo.md("As k gets much smaller than C, columnar advantage increases.").callout(kind="info")
-    _panel = mo.vstack([_table, _note], gap=0.6)
-    _panel
+    _binder
     return
 
 
@@ -2482,6 +2505,99 @@ def _(mo, n_cols, n_rows, random, run_storage, storage_seed, time):
 
         _output = mo.vstack([_table, _note], gap=0.6)
 
+    _output
+    return
+
+
+@app.cell
+def _(mo):
+    run_rowgroup = mo.ui.button(label="Run row-group audit", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    _panel = mo.vstack(
+        [
+            mo.md("### Mini-lab: Which Sections Did We Open?"),
+            mo.md(
+                "Same 3,360 real sales, written twice with 420-row sections: once in date order, "
+                "once shuffled. Then we ask the file's own index card what the query "
+                "`avg(total_price) WHERE sale_date >= '2026-01-01'` is entitled to skip."
+            ).callout(kind="info"),
+            run_rowgroup,
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    _panel
+    return (run_rowgroup,)
+
+
+@app.cell
+def _(SALES_SEED, Path, mo, optional_import, run_rowgroup, tempfile):
+    if run_rowgroup.value == 0:
+        _output = mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral")
+    else:
+        _pd = optional_import("pandas")
+        _duckdb = optional_import("duckdb")
+        if _pd is None or _duckdb is None or not SALES_SEED.exists():
+            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
+        else:
+            _df = _pd.read_parquet(SALES_SEED)
+            _df["sale_date"] = _pd.to_datetime(_df["sale_date"])
+            _cut = "2026-01-01"
+            _wanted = ["sale_date", "total_price"]
+
+            with tempfile.TemporaryDirectory() as _td:
+                _ordered = Path(_td) / "date_ordered.parquet"
+                _shuffled = Path(_td) / "shuffled.parquet"
+                _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
+                _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
+
+                _con = _duckdb.connect()
+                _rows = []
+                for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
+                    _md = _con.execute(
+                        "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
+                        f"FROM parquet_metadata('{_path.as_posix()}')"
+                    ).df()
+                    _groups = _md["row_group_id"].nunique()
+                    _all_cols = int(_md["total_compressed_size"].sum())
+                    _two_cols_all = _md[_md["path_in_schema"].isin(_wanted)]
+                    _b_bytes = int(_two_cols_all["total_compressed_size"].sum())
+                    # The index card: a section survives only if its LATEST date reaches the cut-off.
+                    _dates = _md[_md["path_in_schema"] == "sale_date"]
+                    _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"].tolist()
+                    _c_bytes = int(_two_cols_all[_two_cols_all["row_group_id"].isin(_live)]["total_compressed_size"].sum())
+                    _answer = _con.execute(
+                        f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
+                    ).fetchone()[0]
+                    _rows.append(
+                        {
+                            "file": _label,
+                            "file size (B)": _path.stat().st_size,
+                            "A: every column, every section": _all_cols,
+                            "B: 2 columns, every section": _b_bytes,
+                            "C: 2 columns, surviving sections": _c_bytes,
+                            "sections opened": f"{len(_live)} of {_groups}",
+                            "answer": _answer,
+                        }
+                    )
+
+            _note = mo.md(
+                """
+    Read the top row left to right. Choosing columns took the read from **62,705** bytes to
+    **33,029**. That is what chapter 3 has taught so far. The index card then took it from
+    33,029 to **4,131**, and nobody wrote that in the query.
+
+    Now read the second row. Identical data, identical query, rows written in a different order,
+    and the index card buys **nothing**: every section survives, because every label spans the
+    whole range. Sorting is not tidying. It is what makes the skipping possible.
+
+    Two honesty notes. These are bytes the engine is *entitled to skip*, computed from the file's
+    own footer, not bytes measured leaving the disk. And the shuffled file is also 23% larger
+    from the very same rows, which is a preview of chapter 4: order is itself a form of
+    compression. Both files return the same answer, which is the point.
+                """
+            ).callout(kind="info")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="Bytes the query must read"), _note], gap=0.6
+            )
     _output
     return
 
