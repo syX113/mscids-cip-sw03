@@ -2651,14 +2651,14 @@ def _(
                     {
                         "estimate": "without pushdown",
                         "rows (N)": f"{_n:,}",
-                        "share of rows read": "1",
+                        "share of rows kept": "1",
                         "columns read": _total,
                         "work units": f"{_without:,.0f}",
                     },
                     {
                         "estimate": "with pushdown",
                         "rows (N)": f"{_n:,}",
-                        "share of rows read": f"{_kept:g}",
+                        "share of rows kept": f"{_kept:g}",
                         "columns read": _needed,
                         "work units": f"{_with:,.0f}",
                     },
@@ -2677,11 +2677,11 @@ def _(
 
 @app.cell
 def _():
-    import timeit as _timeit
-
     def ch5_best_seconds(con, sql, params=(), repeat=3):
         """Fastest of `repeat` runs of one SQL statement, so a cold first run does not decide a ranking."""
-        return min(_timeit.repeat(lambda: con.execute(sql, params).fetchall(), number=1, repeat=repeat))
+        import timeit
+
+        return min(timeit.repeat(lambda: con.execute(sql, params).fetchall(), number=1, repeat=repeat))
 
     return (ch5_best_seconds,)
 
@@ -2795,7 +2795,7 @@ def _(
     {_block // 1024} KiB blocks, so a small table still fills whole blocks. {_size_note}
             """
     ).callout(kind="info")
-    mo.vstack([_timings, static_table(_result, label=f"Query result (amount > {duck_threshold.value})"), _note], gap=0.6)
+    mo.vstack([_timings, static_table(_result.to_dict("records"), label=f"Query result (amount > {duck_threshold.value})"), _note], gap=0.6)
     return
 
 
@@ -2892,13 +2892,21 @@ def _(
         show_download=False,
         show_search=False,
     )
-    _planner = (
-        f"Here that is exactly what happened: the `(category)` row is at {_narrow:.1f}x, slower than "
-        "the scan, and the plan still says USING INDEX."
-        if round(_narrow, 1) < 1
-        else "Push the share of C to 0.5 or more and run again: the `(category)` row drops below 1.0x "
-        "and the plan still says USING INDEX."
-    )
+    if round(_narrow, 1) < 1:
+        _planner = (
+            f"Here that is exactly what happened: the `(category)` row is at {_narrow:.1f}x, slower than "
+            "the scan, and the plan still says USING INDEX."
+        )
+    elif round(idx_selectivity.value, 2) < 0.7:
+        _planner = (
+            "Push the share of C to 0.7 or more and run again: the `(category)` row drops below 1.0x "
+            "and the plan still says USING INDEX."
+        )
+    else:
+        _planner = (
+            f"At this share the narrow index still just held on ({_narrow:.1f}x); timings wobble, so run "
+            "again and it drops below 1.0x while the plan still says USING INDEX."
+        )
     _note = mo.md(
         f"""
     **An index is not a speed setting.** It is a second copy of some of your columns, and this
