@@ -431,7 +431,7 @@ def _(mo):
     <div class="section-card">
       <h3>How to Read This Notebook</h3>
       <div class="focus-grid">
-        <div class="focus-item"><strong>Chapters</strong>: open with a Key Question and the tier we are in, close with a Conclusion and a Bridge.</div>
+        <div class="focus-item"><strong>Chapters</strong>: each opens with a Key Question and the tier we are in.</div>
         <div class="focus-item"><strong>Formulas</strong>: a quick quantitative model of the idea.</div>
         <div class="focus-item"><strong>Mini-labs</strong>: controls to test that model. Heavy ones wait for their Run button.</div>
         <div class="focus-item"><strong>Discussion</strong>: questions for the room. Click one to reveal the answer.</div>
