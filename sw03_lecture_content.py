@@ -3745,7 +3745,7 @@ def _(mo):
 
     @app.put("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND | BAD_REQUEST)
     def update_sale(sale_id: SaleId, payload: SaleUpdate) -> dict[str, Any]:
-        "\""Update a sale. Fields you leave out keep their current value (strict HTTP would call this PATCH).
+        "\""Update a sale. Fields you leave out keep their current value (the HTTP standard would call this PATCH).
 
         total_price is recomputed only when units_sold or product_id actually change, so editing just
         the rating keeps the stored total.

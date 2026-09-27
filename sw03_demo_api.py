@@ -50,7 +50,7 @@ TABLES = {
 # Documented in /docs so students see which errors an endpoint can actually return.
 NOT_FOUND = {404: {"description": "No row with that id."}}
 BAD_REQUEST = {400: {"description": "The request broke a rule, for example a duplicate name or an unknown id."}}
-PARTIAL_PUT = "Fields you leave out keep their current value (strict HTTP would call this PATCH)."
+PARTIAL_PUT = "Fields you leave out keep their current value (the HTTP standard would call this PATCH)."
 
 # Every rule is written once, here, and reused wherever the field appears.
 Name = Annotated[str, Field(min_length=1, max_length=120)]
@@ -249,7 +249,7 @@ app = FastAPI(
         "(presentation tier).\n\n"
         "Every table supports the four REST verbs: `GET`, `POST`, `PUT`, `DELETE`. "
         "`PUT` here is a *partial* update: fields you leave out keep their current value. "
-        "Strict HTTP calls that `PATCH` and expects a `PUT` to replace the whole row; "
+        "The HTTP standard calls that `PATCH` and expects a `PUT` to replace the whole row; "
         "this API uses `PUT` for both to keep to four verbs.\n\n"
         "On every start, `data/` is reset from `data/seed/`, so you can experiment freely."
     ),
@@ -452,7 +452,7 @@ def create_sale(payload: SaleCreate) -> dict[str, Any]:
 
 @app.put("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND | BAD_REQUEST)
 def update_sale(sale_id: SaleId, payload: SaleUpdate) -> dict[str, Any]:
-    """Update a sale. Fields you leave out keep their current value (strict HTTP would call this PATCH).
+    """Update a sale. Fields you leave out keep their current value (the HTTP standard would call this PATCH).
 
     total_price is recomputed only when units_sold or product_id actually change, so editing just
     the rating keeps the stored total.
