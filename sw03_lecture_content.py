@@ -4421,7 +4421,7 @@ def _(mo, static_table):
     _frameworks = [
         ("Marimo", "Python", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps", "Labs, teaching, analysis apps"),
         ("Dash", "Python", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps", "Interactive analytics"),
-        ("Streamlit", "Python", "Fastest prototyping, simple widgets", "Little layout and state control", "Dashboards, internal tools"),
+        ("Streamlit", "Python", "Fastest prototyping, simple widgets", "Less layout and state control in big apps", "Dashboards, internal tools"),
         ("Flask", "Python + HTML templates, some JS", "Full control, templates + APIs", "More setup, no built-in UI", "Custom web apps + APIs"),
         ("React", "JavaScript / TypeScript", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling", "Production web apps"),
     ]
@@ -4568,7 +4568,8 @@ def _(mo):
       predicts a *single* point.
 
     Set the slope to 0 and the noise high: the equation still prints confidently, and the ± tells
-    you not to believe it. Then set the slope to 0.4: $R^2$ calls the line nearly useless, yet the
+    you not to believe it. Still, about 1 seed in 20 clears the bar at slope 0: that is what
+    95% means. Then set the slope to 0.4: $R^2$ calls the line nearly useless, yet the
     slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
     how predictable single points are, not whether a trend exists.
 
@@ -4614,11 +4615,11 @@ def _(
     _r2 = statistics.correlation(_xs, _ys) ** 2
     # Standard error of the slope: how far beta would wander if you drew the sample again.
     _se = ((1 - _r2) / (len(_xs) - 2)) ** 0.5 * statistics.stdev(_ys) / statistics.stdev(_xs)
-    _real = abs(_beta) > 2 * _se  # the ± range below excludes 0
+    _nonzero = abs(_beta) > 2 * _se  # the ± range below excludes 0
 
     _trend = (
-        "clearly **not zero**: the trend is real."
-        if _real
+        "clearly **not zero**: the data rule out a flat line."
+        if _nonzero
         else "**indistinguishable from zero**: this is noise, however confident the equation looks."
     )
     _fit = (
@@ -4632,7 +4633,7 @@ def _(
         f"$y = {_alpha:.2f} {_beta:+.2f}\\,x$ &nbsp; (you set the slope to {chart_slope.value:g})  \n"
         f"**Trend:** $\\beta = {_beta:.2f} \\pm {2 * _se:.2f}$, {_trend}  \n"
         f"**Fit:** $R^2 = {_r2:.2f}$, the line explains {_fit}."
-    ).callout(kind="success" if _real else "warn")
+    ).callout(kind="success" if _nonzero else "warn")
 
     _points = (
         alt.Chart(pd.DataFrame({"x": _xs, "y": _ys}))
@@ -4640,7 +4641,12 @@ def _(
         .encode(x=alt.X("x:Q").axis(tickCount=8), y="y:Q")
     )
     _line = _points.transform_regression("x", "y").mark_line(color="#f59e0b", strokeWidth=4)
-    mo.vstack([_verdict, (_points + _line).properties(width="container", height=320)], gap=0.8)
+    _chart = (
+        (_points + _line)
+        .properties(width="container", height=320)
+        .configure_axis(labelFontSize=13, titleFontSize=14)
+    )
+    mo.vstack([_verdict, _chart], gap=0.8)
     return
 
 
@@ -4773,8 +4779,8 @@ def _(mo):
       honestly (ch. 10).
 
     Each tier only talks to its neighbour. Move the sales from Parquet files into a DuckDB
-    database and only the three storage functions at the top of `sw03_demo_api.py` change
-    (`reset`, `read` and `write`), not one endpoint. Swap Streamlit for React and neither lower
+    database and only the storage code in `sw03_demo_api.py` changes (the file names in `TABLES`
+    and `reset`, `read`, `write`), not one endpoint. Swap Streamlit for React and neither lower
     tier notices.
 
     If you remember one thing: correctness first, then performance, then usability.
