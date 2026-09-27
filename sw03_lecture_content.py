@@ -333,24 +333,22 @@ def _(mo):
     _title = mo.md(
         """
     <div class="hero">
-      <div class="hero-content">
-        <div class="eyebrow">CIP - SW03 Lecture Studio</div>
-        <div class="hero-title">Storage, Serialization, APIs & Apps</div>
-        <div class="hero-subtitle">
-          One data product, built in <strong>three tiers</strong>: where the data rests,
-          what serves it, and what people look at. We build each tier in turn and stack
-          them &mdash; race conditions, serialization trade&#8209;offs, columnar analytics,
-          API design, and rapid app prototyping.
-        </div>
-        <div class="hero-pills">
-          <span class="pill">ACID & Concurrency</span>
-          <span class="pill">Atomicity Transfers</span>
-          <span class="pill">Serialization Benchmarks</span>
-          <span class="pill">Columnar Analytics</span>
-          <span class="pill">APIs & FastAPI</span>
-          <span class="pill">Indexes & Plans</span>
-          <span class="pill">Marimo Charts</span>
-        </div>
+      <div class="eyebrow">CIP - SW03 Lecture Studio</div>
+      <div class="hero-title">Storage, Serialization, APIs & Apps</div>
+      <div class="hero-subtitle">
+        One data product, built in <strong>three tiers</strong>: where the data rests,
+        what serves it, and what people look at. We build each tier in turn and stack
+        them &mdash; race conditions, serialization trade&#8209;offs, columnar analytics,
+        API design, and rapid app prototyping.
+      </div>
+      <div class="hero-pills">
+        <span class="pill">ACID & Concurrency</span>
+        <span class="pill">Atomicity Transfers</span>
+        <span class="pill">Serialization Benchmarks</span>
+        <span class="pill">Columnar Analytics</span>
+        <span class="pill">APIs & FastAPI</span>
+        <span class="pill">Indexes & Plans</span>
+        <span class="pill">Marimo Charts</span>
       </div>
     </div>
             """
@@ -499,7 +497,7 @@ def _(Path, mo):
 
 
 @app.cell
-def _(requests):
+def _(mo, requests):
     def format_bytes(num_bytes):
         """Human-friendly byte counts."""
         value = float(num_bytes)
@@ -512,6 +510,10 @@ def _(requests):
     def format_ms(seconds):
         return f"{seconds * 1000:,.2f} ms"
 
+    def static_table(rows, label: str):
+        """A read-out table: no row selection, paging, search or download buttons."""
+        return mo.ui.table(rows, label=label, selection=None, pagination=False, show_download=False, show_search=False)
+
     def call_api(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
         """One HTTP request -> (status code, parsed JSON or raw text).
 
@@ -523,7 +525,7 @@ def _(requests):
         except requests.JSONDecodeError:
             return response.status_code, response.text
 
-    return call_api, format_bytes, format_ms
+    return call_api, format_bytes, format_ms, static_table
 
 
 @app.cell
@@ -728,6 +730,7 @@ def _(
     os,
     run_race,
     sqlite3,
+    static_table,
     strategies,
     tempfile,
     threading,
@@ -942,7 +945,7 @@ def _(
                     }
                 )
 
-        _table = mo.ui.table(race_rows, label="Concurrency results", selection=None, pagination=False, show_download=False, show_search=False)
+        _table = static_table(race_rows, label="Concurrency results")
         _summary = mo.md(
             """
     **How to read the table**
@@ -987,8 +990,8 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker (simulated)", show_value=True)
-    interleave_seed = mo.ui.slider(1, 999, value=13, label="Interleaving seed", show_value=True)
+    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker (simulated)", show_value=True, debounce=True)
+    interleave_seed = mo.ui.slider(1, 999, value=13, label="Interleaving seed", show_value=True, debounce=True)
     show_trace = mo.ui.switch(value=True, label="Show step-by-step trace")
 
     _controls = mo.vstack(
@@ -1004,7 +1007,7 @@ def _(mo):
 
 
 @app.cell
-def _(interleave_seed, interleave_steps, mo, random, show_trace):
+def _(interleave_seed, interleave_steps, mo, random, show_trace, static_table):
     _rng = random.Random(interleave_seed.value)
 
     def _build_ops():
@@ -1055,7 +1058,7 @@ def _(interleave_seed, interleave_steps, mo, random, show_trace):
 
     _panel_items = [_summary]
     if show_trace.value:
-        _panel_items.append(mo.ui.table(_log, label="Interleaving trace", selection=None, pagination=False, show_download=False, show_search=False))
+        _panel_items.append(static_table(_log, label="Interleaving trace"))
 
     _panel = mo.vstack(_panel_items, gap=0.6)
     _panel
@@ -1138,6 +1141,7 @@ def _(
     mo,
     run_atomic,
     sqlite3,
+    static_table,
     tempfile,
 ):
     if run_atomic.value == 0:
@@ -1234,22 +1238,19 @@ def _(
         if not _db_rows:
             _db_rows = list(_initial.items())
 
-        _initial_table = mo.ui.table(
+        _initial_table = static_table(
             [{"account": k, "balance": v} for k, v in _initial.items()],
             label="Initial balances",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
-        _file_table = mo.ui.table(
+        _file_table = static_table(
             [{"account": k, "balance": v} for k, v in _file_final.items()],
             label="File ledger (JSON)",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
-        _db_table = mo.ui.table(
+        _db_table = static_table(
             [{"account": name, "balance": bal} for name, bal in _db_rows],
             label="SQLite ledger (transaction)",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
-        _timeline_table = mo.ui.table(_timeline, label="Step-by-step timeline", selection=None, pagination=False, show_download=False, show_search=False)
+        _timeline_table = static_table(_timeline, label="Step-by-step timeline")
 
         _file_total = sum(_file_final.values())
         _db_total = sum(row[1] for row in _db_rows)
@@ -1610,6 +1611,7 @@ def _(
     serial_cols,
     serial_rows,
     serial_seed,
+    static_table,
     tempfile,
     time,
 ):
@@ -1651,7 +1653,7 @@ def _(
         _output = mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral")
     else:
         _records = _make_records(serial_rows.value, serial_cols.value, serial_seed.value + run_serial.value)
-        sample = mo.ui.table(_records[:5], label="Sample records", selection=None, pagination=False, show_download=False, show_search=False)
+        sample = static_table(_records[:5], label="Sample records")
 
         _results = []
         with tempfile.TemporaryDirectory() as _tmpdir:
@@ -1806,7 +1808,7 @@ def _(
         )
         _charts = mo.vstack([_size_chart, _latency_chart], gap=0.6)
 
-        results_table = mo.ui.table(_display_rows, label="Serialization benchmark", selection=None, pagination=False, show_download=False, show_search=False)
+        results_table = static_table(_display_rows, label="Serialization benchmark")
         benchmark_note = mo.md("Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark.").callout(kind="info")
         warning = mo.md(
             """
@@ -1814,15 +1816,14 @@ def _(
                 """
         ).callout(kind="warn")
 
-        _items = [sample, results_table, _charts, benchmark_note, warning]
-        _output = mo.vstack(_items, gap=0.6)
+        _output = mo.vstack([sample, results_table, _charts, benchmark_note, warning], gap=0.6)
 
     _output
     return
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, pd, tempfile):
+def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500).copy()
     _src["sale_date"] = pd.to_datetime(_src["sale_date"])
     # Store codes are the classic case: they look like numbers and are not.
@@ -1878,8 +1879,8 @@ def _(Path, SALES_SEED, mo, pd, tempfile):
 
     _panel = mo.vstack(
         [
-            mo.ui.table(_dtypes, label="Same 500 rows, written two ways and read back", selection=None, pagination=False, show_download=False, show_search=False),
-            mo.ui.table(_answers, label="Now ask the data a question", selection=None, pagination=False, show_download=False, show_search=False),
+            static_table(_dtypes, label="Same 500 rows, written two ways and read back"),
+            static_table(_answers, label="Now ask the data a question"),
             _note,
         ],
         gap=0.6,
@@ -1889,7 +1890,7 @@ def _(Path, SALES_SEED, mo, pd, tempfile):
 
 
 @app.cell
-def _(csv, fastavro, io, mo):
+def _(csv, fastavro, io, mo, static_table):
     # It is next March. Your team adds a `channel` field to the sales event.
     # Two years of old files sit on disk, and one old program nobody redeployed
     # is still running in production. What happens?
@@ -1955,7 +1956,7 @@ def _(csv, fastavro, io, mo):
     _panel = mo.vstack(
         [
             mo.md("### Schema Evolution: the office adds a box to the form"),
-            mo.ui.table(_rows, label="Same change, three situations", selection=None, pagination=False, show_download=False, show_search=False),
+            static_table(_rows, label="Same change, three situations"),
             _note,
         ],
         gap=0.6,
@@ -2213,7 +2214,16 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_cols, n_rows, random, run_storage, storage_seed, time):
+def _(
+    mo,
+    n_cols,
+    n_rows,
+    random,
+    run_storage,
+    static_table,
+    storage_seed,
+    time,
+):
     def build_data(rows, cols, seed_value):
         rng = random.Random(seed_value)
         rows_list = [tuple(rng.random() for _ in range(cols)) for _ in range(rows)]
@@ -2252,7 +2262,7 @@ def _(mo, n_cols, n_rows, random, run_storage, storage_seed, time):
             },
         ]
 
-        _table = mo.ui.table(_results, label="Row vs Column timing (Python simulation)", selection=None, pagination=False, show_download=False, show_search=False)
+        _table = static_table(_results, label="Row vs Column timing (Python simulation)")
         _note = mo.md(
             """
     **Discussion:** These timings simulate the two *access patterns* in plain Python. No file is written
@@ -2292,7 +2302,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, static_table, tempfile):
     if run_rowgroup.value == 0:
         _output = mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral")
     else:
@@ -2354,7 +2364,7 @@ def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, tempfile):
                 """
         ).callout(kind="info")
         _output = mo.vstack(
-            [mo.ui.table(_rows, label="Bytes the query must read", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+            [static_table(_rows, label="Bytes the query must read"), _note], gap=0.6
         )
     _output
     return
@@ -2494,9 +2504,9 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)", show_value=True)
-    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio", show_value=True)
-    budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day", show_value=True)
+    budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)", show_value=True, debounce=True)
+    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio", show_value=True, debounce=True)
+    budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day", show_value=True, debounce=True)
     _note = mo.md("Set the estimated compression ratio and scan frequency to quantify daily I/O savings (reduced bytes read/written).").callout(kind="info")
     _panel = mo.vstack(
         [
@@ -2512,20 +2522,19 @@ def _(mo):
 
 
 @app.cell
-def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
+def _(budget_ratio, budget_scans_day, budget_size_gb, mo, static_table):
     raw_gb = budget_size_gb.value
     _compression_ratio = budget_ratio.value
     comp_gb = raw_gb * _compression_ratio
     saved_gb = raw_gb - comp_gb
     daily_io_saved = saved_gb * budget_scans_day.value
-    _table = mo.ui.table(
+    _table = static_table(
         [
             {"metric": "compressed size (GB)", "value": round(comp_gb, 2)},
             {"metric": "saved size per scan (GB)", "value": round(saved_gb, 2)},
             {"metric": "daily I/O saved (GB)", "value": round(daily_io_saved, 2)},
         ],
         label="Compression budget impact",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
     _note = mo.md("Use this as a first-order estimate before deeper benchmarking.").callout(kind="info")
     _panel = mo.vstack([_table, _note], gap=0.6)
@@ -2549,8 +2558,8 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="PCA components (rank k)", show_value=True)
-    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True)
+    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="PCA components (rank k)", show_value=True, debounce=True)
+    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True, debounce=True)
     _panel = mo.vstack(
         [
             mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
@@ -2575,6 +2584,7 @@ def _(
     math,
     mo,
     np,
+    static_table,
 ):
     _width = image_demo_width.value
     _height = int(_width * 0.74)
@@ -2806,7 +2816,7 @@ def _(
     _gz_identical = bool(np.array_equal(_gz_back, _orig_u8))
     _pca_worst = int(np.max(np.abs(_rec_uint8.astype(int) - _orig_u8.astype(int))))
 
-    _comparison_table = mo.ui.table(
+    _comparison_table = static_table(
         [
             {
                 "method": "gzip (lossless)",
@@ -2824,7 +2834,6 @@ def _(
             },
         ],
         label=f"Same {_raw_rgb_bytes:,}-byte image, two kinds of compression",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
     _comparison_note = mo.md(
         """
@@ -2886,7 +2895,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, pd, run_lossy_money, tempfile):
+def _(Path, SALES_SEED, mo, pd, run_lossy_money, static_table, tempfile):
     if run_lossy_money.value == 0:
         _output = mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral")
     else:
@@ -2949,7 +2958,7 @@ def _(Path, SALES_SEED, mo, pd, run_lossy_money, tempfile):
                 """
         ).callout(kind="danger")
         _output = mo.vstack(
-            [mo.ui.table(_rows, label="Same 3,360 prices, stored five ways", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+            [static_table(_rows, label="Same 3,360 prices, stored five ways"), _note], gap=0.6
         )
     _output
     return
@@ -2984,6 +2993,7 @@ def _(
     pq,
     random,
     run_compress,
+    static_table,
     tempfile,
 ):
     def _make_records(count, num_cols, seed_value):
@@ -3063,7 +3073,7 @@ def _(
                     }
                 )
 
-        _table = mo.ui.table(_results, label="Compression ratios (baseline: JSON size)", selection=None, pagination=False, show_download=False, show_search=False)
+        _table = static_table(_results, label="Compression ratios (baseline: JSON size)")
         _note = mo.md(
             """
     How to read this table:
@@ -3117,7 +3127,7 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, gzip, io, mo, pd, run_ctime, time):
+def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table, time):
     if run_ctime.value == 0:
         _output = mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral")
     else:
@@ -3180,7 +3190,7 @@ def _(SALES_SEED, gzip, io, mo, pd, run_ctime, time):
                 """
         ).callout(kind="warn")
         _output = mo.vstack(
-            [mo.ui.table(_rows, label="Same question, four ways to store the file", selection=None, pagination=False, show_download=False, show_search=False), _note],
+            [static_table(_rows, label="Same question, four ways to store the file"), _note],
             gap=0.6,
         )
     _output
@@ -3189,9 +3199,9 @@ def _(SALES_SEED, gzip, io, mo, pd, run_ctime, time):
 
 @app.cell
 def _(mo):
-    dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows", show_value=True)
-    dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values", show_value=True)
-    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Average bytes per original value", show_value=True)
+    dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows", show_value=True, debounce=True)
+    dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values", show_value=True, debounce=True)
+    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Average bytes per original value", show_value=True, debounce=True)
     _panel = mo.vstack(
         [
             mo.md("### Dictionary Encoding Intuition (Toy Model)"),
@@ -3206,7 +3216,7 @@ def _(mo):
 
 
 @app.cell
-def _(dict_rows, dict_unique, dict_value_bytes, math, mo):
+def _(dict_rows, dict_unique, dict_value_bytes, math, mo, static_table):
     _rows_count = dict_rows.value
     _unique_values = min(dict_unique.value, _rows_count)
     _bytes_per_value = dict_value_bytes.value
@@ -3219,7 +3229,7 @@ def _(dict_rows, dict_unique, dict_value_bytes, math, mo):
     _encoded_ratio = _encoded_total_bytes / max(_raw_bytes, 1)
     _savings = 1 - _encoded_ratio
 
-    _table = mo.ui.table(
+    _table = static_table(
         [
             {
                 "metric": "Raw storage (no dictionary)",
@@ -3253,7 +3263,6 @@ def _(dict_rows, dict_unique, dict_value_bytes, math, mo):
             },
         ],
         label="Dictionary encoding intuition (toy calculation)",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
     _note = mo.md(
         """
@@ -3376,10 +3385,10 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    push_rows = mo.ui.slider(10_000, 5_000_000, step=10_000, value=400_000, label="Rows (N)", show_value=True)
-    push_selectivity = mo.ui.slider(0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction of rows kept)", show_value=True)
-    push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns", show_value=True)
-    push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query", show_value=True)
+    push_rows = mo.ui.slider(10_000, 5_000_000, step=10_000, value=400_000, label="Rows (N)", show_value=True, debounce=True)
+    push_selectivity = mo.ui.slider(0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction of rows kept)", show_value=True, debounce=True)
+    push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns", show_value=True, debounce=True)
+    push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query", show_value=True, debounce=True)
     _push_note = mo.md(
         """
     Model used in this mini-lab:
@@ -3405,7 +3414,14 @@ def _(mo):
 
 
 @app.cell
-def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
+def _(
+    mo,
+    push_cols_needed,
+    push_cols_total,
+    push_rows,
+    push_selectivity,
+    static_table,
+):
     total_cols = push_cols_total.value
     needed_cols = min(push_cols_needed.value, total_cols)
     rows = push_rows.value
@@ -3415,7 +3431,7 @@ def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
     with_push = rows * sel * needed_cols
     gain = no_push / max(with_push, 1)
 
-    _table = mo.ui.table(
+    _table = static_table(
         [
             {
                 "metric": "Estimated work without pushdown",
@@ -3434,7 +3450,6 @@ def _(mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
             },
         ],
         label="Predicate + projection pushdown estimate (toy model)",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
     _panel = mo.vstack(
         [
@@ -3485,6 +3500,7 @@ def _(
     pq,
     random,
     run_duck,
+    static_table,
     tempfile,
     time,
 ):
@@ -3573,8 +3589,8 @@ def _(
             _sizes = [
                 {"file": "orders.csv", "size (bytes)": _csv_path.stat().st_size},
                 {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
+                {"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size},
             ]
-            _sizes.append({"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size})
 
         _results_table = [
             {
@@ -3585,9 +3601,9 @@ def _(
             for row in (_result_rows or [])
         ]
 
-        _sizes_table = mo.ui.table(_sizes, label="File sizes", selection=None, pagination=False, show_download=False, show_search=False)
-        _timing_table = mo.ui.table(_timings, label="Query timing (ms)", selection=None, pagination=False, show_download=False, show_search=False)
-        _results_panel = mo.ui.table(_results_table, label="Query results", selection=None, pagination=False, show_download=False, show_search=False)
+        _sizes_table = static_table(_sizes, label="File sizes")
+        _timing_table = static_table(_timings, label="Query timing (ms)")
+        _results_panel = static_table(_results_table, label="Query results")
 
         _notes = []
         if _ingest_time is not None:
@@ -3656,6 +3672,7 @@ def _(
     random,
     run_index,
     sqlite3,
+    static_table,
     tempfile,
     time,
 ):
@@ -3712,7 +3729,7 @@ def _(
             _idx_result = _states[-1][4]
             _con.close()
 
-        _timing_table = mo.ui.table(
+        _timing_table = static_table(
             [
                 {
                     "state": _name,
@@ -3723,16 +3740,14 @@ def _(
                 for _name, _build, _el, _plan, _res in _states
             ],
             label="What the index costs, and what it buys",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
 
-        _plan_table = mo.ui.table(
+        _plan_table = static_table(
             [{"state": _name, "SQLite plan": str(_plan[-1])} for _name, _build, _el, _plan, _res in _states],
             label="Query plan (SQLite)",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
 
-        _result_table = mo.ui.table(
+        _result_table = static_table(
             [
                 {"metric": "count", "scan": _scan_result[0], "index": _idx_result[0]},
                 {
@@ -3742,7 +3757,6 @@ def _(
                 },
             ],
             label="Query results",
-            selection=None, pagination=False, show_download=False, show_search=False,
         )
 
         _note = mo.md(
@@ -3822,7 +3836,17 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
+def _(
+    Path,
+    SALES_SEED,
+    duckdb,
+    mo,
+    pd,
+    random,
+    run_schema,
+    static_table,
+    tempfile,
+):
     if run_schema.value == 0:
         _output = mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral")
     else:
@@ -3908,7 +3932,7 @@ def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
                 """
         ).callout(kind="warn")
         _output = mo.vstack(
-            [mo.ui.table(_rows, label="One messy export, two lanes", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+            [static_table(_rows, label="One messy export, two lanes"), _note], gap=0.6
         )
     _output
     return
@@ -3935,7 +3959,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, static_table, tempfile):
     if run_evolution.value == 0:
         _output = mo.md("Click **Run schema evolution demo** to ask the same question three ways.").callout(kind="neutral")
     else:
@@ -3997,7 +4021,7 @@ def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
                 """
         ).callout(kind="warn")
         _output = mo.vstack(
-            [mo.ui.table(_rows, label="One folder, two file shapes, three readings", selection=None, pagination=False, show_download=False, show_search=False), _note],
+            [static_table(_rows, label="One folder, two file shapes, three readings"), _note],
             gap=0.6,
         )
     _output
@@ -5094,7 +5118,16 @@ def _(mo):
 
 
 @app.cell
-def _(fastapi_base_url, json, mo, pydantic, run_gates, url_error, url_request):
+def _(
+    fastapi_base_url,
+    json,
+    mo,
+    pydantic,
+    run_gates,
+    static_table,
+    url_error,
+    url_request,
+):
     if run_gates.value == 0:
         _output = mo.md("Click **Send six slips through both gates** to compare them.").callout(kind="neutral")
     else:
@@ -5175,7 +5208,7 @@ def _(fastapi_base_url, json, mo, pydantic, run_gates, url_error, url_request):
                     """
             ).callout(kind="info")
             _output = mo.vstack(
-                [mo.ui.table(_rows, label="The same six slips, checked twice", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+                [static_table(_rows, label="The same six slips, checked twice"), _note], gap=0.6
             )
         except url_error.URLError as _exc:
             _output = mo.md(
@@ -5205,7 +5238,15 @@ def _(mo):
 
 
 @app.cell
-def _(fastapi_base_url, json, mo, run_twice, url_error, url_request):
+def _(
+    fastapi_base_url,
+    json,
+    mo,
+    run_twice,
+    static_table,
+    url_error,
+    url_request,
+):
     if run_twice.value == 0:
         _output = mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral")
     else:
@@ -5299,7 +5340,7 @@ def _(fastapi_base_url, json, mo, run_twice, url_error, url_request):
                 """
             ).callout(kind="info")
             _output = mo.vstack(
-                [mo.ui.table(_rows, label="Each verb, sent twice", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+                [static_table(_rows, label="Each verb, sent twice"), _note], gap=0.6
             )
         except url_error.URLError as _exc:
             _output = mo.md(
@@ -5336,6 +5377,7 @@ def _(
     json,
     mo,
     run_follow,
+    static_table,
     url_error,
     url_request,
 ):
@@ -5412,7 +5454,7 @@ def _(
                     """
                 ).callout(kind="info")
                 _output = mo.vstack(
-                    [mo.ui.table(_rows, label="Same sale, two tiers, two shapes", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+                    [static_table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6
                 )
             except url_error.URLError as _exc:
                 _output = mo.md(
@@ -5448,7 +5490,15 @@ def _(mo):
 
 
 @app.cell
-def _(fastapi_base_url, json, mo, run_two_analysts, url_error, url_request):
+def _(
+    fastapi_base_url,
+    json,
+    mo,
+    run_two_analysts,
+    static_table,
+    url_error,
+    url_request,
+):
     if run_two_analysts.value == 0:
         _output = mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral")
     else:
@@ -5514,7 +5564,7 @@ def _(fastapi_base_url, json, mo, run_two_analysts, url_error, url_request):
                 """
             ).callout(kind="danger")
             _output = mo.vstack(
-                [mo.ui.table(_steps, label="Six requests, strictly in order", selection=None, pagination=False, show_download=False, show_search=False), _note], gap=0.6
+                [static_table(_steps, label="Six requests, strictly in order"), _note], gap=0.6
             )
         except url_error.URLError as _exc:
             _output = mo.md(
@@ -5579,7 +5629,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _(mo, static_table):
     framework_rows = [
         {
             "framework": "Marimo",
@@ -5660,7 +5710,7 @@ def _(mo):
             """
     ).callout(kind="neutral")
 
-    _framework_table = mo.ui.table(framework_rows, label="Framework comparison", selection=None, pagination=False, show_download=False, show_search=False)
+    _framework_table = static_table(framework_rows, label="Framework comparison")
     _panel = mo.vstack([_framework_note, _framework_table], gap=0.6)
     _panel
     return
@@ -5668,9 +5718,9 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration", show_value=True)
-    fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control", show_value=True)
-    fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength", show_value=True)
+    fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration", show_value=True, debounce=True)
+    fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control", show_value=True, debounce=True)
+    fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength", show_value=True, debounce=True)
     _note = mo.md(
         """
     Set three numbers about *your team*, not about the frameworks.
@@ -5701,7 +5751,7 @@ def _(mo):
 
 
 @app.cell
-def _(fw_control, fw_js, fw_speed, mo):
+def _(fw_control, fw_js, fw_speed, mo, static_table):
     # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
     # so no framework wins just by carrying more weight than the others.
     _weights = {
@@ -5720,7 +5770,7 @@ def _(fw_control, fw_js, fw_speed, mo):
         for name, ((w_s, w_c, w_j), python_native) in _weights.items()
     }
     _ranked_frameworks = sorted(_framework_scores.items(), key=lambda x: x[1], reverse=True)
-    _fit_table = mo.ui.table(
+    _fit_table = static_table(
         [
             {
                 "framework": name,
@@ -5730,7 +5780,6 @@ def _(fw_control, fw_js, fw_speed, mo):
             for name, score in _ranked_frameworks
         ],
         label="Teaching score (higher = better fit)",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
     _fit_message = mo.md(f"Current top fit: **{_ranked_frameworks[0][0]}**").callout(kind="info")
     _fit_panel = mo.vstack([_fit_table, _fit_message], gap=0.6)
@@ -5813,10 +5862,10 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows (max 1000)", show_value=True)
-    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True)
-    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="Trend slope", show_value=True)
-    chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level", show_value=True)
+    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows (max 1000)", show_value=True, debounce=True)
+    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True, debounce=True)
+    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="Trend slope", show_value=True, debounce=True)
+    chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level", show_value=True, debounce=True)
 
     _controls = mo.vstack(
         [
@@ -5840,6 +5889,7 @@ def _(
     mo,
     pd,
     random,
+    static_table,
     statistics,
 ):
     _rng = random.Random(chart_seed.value)
@@ -5869,7 +5919,7 @@ def _(
     _y_vals = [row["y"] for row in _rows]
     _stats_x = _stats(_x_vals)
     _stats_y = _stats(_y_vals)
-    _stats_table = mo.ui.table(
+    _stats_table = static_table(
         [
             {
                 "metric": k,
@@ -5879,7 +5929,6 @@ def _(
             for k in _stats_x.keys()
         ],
         label="Summary statistics (x, y)",
-        selection=None, pagination=False, show_download=False, show_search=False,
     )
 
     _df = pd.DataFrame(_rows)
@@ -5996,7 +6045,7 @@ def _(mo):
 
 
 @app.cell
-def _(SEED_DIR, duckdb, honest_view, mo, statistics):
+def _(SEED_DIR, duckdb, honest_view, mo, static_table, statistics):
     def _fit(_xs, _ys):
         _mx, _my = statistics.mean(_xs), statistics.mean(_ys)
         _vx = sum((_x - _mx) ** 2 for _x in _xs)
@@ -6090,7 +6139,7 @@ def _(SEED_DIR, duckdb, honest_view, mo, statistics):
 
     _output = mo.vstack(
         [
-            mo.ui.table(_rows, label="Same 3,360 sales, same question", selection=None, pagination=False, show_download=False, show_search=False),
+            static_table(_rows, label="Same 3,360 sales, same question"),
             mo.md(_lesson).callout(kind="warn"),
         ],
         gap=0.6,
