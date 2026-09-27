@@ -28,6 +28,7 @@ The lecture builds one data product in **three tiers**:
 | Material | File | Purpose |
 | --- | --- | --- |
 | 📓 Lecture Notebook | `sw03_lecture_content.py` | Main teaching notebook |
+| 🎨 Lecture Styles | `sw03_deck.css` | Colours and diagram styles the lecture notebook loads |
 | 🧪 Exercises Notebook | `sw03_lecture_exercises.py` | Student exercises |
 | ✅ Solutions Notebook | `sw03_lecture_exercises_solutions.py` | Reference solutions |
 | 🚀 Demo API | `sw03_demo_api.py` | FastAPI service for API examples |

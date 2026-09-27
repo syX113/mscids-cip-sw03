@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.25.0"
-app = marimo.App(width="medium")
+app = marimo.App(width="medium", css_file="sw03_deck.css")
 
 
 @app.cell
@@ -15,6 +15,7 @@ def _():
     import os
     import pickle
     import random
+    import re
     import sqlite3
     import statistics
     import tempfile
@@ -37,6 +38,7 @@ def _():
         os,
         pickle,
         random,
+        re,
         sqlite3,
         statistics,
         tempfile,
@@ -47,383 +49,38 @@ def _():
 
 
 @app.cell
-def _(mo):
-    mo.Html(
-        """
-        <style title="marimo-sw03-deck">
-          /* The title must start with "marimo": marimo then copies this sheet into the shadow
-             DOM of callouts, tabs, accordions and carousels, so these classes work in them too.
-             Give no other <style> a title: a second title would switch one of them off. */
-          /* One palette for both marimo themes: marimo sets color-scheme: dark on its dark
-             theme, and light-dark() picks the matching value. Names avoid marimo's own
-             variables (--accent, --border, --muted, ...), which its UI depends on. */
-          :root {
-            /* marimo's layout width, widened for the projector */
-            --content-width: min(80vw, 1150px);
-            --content-width-medium: min(80vw, 1150px);
+def _(html, mo, re):
+    def label_w(text: str) -> float:
+        """Width of a box around a 17 px label: about 8.2 px per character (tags do not count) plus 32 px padding."""
+        return 32 + 8.2 * len(html.unescape(re.sub(r"<[^>]*>", "", text)))
 
-            --ink: light-dark(#0b1220, #e8edf4);
-            --ink-soft: light-dark(#2b3a55, #c5cfdc);
-            --ink-muted: light-dark(#56657c, #98a4b5);
-            --line: light-dark(rgb(11 18 32 / 0.12), rgb(255 255 255 / 0.12));
-            --surface: light-dark(#ffffff, #1f2423);
-            --surface-2: light-dark(#f4f7fb, #282d2c);
-            --brand: light-dark(#2f6fed, #86abff);
-            --teal: light-dark(#0f9488, #3fd0bd);
-            --amber: light-dark(#d97706, #f5b43c);
-            --red: light-dark(#b42318, #ff9b8f);
-            /* short on purpose: each marimo cell paints over the one above it */
-            --shadow: 0 1px 2px light-dark(rgb(15 23 42 / 0.06), rgb(0 0 0 / 0.3)),
-              0 4px 10px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.2));
-          }
+    def box(x: float, y: float, text: str, *, w: float | None = None, h: float = 44, cls: str = "dg-box") -> str:
+        """SVG for a box at (x, y) with `text` centred in it; as wide as label_w(text) unless `w` is given."""
+        w = label_w(text) if w is None else w
+        return (
+            f'<rect class="{cls}" x="{x:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + h / 2:.0f}" text-anchor="middle" dominant-baseline="central">{text}</text>'
+        )
 
-          .markdown h2 {
-            margin-top: 2.2rem;
-            padding-bottom: 0.35rem;
-            background: linear-gradient(90deg, var(--brand), var(--teal)) left bottom / 100% 3px no-repeat;
-          }
-
-          .section-card {
-            padding: 18px 20px;
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            background: var(--surface);
-            box-shadow: var(--shadow);
-          }
-
-          .section-card :is(h2, h3) {
-            margin-top: 0;
-          }
-
-          .hero {
-            padding: 28px;
-            border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent);
-            border-radius: 22px;
-            background:
-              radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--brand) 24%, transparent), transparent 48%),
-              linear-gradient(
-                120deg,
-                color-mix(in srgb, var(--brand) 12%, var(--surface)),
-                color-mix(in srgb, var(--teal) 10%, var(--surface)),
-                color-mix(in srgb, var(--amber) 10%, var(--surface))
-              );
-            box-shadow: var(--shadow);
-          }
-
-          .eyebrow {
-            display: inline-flex;
-            padding: 6px 12px;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--brand) 16%, transparent);
-            color: var(--brand);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-          }
-
-          .hero-title {
-            margin: 14px 0 10px;
-            color: var(--ink);
-            font-family: var(--heading-font);
-            font-size: 2.6rem;
-            font-weight: 700;
-            line-height: 1.1;
-          }
-
-          .hero-subtitle {
-            max-width: 860px;
-            color: var(--ink-soft);
-            font-size: 1.05rem;
-            line-height: 1.6;
-          }
-
-          .hero-pills {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 18px;
-          }
-
-          .pill {
-            padding: 6px 12px;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--surface) 75%, transparent);
-            color: var(--ink-soft);
-            font-size: 13px;
-          }
-
-          .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 16px;
-          }
-
-          .focus-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-          }
-
-          .focus-item {
-            padding: 10px 12px;
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            background: var(--surface-2);
-          }
-
-          .flow-card {
-            display: grid;
-            gap: 12px;
-          }
-
-          .flow-diagram {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 12px;
-          }
-
-          .flow-box {
-            min-width: 150px;
-            padding: 10px 14px;
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            background: var(--surface-2);
-            color: var(--ink);
-            font-weight: 600;
-            text-align: center;
-          }
-
-          .flow-arrow {
-            color: var(--ink-muted);
-            font-size: 1.4rem;
-            line-height: 1;
-          }
-
-          .flow-note {
-            color: var(--ink-muted);
-            font-size: 0.9rem;
-          }
-
-          .lost-update-wrap {
-            overflow-x: auto;
-          }
-
-          .lost-update-grid {
-            display: grid;
-            grid-template-columns: 90px repeat(3, minmax(180px, 1fr));
-            min-width: 760px;
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            overflow: hidden;
-            background: var(--surface);
-          }
-
-          .lu-header,
-          .lu-step,
-          .lu-event,
-          .lu-state {
-            display: flex;
-            align-items: center;
-            padding: 10px 12px;
-            border-right: 1px solid var(--line);
-            border-bottom: 1px solid var(--line);
-            color: var(--ink);
-            font-weight: 600;
-          }
-
-          .lu-header {
-            font-weight: 700;
-            background: color-mix(in srgb, var(--brand) 14%, transparent);
-          }
-
-          .lu-step {
-            justify-content: center;
-            font-weight: 700;
-            background: var(--surface-2);
-          }
-
-          .lu-state {
-            font-weight: 700;
-          }
-
-          .lu-read {
-            background: color-mix(in srgb, var(--teal) 15%, transparent);
-          }
-
-          .lu-write {
-            background: color-mix(in srgb, var(--amber) 18%, transparent);
-          }
-
-          .lu-idle {
-            color: var(--ink-muted);
-            background: var(--surface-2);
-            font-weight: 500;
-          }
-
-          .lu-stale,
-          .lu-problem {
-            color: var(--red);
-            background: color-mix(in srgb, var(--red) 13%, transparent);
-            font-weight: 700;
-          }
-
-          .bar-chart {
-            display: grid;
-            gap: 10px;
-          }
-
-          .bar-row {
-            display: grid;
-            grid-template-columns: 140px 1fr 110px;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.92rem;
-          }
-
-          .bar-label {
-            color: var(--ink);
-            font-weight: 600;
-          }
-
-          .bar-track {
-            height: 10px;
-            border-radius: 999px;
-            overflow: hidden;
-            background: color-mix(in srgb, var(--ink) 12%, transparent);
-          }
-
-          .bar-fill {
-            height: 100%;
-            border-radius: 999px;
-            background: linear-gradient(90deg, var(--brand), var(--teal));
-          }
-
-          .bar-fill.good {
-            background: linear-gradient(90deg, var(--teal), var(--brand));
-          }
-
-          .bar-fill.bad {
-            background: linear-gradient(90deg, #f97316, #ef4444);
-          }
-
-          .bar-value {
-            color: var(--ink-soft);
-            font-variant-numeric: tabular-nums;
-            text-align: right;
-          }
-
-          .disclaimer-red {
-            padding: 12px 14px;
-            border: 1px solid color-mix(in srgb, var(--red) 55%, transparent);
-            border-radius: 14px;
-            background: color-mix(in srgb, var(--red) 13%, transparent);
-            color: var(--red);
-            font-weight: 600;
-          }
-
-          /* Tiers: one hue each, the same in both themes (colour-blind safe, 3:1 on white
-             and on marimo's dark page). Every chapter's visuals carry their tier's hue. */
-          :root {
-            --tier-data: #2f7fe0;
-            --tier-logic: #c9479f;
-            --tier-presentation: #dd6325;
-          }
-
-          .tier-data { --tier: var(--tier-data); }
-          .tier-logic { --tier: var(--tier-logic); }
-          .tier-presentation { --tier: var(--tier-presentation); }
-
-          .tier-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 12px;
-            border: 1px solid var(--tier, var(--line));
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--tier, transparent) 14%, transparent);
-            color: var(--ink);
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-          }
-
-          .tier-badge::before {
-            content: "";
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--tier, var(--ink-muted));
-          }
-
-          /* SVG diagrams drawn with diagram(): 1 viewBox unit is 1 px at full size */
-          .dg { display: block; width: 100%; height: auto; margin: 0 auto; font-size: 17px; }
-          .dg text { fill: var(--ink); }
-          .dg .dg-muted { fill: var(--ink-muted); font-size: 15px; }
-          .dg-box { fill: var(--surface-2); stroke: color-mix(in srgb, var(--ink) 30%, transparent); stroke-width: 1.5; }
-          .dg-tier { fill: color-mix(in srgb, var(--tier, var(--ink-muted)) 16%, transparent); stroke: var(--tier, var(--ink-muted)); stroke-width: 2; }
-          .dg-edge { fill: none; stroke: var(--ink-muted); stroke-width: 2.5; marker-end: url(#dg-arrow); }
-          .dg-head { fill: var(--ink-muted); fill: context-stroke; }
-          .dg .dg-hot { stroke: var(--red); fill: color-mix(in srgb, var(--red) 14%, transparent); }
-          .dg .dg-edge.dg-hot { fill: none; }
-          .dg text.dg-hot, .dg tspan.dg-hot { stroke: none; fill: var(--red); font-weight: 700; }
-          .dg-dot { fill: var(--tier, var(--ink)); stroke: var(--surface); stroke-width: 2; }
-          .dg-flow { stroke-dasharray: 10 8; }
-
-          @media (prefers-reduced-motion: no-preference) {
-            .dg-flow { animation: dg-flow 0.9s linear infinite; }
-            .dg-pulse { animation: dg-pulse 1.6s ease-in-out infinite; }
-          }
-
-          /* the travelling token moves by SMIL, which ignores the media query above */
-          @media (prefers-reduced-motion: reduce) {
-            .dg-dot { display: none; }
-          }
-
-          @keyframes dg-flow { to { stroke-dashoffset: -18; } }
-          @keyframes dg-pulse { 50% { opacity: 0.3; } }
-
-          /* A visual with its two or three short lines beside it */
-          .vis-split {
-            display: grid;
-            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-            gap: 28px;
-            align-items: center;
-          }
-
-          .vis-caption {
-            color: var(--ink-soft);
-            font-size: 1.1rem;
-            line-height: 1.5;
-          }
-        </style>
-        """
-    )
-    return
-
-
-@app.cell
-def _(html, mo):
     def diagram(body: str, *, width: int, height: int, label: str, tier: str | None = None):
-        """An inline SVG drawn with the dg-* classes of the CSS cell; `label` is what a screen reader says.
+        """An inline SVG drawn with the dg-* classes of sw03_deck.css; `label` is what a screen reader says.
 
         1 viewBox unit is 1 px at full size: never wider than `width` px, narrower when its column is.
         `tier` ("data", "logic" or "presentation") colours every dg-tier and dg-dot inside.
         """
         tier_class = f" tier-{tier}" if tier else ""
+        # One arrowhead id per drawing: url(#id) takes the first match in the page, which can sit in a
+        # hidden copy that marimo keeps of tab and accordion content, and a hidden marker draws nothing.
+        arrow = f"dg-arrow-{abs(hash(body))}"
         return mo.Html(
-            f'<svg class="dg{tier_class}" viewBox="0 0 {width} {height}" style="max-width: {width}px"'
-            f' role="img" aria-label="{html.escape(label)}">'
-            '<defs><marker id="dg-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5"'
+            f'<svg class="dg{tier_class}" viewBox="0 0 {width} {height}"'
+            f' style="max-width: {width}px; --dg-arrow: url(#{arrow})" role="img" aria-label="{html.escape(label)}">'
+            f'<defs><marker id="{arrow}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5"'
             ' orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>'
             f"{body}</svg>"
         )
 
-    return (diagram,)
+    return box, diagram, label_w
 
 
 @app.cell
@@ -481,38 +138,36 @@ def _(mo):
 
 
 @app.cell
-def _(diagram, mo):
+def _(box, diagram, label_w, mo):
     def _tier(y, tier, name, role, chapters):
         """One tier band: name and role on the left, then one chip per chapter."""
         parts = [
-            f'<g class="tier-{tier}"><rect class="dg-tier" x="0" y="{y}" width="1100" height="96" rx="16"/>',
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="0" y="{y}" width="1060" height="96" rx="16"/>',
             f'<text x="24" y="{y + 40}" font-size="21" font-weight="700">{name}</text>',
             f'<text class="dg-muted" x="24" y="{y + 68}">{role}</text>',
         ]
         x = 230
         for number, topic in chapters:
-            w = 30 + 9.4 * len(f"{number} {topic}")  # about 9.4 px per character at 17 px
-            parts.append(f'<rect class="dg-box" x="{x}" y="{y + 26}" width="{w:.0f}" height="44" rx="12" style="stroke: var(--tier)"/>')
-            parts.append(
-                f'<text x="{x + w / 2:.0f}" y="{y + 48}" text-anchor="middle" dominant-baseline="central">'
-                f'<tspan font-weight="700">{number}</tspan> {topic}</text>'
-            )
-            x += w + 12
+            chip = f'<tspan font-weight="700">{number}</tspan> {topic}'
+            parts.append(box(x, y + 26, chip, cls="dg-tier"))
+            x += label_w(chip) + 12
         return "".join(parts) + "</g>"
 
     # Returned too, so the wrap-up can show the same map again.
     tier_map = diagram(
-        '<text x="960" y="22" text-anchor="middle" font-weight="700">request</text>'
-        '<text x="1045" y="22" text-anchor="middle" font-weight="700">answer</text>'
+        '<text x="920" y="22" text-anchor="middle" font-weight="700">request</text>'
+        '<text x="1000" y="22" text-anchor="middle" font-weight="700">answer</text>'
         + _tier(40, "presentation", "Presentation tier", "what a person sees", [("9", "frontend"), ("10", "honest charts")])
         + _tier(172, "logic", "Logic tier", "rules and the API", [("6", "contract"), ("7", "validate input"), ("8", "serve over HTTP")])
         + _tier(304, "data", "Data tier", "where bytes rest", [("1", "correct writes"), ("2", "format"), ("3", "layout"), ("4", "compression"), ("5", "query")])
-        + '<path class="dg-edge" d="M960 88 V 340"/><path class="dg-edge" d="M1045 352 V 100"/>'
-        + '<circle class="dg-dot" r="9"><animateMotion dur="5s" repeatCount="indefinite" path="M960 88 V 352 H 1045 V 88 Z"/></circle>',
-        width=1100,
+        # one hop per neighbour: down for the request, up for the answer
+        + '<path class="dg-edge" d="M920 88 V 166"/><path class="dg-edge" d="M920 220 V 298"/>'
+        + '<path class="dg-edge" d="M1000 352 V 274"/><path class="dg-edge" d="M1000 220 V 142"/>'
+        + '<circle class="dg-dot" r="9"><animateMotion dur="5s" repeatCount="indefinite" path="M920 88 V 352 H 1000 V 88 Z"/></circle>',
+        width=1060,
         height=420,
         label="Three tiers, stacked: presentation (chapters 9 and 10) on logic (6 to 8) on data (1 to 5). "
-        "A request travels down through each tier and the answer comes back up.",
+        "A request travels down one tier at a time and the answer comes back up the same way.",
     )
     mo.md(f"""
     <div class="section-card">
@@ -616,19 +271,23 @@ def _(mo, requests, timeit):
         except requests.JSONDecodeError:
             return response.status_code, response.text
 
-    TIER = {"data": "#2f7fe0", "logic": "#c9479f", "presentation": "#dd6325"}  # the --tier-* hues of the CSS cell
+    # ponytail: marimo 0.25 reports theme "system" as light, so on a dark OS those users get light-theme label ink
+    _dark = mo.app_meta().theme == "dark"
+    # the --tier-* hues of sw03_deck.css, plus a grey for the bars that are not the point (darker than a hue on dark)
+    TIER = {"data": "#2f7fe0", "logic": "#c9479f", "presentation": "#dd6325", "muted": "#626b78" if _dark else "#9aa4b2"}
 
     def tier_chart(chart, tier: str):
         """Finish an altair chart: marks in the tier's hue, no background, labels sized for the projector.
 
-        marimo themes the axes for light and dark itself; text marks (value labels) get a grey that reads on both.
+        marimo themes the axes for light and dark itself; text marks (value labels) get the page's ink.
         """
+        ink = "#e8edf4" if _dark else "#0b1220"  # --ink of sw03_deck.css
         return (
             chart.configure(background="transparent")
             .configure_mark(color=TIER[tier])
             .configure_axis(labelFontSize=14, titleFontSize=14, tickCount=5)
             .configure_legend(labelFontSize=14, titleFontSize=14)
-            .configure_text(color="#7c8593", fontSize=15, fontWeight="bold")
+            .configure_text(color=ink, fontSize=15, fontWeight="bold")
         )
 
     return TIER, best_seconds, call_api, format_bytes, format_ms, static_table, tier_chart
