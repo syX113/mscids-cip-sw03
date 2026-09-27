@@ -443,8 +443,9 @@ def exercise8_prompt(mo):
 
     Implement `call_json_endpoint(base_url, path, opener)`. `opener` works like
     `urllib.request.urlopen`: call it with a URL and it returns a response with `.read()`
-    and `.status`. `urlopen` is the standard library's version of the `requests` calls from
-    Chapter 6: `.status` instead of `.status_code`, `.read()` plus `json.loads` instead of `.json()`.
+    and `.status`. `urlopen` is the standard library's HTTP client. The `requests` package, which
+    the lecture's labs use behind the scenes, spells the same steps `.status_code` and `.json()`
+    instead of `.status` and `.read()` plus `json.loads`.
 
     Expected behavior:
     - call `base_url` + `path` (the code already strips stray slashes)
