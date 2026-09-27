@@ -198,8 +198,7 @@ def _(mo):
             line-height: 1;
           }
 
-          .flow-note,
-          .chart-note {
+          .flow-note {
             color: var(--ink-muted);
             font-size: 0.9rem;
           }
@@ -388,7 +387,7 @@ def _(mo):
       <p>
         Almost every data application is split into three layers, called <strong>tiers</strong>.
         Each tier only talks to its neighbour, so any one of them can be replaced without
-        rewriting the others. This notebook builds them from the bottom up.
+        rewriting the others.
       </p>
       <div class="flow-diagram">
         <div class="flow-box"><strong>Presentation tier</strong><br/>what a person sees<br/><em>chapters 9&ndash;10</em></div>
@@ -415,9 +414,6 @@ def _(mo):
           </ul>
         </div>
       </div>
-      <div class="flow-note">
-        Keep this picture in mind. At the start of every chapter we say which tier we are standing in.
-      </div>
     </div>
     """)
     return
@@ -432,7 +428,7 @@ def _(mo):
         <div class="focus-item"><strong>Chapters</strong>: each opens with a Key Question and the tier we are in.</div>
         <div class="focus-item"><strong>Formulas</strong>: a quick quantitative model of the idea.</div>
         <div class="focus-item"><strong>Mini-labs</strong>: controls to test that model. Heavy ones wait for their Run button.</div>
-        <div class="focus-item"><strong>Discussion</strong>: questions for the room. Click one to reveal the answer.</div>
+        <div class="focus-item"><strong>Discussion</strong>: in most chapters, questions for the room. Click one to reveal the answer.</div>
       </div>
     </div>
     """)
@@ -482,7 +478,7 @@ def _(Path, mo):
 
 
 @app.cell
-def _(mo, requests):
+def _(mo, requests, timeit):
     def format_bytes(num_bytes):
         """Human-friendly byte counts."""
         value = float(num_bytes)
@@ -495,9 +491,13 @@ def _(mo, requests):
     def format_ms(seconds):
         return f"{seconds * 1000:,.2f} ms"
 
-    def static_table(rows, label: str):
-        """A read-out table: no row selection, paging, search or download buttons."""
-        return mo.ui.table(rows, label=label, selection=None, pagination=False, show_download=False, show_search=False)
+    def static_table(rows, label: str, **kwargs):
+        """A read-out table: no row selection, paging, search or download buttons. kwargs go to mo.ui.table."""
+        return mo.ui.table(rows, label=label, selection=None, pagination=False, show_download=False, show_search=False, **kwargs)
+
+    def best_seconds(fn, *args, repeat=3, number=1):
+        """Seconds per fn(*args), fastest of `repeat` bursts of `number` calls: a cold start or a hiccup only adds time."""
+        return min(timeit.repeat(lambda: fn(*args), number=number, repeat=repeat)) / number
 
     def call_api(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
         """One HTTP request -> (status code, parsed JSON or raw text).
@@ -510,7 +510,7 @@ def _(mo, requests):
         except requests.JSONDecodeError:
             return response.status_code, response.text
 
-    return call_api, format_bytes, format_ms, static_table
+    return best_seconds, call_api, format_bytes, format_ms, static_table
 
 
 @app.cell
@@ -529,9 +529,9 @@ def _(mo):
 
     > **Key Question:** When many users update shared data at the same time, do we preserve correctness?
 
-    We are standing in the **data tier**, at its very bottom: before we pick a format or a layout,
-    writes have to be correct. Databases promise four things, abbreviated **ACID**. A plain file,
-    on its own, promises none of them:
+    *We start in the **data tier**, at its very bottom: before a format or a layout, writes have to be correct.*
+
+    Databases promise four things, abbreviated **ACID**. A plain file, on its own, promises none of them:
 
     | | Database promise | Plain file |
     |:---|:---|:---|
@@ -541,7 +541,8 @@ def _(mo):
     | **D**urability | committed data survives a crash | only after flush + fsync |
 
     The signal to watch: with $W$ workers adding $I$ increments each, the counter should end at
-    $E = W \\times I$. Whatever the actual value $A$ falls short is lost updates, $L = E - A$.
+    $E = W \\times I$. The shortfall is the number of lost updates: $L = E - A$, where $A$ is the
+    value actually reached.
             """
     ).callout(kind="neutral")
     return
@@ -572,7 +573,7 @@ def _(mo):
           <div class="lu-step">3</div>
           <div class="lu-event lu-idle">done</div>
           <div class="lu-event lu-stale">writes stale 42</div>
-          <div class="lu-state lu-problem">42 (A increment overwritten)</div>
+          <div class="lu-state lu-problem">42 (A's +1 overwritten)</div>
         </div>
       </div>
       <div class="flow-note"><strong>Expected after 2 increments: 43.</strong> Observed: 42, so one update was lost.</div>
@@ -624,9 +625,9 @@ def _(mo):
         }
     )
     workers = mo.ui.slider(2, 8, value=4, label="Concurrent workers", show_value=True)
-    # Capped so the slowest setting (8 x 120 x 3 ms, paid in a queue) still finishes in seconds.
+    # Capped so the slowest setting (8 x 120 x 2 ms, paid in a queue by flock) stays near 3 s in all.
     iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments per worker", show_value=True)
-    jitter = mo.ui.slider(0, 3, value=1, step=1, label="Artificial jitter (ms) per update", show_value=True)
+    jitter = mo.ui.slider(0, 2, value=1, step=1, label="Artificial jitter (ms) per update", show_value=True)
     run_race = mo.ui.run_button(label="Run counter experiment", kind="success")
     _term_note = mo.md(
         """
@@ -869,7 +870,7 @@ def _(mo):
     ### Atomicity Demo: Transfer With Failure
 
     Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
-    A transfer must keep $B_{Alice} + B_{Bob}$ constant. Without a transaction, a crash between
+    A transfer must keep $B_{\\text{Alice}} + B_{\\text{Bob}}$ constant. Without a transaction, a crash between
     **debit** and **credit** breaks that; a database rolls the partial work back.
 
     This demo is about atomicity alone: one transfer, no concurrent writers.
@@ -1063,10 +1064,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    This chapter showed a **correctness** problem: many writers can break data if updates are not coordinated.
-    Now we switch to a **data representation** problem (serialization format choice): once data is correct, which format should be used to store/send it?
-
-    Simple idea:
+    Chapter 1 kept the data correct. Next: what should it look like as bytes, stored or sent?
 
     $$
     \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
@@ -1096,18 +1094,8 @@ def _(mo):
 
     *Still in the **data tier**. Chapter 1 made writes correct; now we choose what those bytes look like.*
 
-    Serialization is packaging data for storage or transfer.
-    Different packages have different trade-offs:
-
-    - readable vs compact
-    - Python-specific vs cross-language
-    - fast writes vs fast reads
-
-    Rule of thumb:
-
-    $$
-    \\text{end-to-end cost} \\approx \\text{write time} + \\text{read time} + \\text{bytes moved cost}
-    $$
+    Every format trades readability, portability, size and speed differently; the benchmark below
+    measures the trade.
             """
     ).callout(kind="neutral")
     return
@@ -1152,7 +1140,7 @@ def _(mo):
     - **Schema evolution**: do old files survive a new field?
     - **Safety**: Pickle can execute arbitrary code
 
-    Two words that sound alike and are not.
+    Two words people mix up.
 
     **Latency** is how long *one* thing takes, end to end. Post a letter to Vienna: two days.
 
@@ -1184,7 +1172,7 @@ def _(mo):
     - **Pickle**: Python‑specific (unsafe for untrusted data)
             """
     ).callout(kind="neutral")
-    _flow = mo.Html(
+    _flow = mo.md(
         """
     <div class="section-card flow-card">
       <h3>Serialization Pipeline</h3>
@@ -1282,6 +1270,7 @@ def _(mo):
 def _(
     Path,
     alt,
+    best_seconds,
     csv,
     fastavro,
     feather,
@@ -1297,7 +1286,6 @@ def _(
     serial_rows,
     static_table,
     tempfile,
-    timeit,
 ):
     mo.stop(not run_serial.value, mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral"))
 
@@ -1347,14 +1335,12 @@ def _(
         "Avro": (_avro_write, _avro_read),
     }
 
-    def _best_ms(fn, path):  # best of 3: the first call pays the warm-up, the minimum does not
-        return min(timeit.repeat(lambda: fn(path), number=1, repeat=3)) * 1000
-
     _rows = []
     with tempfile.TemporaryDirectory() as _tmp:
         for _label, (_write, _read) in _formats.items():
             _path = Path(_tmp) / _label.replace("/", "_")
-            _write_ms, _read_ms = _best_ms(_write, _path), _best_ms(_read, _path)
+            _write_ms = best_seconds(_write, _path) * 1000  # best of 3: only the first call pays the warm-up
+            _read_ms = best_seconds(_read, _path) * 1000
             _rows.append(
                 {
                     "format": _label,
@@ -1453,16 +1439,7 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
     mo.vstack(
         [
             static_table(_dtypes, label="Same 500 rows, written two ways and read back"),
-            # static_table, plus wrapping so the TypeError is read in full
-            mo.ui.table(
-                _answers,
-                label="Now ask the data a question",
-                wrapped_columns=["via CSV"],
-                selection=None,
-                pagination=False,
-                show_download=False,
-                show_search=False,
-            ),
+            static_table(_answers, label="Now ask the data a question", wrapped_columns=["via CSV"]),
             _note,
         ],
         gap=0.6,
@@ -1471,7 +1448,7 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
 
 
 @app.cell
-def _(csv, fastavro, io, mo):
+def _(csv, fastavro, io, mo, static_table):
     # It is next March. Your team adds a `channel` field to the sales event.
     # Two years of old files sit on disk, and one old program nobody redeployed
     # is still running in production. What happens?
@@ -1533,16 +1510,7 @@ def _(csv, fastavro, io, mo):
     mo.vstack(
         [
             mo.md("### Schema Evolution: the office adds a box to the form"),
-            # static_table, plus wrapping so the punchlines are read in full
-            mo.ui.table(
-                _rows,
-                label="Same change, three situations",
-                wrapped_columns=["result", "verdict"],
-                selection=None,
-                pagination=False,
-                show_download=False,
-                show_search=False,
-            ),
+            static_table(_rows, label="Same change, three situations", wrapped_columns=["result", "verdict"]),
             _note,
         ],
         gap=0.6,
@@ -1578,16 +1546,14 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 2 Conclusion</h3>
-      <ul>
-        <li>Format choice is a trade-off between speed, size, interoperability, and safety.</li>
-        <li>Use benchmarks from a representative workload to compare latency and storage cost.</li>
-        <li>CSV keeps values but drops types: dates came back as <code>str</code>, store code <code>007</code> as <code>7</code>. Parquet and Avro carry the schema.</li>
-        <li>An Avro reader schema with defaults lets last year's files and this year's code agree.</li>
-        <li>Pickle preserves Python types but should not be used for untrusted data.</li>
-      </ul>
-    </div>
+    ### Chapter 2 Conclusion
+
+    - Format choice is a trade-off between speed, size, interoperability, and safety.
+    - Use benchmarks from a representative workload to compare latency and storage cost.
+    - CSV keeps values but drops types: dates came back as `str`, store code `007` as `7`.
+      Parquet and Avro carry the schema.
+    - An Avro reader schema with defaults lets last year's files and this year's code agree.
+    - Pickle preserves Python types but should not be used for untrusted data.
             """
     ).callout(kind="success")
     return
@@ -1636,14 +1602,6 @@ def _(mo):
 
     - Row store: incurs read cost (I/O + CPU) for whole rows
     - Column store: incurs read cost mainly for selected columns
-
-    Quick mental model:
-
-    $$
-    \\text{cost ratio} \\approx \\frac{C}{k}
-    $$
-
-    If a query needs only $k$ of $C$ columns, columnar layout can reduce read work substantially.
             """
     ).callout(kind="neutral")
     return
@@ -1735,11 +1693,8 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_rows, np, run_storage, static_table, timeit):
+def _(best_seconds, mo, n_rows, np, run_storage, static_table):
     mo.stop(not run_storage.value, mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral"))
-
-    def _best_ms(fn, table):  # best of 5: each operation is sub-millisecond, so a stray hiccup would dominate
-        return min(timeit.repeat(lambda: fn(table), number=1, repeat=5)) * 1000
 
     _operations = {
         "Count c0 > 0.75": lambda t: np.count_nonzero(t[:, 0] > 0.75),
@@ -1751,7 +1706,9 @@ def _(mo, n_rows, np, run_storage, static_table, timeit):
         _row_store = np.random.default_rng(7).random((n_rows.value * 1000, _cols))  # C order: each record contiguous
         _col_store = np.asfortranarray(_row_store)  # F order: each column contiguous
         for _operation, _fn in _operations.items():
-            _row_ms, _col_ms = _best_ms(_fn, _row_store), _best_ms(_fn, _col_store)
+            # best of 5: each operation is sub-millisecond, so a stray hiccup would dominate
+            _row_ms = best_seconds(_fn, _row_store, repeat=5) * 1000
+            _col_ms = best_seconds(_fn, _col_store, repeat=5) * 1000
             _results.append(
                 {
                     "operation": _operation,
@@ -1773,7 +1730,7 @@ def _(mo, n_rows, np, run_storage, static_table, timeit):
     away. In the column layout the values lie side by side and every byte fetched is used.
 
     **Read down the table:** as the column count grows, the row side slows down while the column
-    side stays put. That is $C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
+    side stays put. That is $IO_{row} / IO_{col} = C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
     goes further and never reads the unused columns from disk.
             """
     ).callout(kind="info")
@@ -1819,10 +1776,10 @@ def _(mo):
     **Two fences, and the second one matters more than it looks.**
 
     - The card can prove a section is **hopeless**. It can never prove a section is **useful**.
-      A section labelled `2024-03-01 .. 2026-02-27` must be opened, and may turn out to hold no
+      A section labelled <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened, and may turn out to hold no
       2026 sale at all. Min and max are a rejection test, not a search.
     - This is why the order rows were written in is not cosmetic. Drop the sales into the binder
-      in random order and every section's card reads roughly `2024-03-01 .. 2026-02-27`. Every
+      in random order and every section's card reads roughly <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code>. Every
       label spans everything, every label is useless, and you open all eight sections. The
       mechanism did not fail. You gave it nothing to work with. The next cell measures exactly
       that, on the real file.
@@ -1894,7 +1851,7 @@ def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, static_table, tempfile):
     _note = mo.md(
         f"""
     Read the top row left to right. Choosing columns took the read from **{_sorted['A: all columns']:,}**
-    bytes to **{_sorted['B: 2 columns']:,}**. That is what chapter 3 has taught so far. The index card
+    bytes to **{_sorted['B: 2 columns']:,}**. That is what this chapter has taught so far. The index card
     then took it from {_sorted['B: 2 columns']:,} to **{_sorted['C: 2 columns, open sections']:,}**, and
     nobody wrote that in the query.
 
@@ -1939,14 +1896,12 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 3 Conclusion</h3>
-      <ul>
-        <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
-        <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
-        <li>Parquet keeps min/max per row group in its footer. Sorted by date, the engine skipped 7 of 8 row groups (predicate pushdown); shuffled, it skipped none.</li>
-      </ul>
-    </div>
+    ### Chapter 3 Conclusion
+
+    - Row layouts favour transactional record-level access; column layouts favour scans and aggregates.
+    - Reading only required columns cuts I/O and typically improves analytics performance.
+    - Parquet keeps min/max per row group in its footer. Sorted by date, the footer lets the query
+      skip 7 of 8 row groups; shuffled, none.
             """
     ).callout(kind="success")
     return
@@ -1960,10 +1915,6 @@ def _(mo):
 
     Columnar data puts similar values together, and similar values are easier to compress.
     Next we measure how much size reduction we can actually get.
-
-    $$
-    \\text{savings} = 1 - \\frac{\\text{compressed size}}{\\text{original size}}
-    $$
             """
     ).callout(kind="neutral")
     return
@@ -2010,9 +1961,6 @@ def _(mo):
     mo.md(
         """
     ### Compression & Encoding
-
-    Compression reduces storage and I/O. Columnar formats (like Parquet) compress well because
-    similar values are adjacent.
 
     Compression ratio (lower is better):
 
@@ -2090,7 +2038,7 @@ def _(mo):
                 "Left is the original cat. Right is rebuilt from only the top `k` singular vectors per colour channel "
                 "(rank-k SVD, the maths behind PCA)."
             ).callout(kind="info"),
-            mo.md("Further Details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)").callout(kind="neutral"),
+            mo.md("Further details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)").callout(kind="neutral"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -2185,7 +2133,7 @@ def _(ch4_cat, ch4_cat_svd, gzip, image_demo_rank, io, mo, np, static_table):
 
     **Lossless** is a letter folded to fit an envelope. Every word is still there; unfold it and
     you get the original back exactly, byte for byte. gzip, PNG and Parquet are lossless. This is
-    the only kind you may use on a sales ledger.
+    the only kind you may use on money.
 
     **Lossy** is a summary. Usually much smaller, still useful, and the original is gone forever.
     PCA here, JPEG and MP3 in the world. Fine for a photo, where nobody can tell. Never fine for a
@@ -2227,7 +2175,7 @@ def _(mo):
     run_lossy_money = mo.ui.run_button(label="Run lossy vs lossless on money", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: The Cat Trick, Applied to the Sales Ledger"),
+            mo.md("### Mini-lab: The Cat Trick, Applied to Sales Prices"),
             mo.md(
                 """
     Blurring a cat is fine because nobody can tell. So try the same idea on the real sales file:
@@ -2412,14 +2360,14 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table, timeit):
+def _(SALES_SEED, best_seconds, gzip, io, mo, pd, run_ctime, static_table):
     mo.stop(not run_ctime.value, mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral"))
 
     _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
     def _ms(_fn, _calls=20):
         """Milliseconds per call, fastest of 5 bursts. A burst averages out sub-millisecond noise."""
-        return min(timeit.repeat(_fn, number=_calls, repeat=5)) / _calls * 1000
+        return best_seconds(_fn, repeat=5, number=_calls) * 1000
 
     def _answer(_csv_bytes):
         return pd.read_csv(io.BytesIO(_csv_bytes))["total_price"].sum()
@@ -2523,6 +2471,23 @@ def _(dict_rows, dict_unique, dict_value_bytes, math, mo, static_table):
 def _(mo):
     mo.md(
         """
+    ### Chapter 4 Conclusion
+
+    - Lossless (gzip, Parquet codecs) gives back every byte; lossy (PCA, rounding) gives back an
+      approximation: fine for a picture, never for prices, ids or dates.
+    - Compression feeds on repetition: five distinct values per column handed Parquet the win,
+      distinct measurements handed it to gzipped CSV.
+    - Smaller is not automatically faster: on a file already in memory, unpacking costs CPU on
+      every query and saves no I/O. The gzip level is a cost paid when writing.
+            """
+    ).callout(kind="success")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
     ### Bridge to Next Chapter
 
     Smaller files help, but analytics runtime is not only about file size.
@@ -2536,6 +2501,14 @@ def _(mo):
     on whole columns at once.
             """
     ).callout(kind="neutral")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## 5. DuckDB Example (SQL on Files)
+    """)
     return
 
 
@@ -2555,14 +2528,6 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md("""
-    ## 5. DuckDB Example (SQL on Files)
-    """)
-    return
-
-
-@app.cell
-def _(mo):
     mo.md(
         """
     ### Chapter 5 Introduction
@@ -2571,7 +2536,7 @@ def _(mo):
 
     *Last stop in the **data tier**. Chapters 1-4 built the files; now something has to read them back.*
 
-    Two key ideas:
+    Two ideas you already met in chapter 3, the index card and the ledger, by their proper names:
 
     - **Predicate pushdown**: the filter runs inside the scan, so non-matching rows are dropped
       before any other work, and whole blocks whose min/max rule out a match are not read at all.
@@ -2585,7 +2550,7 @@ def _(mo):
 
     Lower selectivity and fewer needed columns usually mean less total work. It is a toy model:
     the filter column itself is still read for every row unless whole blocks can be skipped, which
-    needs data sorted or clustered on that column (chapter 3).
+    needs data sorted or clustered on that column.
             """
     ).callout(kind="neutral")
     return
@@ -2646,17 +2611,17 @@ def _(
                 [
                     {
                         "estimate": "without pushdown",
-                        "rows (N)": f"{_n:,}",
-                        "share of rows kept": "1",
+                        "rows (N)": _n,
+                        "share of rows kept": 1.0,
                         "columns read": _total,
-                        "work units": f"{_without:,.0f}",
+                        "work units": _without,
                     },
                     {
                         "estimate": "with pushdown",
-                        "rows (N)": f"{_n:,}",
-                        "share of rows kept": f"{_kept:g}",
+                        "rows (N)": _n,
+                        "share of rows kept": _kept,
                         "columns read": _needed,
-                        "work units": f"{_with:,.0f}",
+                        "work units": round(_with),
                     },
                 ],
                 label="Predicate + projection pushdown estimate (toy model, not a runtime)",
@@ -2669,15 +2634,6 @@ def _(
         gap=0.6,
     )
     return
-
-
-@app.cell
-def _(timeit):
-    def ch5_best_seconds(con, sql, params=(), repeat=3):
-        """Fastest of `repeat` runs of one SQL statement, so a cold first run does not decide a ranking."""
-        return min(timeit.repeat(lambda: con.execute(sql, params).fetchall(), number=1, repeat=repeat))
-
-    return (ch5_best_seconds,)
 
 
 @app.cell
@@ -2705,7 +2661,7 @@ def _(mo):
 @app.cell
 def _(
     Path,
-    ch5_best_seconds,
+    best_seconds,
     duck_rows,
     duck_threshold,
     duckdb,
@@ -2740,11 +2696,15 @@ def _(
         _orders.to_csv(_csv, index=False)
         _orders.to_parquet(_parquet, index=False)
         with duckdb.connect(_db) as _con:
-            _load_csv = ch5_best_seconds(_con, "CREATE OR REPLACE TABLE orders AS FROM read_csv(?)", [str(_csv)])
-            _load_parquet = ch5_best_seconds(_con, "CREATE OR REPLACE TABLE orders AS FROM read_parquet(?)", [str(_parquet)])
-            _query_csv = ch5_best_seconds(_con, _sql.format("read_csv(?)"), [str(_csv), duck_threshold.value])
-            _query_parquet = ch5_best_seconds(_con, _sql.format("read_parquet(?)"), [str(_parquet), duck_threshold.value])
-            _query_table = ch5_best_seconds(_con, _sql.format("orders"), [duck_threshold.value])
+
+            def _best(sql, params):  # best of 3, so a cold first run does not decide the ranking
+                return best_seconds(lambda: _con.execute(sql, params).fetchall())
+
+            _load_csv = _best("CREATE OR REPLACE TABLE orders AS FROM read_csv(?)", [str(_csv)])
+            _load_parquet = _best("CREATE OR REPLACE TABLE orders AS FROM read_parquet(?)", [str(_parquet)])
+            _query_csv = _best(_sql.format("read_csv(?)"), [str(_csv), duck_threshold.value])
+            _query_parquet = _best(_sql.format("read_parquet(?)"), [str(_parquet), duck_threshold.value])
+            _query_table = _best(_sql.format("orders"), [duck_threshold.value])
             _result = _con.execute(_sql.format("orders"), [duck_threshold.value]).df()
             _block = _con.execute("SELECT block_size FROM pragma_database_size()").fetchone()[0]
         _csv_size, _parquet_size, _db_size = (_p.stat().st_size for _p in (_csv, _parquet, _db))
@@ -2829,7 +2789,7 @@ def _(mo):
 
 @app.cell
 def _(
-    ch5_best_seconds,
+    best_seconds,
     idx_rows,
     idx_seed,
     idx_selectivity,
@@ -2838,6 +2798,7 @@ def _(
     random,
     run_index,
     sqlite3,
+    static_table,
 ):
     mo.stop(not run_index.value, mo.md("Click **Run indexing demo** to time one query on three states of the same table.").callout(kind="neutral"))
 
@@ -2859,16 +2820,16 @@ def _(
         ("index on (category)", "CREATE INDEX idx_cat ON events(category)"),
         ("index on (category, value)", "CREATE INDEX idx_cat_val ON events(category, value)"),
     ):
-        _build = ch5_best_seconds(_con, _ddl, repeat=1) if _ddl else 0.0
+        _build = best_seconds(_con.execute, _ddl, repeat=1) if _ddl else 0.0
         _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}", _params).fetchone()[-1]
-        _states[_state] = (_build, ch5_best_seconds(_con, _query, _params, repeat=5), _plan)
+        _states[_state] = (_build, best_seconds(lambda: _con.execute(_query, _params).fetchall(), repeat=5), _plan)
         _answers.add(_con.execute(_query, _params).fetchone())
     _con.close()
     ((_count, _avg),) = _answers  # one answer, whichever plan SQLite picked
 
     _scan = _states["no index"][1]
     _narrow = _scan / _states["index on (category)"][1]
-    _table = mo.ui.table(
+    _table = static_table(
         [
             {
                 "state": _state,
@@ -2881,10 +2842,6 @@ def _(
         ],
         label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
         wrapped_columns=["SQLite plan"],
-        selection=None,
-        pagination=False,
-        show_download=False,
-        show_search=False,
     )
     if round(_narrow, 1) < 1:
         _planner = (
@@ -2971,7 +2928,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, static_table, tempfile):
     mo.stop(not run_schema.value, mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral"))
 
     _src = pd.read_parquet(SALES_SEED).head(400)
@@ -3014,7 +2971,7 @@ def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
 
     _true = _src["total_price"].sum()
     _read, _write = "schema-on-read (guess the types)", "schema-on-write (declare, then load)"
-    _table = mo.ui.table(
+    _table = static_table(
         {
             "": ["type of total_price", "rows in the file", "rows that reached the answer", "what you are told", "revenue reported"],
             _read: [_inferred, f"{_rows:,}", f"{_parsed:,}", "nothing at all", f"{_revenue:,.2f} (true total: {_true:,.2f})"],
@@ -3023,10 +2980,6 @@ def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
         label="One messy export, two lanes",
         wrapped_columns=[_read, _write],
         column_widths={_read: 400, _write: 440},
-        selection=None,
-        pagination=False,
-        show_download=False,
-        show_search=False,
     )
     _note = mo.md(
         f"""
@@ -3057,7 +3010,7 @@ def _(mo):
             mo.md("### Mini-lab: Add One Column, Then Read Last Year's Files"),
             mo.md(
                 "Chapter 2 showed a *format* handling a changed form. This is the same problem one "
-                "tier up, where you keep one file per year in a folder and read them together. "
+                "level up: a folder with one file per year, read together. "
                 "We split the real sales by year: `sales_2024.parquet` was written **before** anyone "
                 "thought of `customer_rating`; `sales_2025.parquet` and `sales_2026.parquet` have it."
             ).callout(kind="info"),
@@ -3069,7 +3022,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, static_table, tempfile):
     mo.stop(not run_evolution.value, mo.md("Click **Run schema evolution demo** to read one folder three ways.").callout(kind="neutral"))
 
     _all = pd.read_parquet(SALES_SEED)
@@ -3126,15 +3079,11 @@ def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
     ).callout(kind="warn")
     mo.vstack(
         [
-            mo.ui.table(
+            static_table(
                 _rows,
                 label="One folder, two file shapes, three readings",
                 wrapped_columns=["how you read the folder", "what happens", "why"],
                 column_widths={"how you read the folder": 250, "what happens": 480, "why": 330},
-                selection=None,
-                pagination=False,
-                show_download=False,
-                show_search=False,
             ),
             _note,
         ],
@@ -3150,7 +3099,7 @@ def _(mo):
       <h3>Discussion — DuckDB & Schema</h3>
       <details>
         <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
-        <p><strong>Answer:</strong> When the same queries or joins run repeatedly: the file is parsed once at load instead of on every query, as the timing lab showed (materialization = storing structured intermediate data for reuse).</p>
+        <p><strong>Answer:</strong> When the same queries or joins run repeatedly: the file is parsed once at load instead of on every query, as the three-sources lab showed (materialisation = storing structured intermediate data for reuse).</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> What risk appears with schema-on-read?</summary>
@@ -3169,15 +3118,15 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 5 Conclusion</h3>
-      <ul>
-        <li>DuckDB runs SQL directly on files; typed columns (Parquet, a loaded table) answer far faster than CSV, which is re-parsed on every query.</li>
-        <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
-        <li>An index is a second copy of some columns: it pays when it covers the query and the query asks for few rows, and every write pays for it.</li>
-        <li>Reading a folder whose files grew columns: say <code>union_by_name=true</code>, or the first file decides the shape.</li>
-      </ul>
-    </div>
+    ### Chapter 5 Conclusion
+
+    - DuckDB runs SQL directly on files; typed columns (Parquet, a loaded table) answer far faster
+      than CSV, which is re-parsed on every query.
+    - Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.
+    - An index is a second copy of some columns: it pays when it covers the query and the query
+      asks for few rows, and every write pays for it.
+    - Reading a folder whose files grew columns: say `union_by_name=true`, or the first file
+      decides the shape.
             """
     ).callout(kind="success")
     return
@@ -3236,15 +3185,6 @@ def _(mo):
     - 2xx: success
     - 4xx: client-side issue
     - 5xx: server-side issue
-
-    Reference list of status codes:
-    https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
-
-    Status family is computed from the code:
-
-    $$
-    \\text{family} = \\left\\lfloor \\frac{\\text{status code}}{100} \\right\\rfloor
-    $$
             """
     ).callout(kind="neutral")
     return
@@ -3254,7 +3194,7 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    ### REST Principles (Quick Recap)
+    ### REST Principles
 
     First the four words this whole chapter is built from:
 
@@ -3268,7 +3208,7 @@ def _(mo):
     - **GET**: fetch a resource
     - **POST**: create a new resource
     - **PUT**: replace a resource with the version you send. Our API also accepts just the
-      fields you change, which strict HTTP calls **PATCH**; its `/docs` page says so.
+      fields you change, which the HTTP standard calls **PATCH**; its `/docs` page says so.
     - **DELETE**: remove a resource
 
     One more word, because the mini-lab below and chapter 8's *Press It Twice* lab turn on it.
@@ -3324,20 +3264,17 @@ def _(mo):
     | :--- | :--- | :--- |
     | `POST /sales` with a valid sale | **201 Created** | it worked, and a new thing now exists |
     | `GET /sales/999999` | **404 Not Found** | the address is fine, nothing lives there |
-    | `POST /countries` with `region_id: 999` | **400 Bad Request** | the form is fine, what it asks for is impossible |
-    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable Content** | the form breaks a rule written in the model (1 to 5), so the endpoint's code never ran |
+    | `POST /countries` with `region_id: 999` | **400 Bad Request** | well formed, but it asks for the impossible |
+    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable Content** | it breaks a rule written in the model (1 to 5), so the endpoint's code never ran |
 
     All three failures are **4xx**, and that first digit is the instruction: *you* must change
     something; resending the same request gets the same answer. A **5xx** is the opposite
     message: the server broke, so retrying may well work (blindly only for the lift-button verbs).
 
-    The distinction between 400 and 422 is the one students trip on. 422 means the request broke
-    a rule written in the Pydantic model (missing field, wrong type, rating outside 1 to 5), so it
-    was turned away at the door before the endpoint's code ran: chapter 7. Our models also trim
-    whitespace and refuse unknown fields, so a name of only spaces, or a field the model does not
-    know (like `total_price`, which the server computes itself), is a 422 too. 400 means the
-    request passed the door, then broke a rule only the data can check, like pointing at a region
-    that does not exist.
+    400 or 422 is where students trip. **422**: the request broke a rule in the model (missing
+    field, wrong type, rating 9, a name of only spaces, an unknown field such as `total_price`,
+    which the server computes itself), so it was turned away at the door (chapter 7). **400**: it
+    passed the door, then broke a rule only the data can check, like a region that does not exist.
         """
     ).callout(kind="neutral")
     return
@@ -3345,7 +3282,8 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    ch6_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
+    # One box for chapters 6 and 8: chapter 8 shows this same element again, and both copies stay in sync.
+    api_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL", full_width=True)
     _sale = {"sale_date": "2026-09-01", "product_id": 1, "country_id": 3, "units_sold": 2, "customer_rating": 4}
     ch6_preset = mo.ui.dropdown(
         options={
@@ -3368,17 +3306,21 @@ def _(mo):
                 """
     ### Mini-lab: Ask Our API
 
-    Start the API in a terminal first: `uvicorn sw03_demo_api:app`. Pick a request, **guess the
-    status code**, then press **Send request**. Send the POST, the PUT and the DELETE twice each:
+    Start the API in a terminal first: `uvicorn sw03_demo_api:app`. **uvicorn** is the program
+    that listens on the port and hands each request to the FastAPI code; `sw03_demo_api` is the
+    file and `app` the variable inside it. Leave out `--reload` today: it also restarts the server
+    whenever marimo saves a notebook in this folder, and every restart resets `data/`.
+
+    Pick a request, **guess the status code**, then press **Send request**. Send the POST, the PUT and the DELETE twice each:
     which of them leave the server where the first press left it? The API restores `data/` from
     `data/seed/` every time it starts, so nothing you change or delete here is permanent.
                 """
             ),
-            mo.hstack([ch6_preset, ch6_base_url], widths="equal"),
+            mo.hstack([ch6_preset, api_base_url], widths="equal"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    return ch6_base_url, ch6_preset
+    return api_base_url, ch6_preset
 
 
 @app.cell
@@ -3396,8 +3338,8 @@ def _(ch6_preset, json, mo):
 
 @app.cell
 def _(
+    api_base_url,
     call_api,
-    ch6_base_url,
     ch6_body,
     ch6_method,
     ch6_path,
@@ -3410,7 +3352,7 @@ def _(
 
     mo.stop(not ch6_send.value, mo.md("Pick a request, guess the status code, then click **Send request**.").callout(kind="neutral"))
 
-    _url = ch6_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
+    _url = api_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
     try:
         _body = json.loads(ch6_body.value) if ch6_method.value in {"POST", "PUT"} else None
     except json.JSONDecodeError as _exc:
@@ -3460,15 +3402,13 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 6 Conclusion</h3>
-      <ul>
-        <li>The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.</li>
-        <li>404, 400 and 422 are three different client mistakes: nothing lives there, the request asks for the impossible, the request breaks a written rule.</li>
-        <li>GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.</li>
-        <li>Stateless: the server forgets the conversation, never the data.</li>
-      </ul>
-    </div>
+    ### Chapter 6 Conclusion
+
+    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.
+    - 404, 400 and 422 are three different client mistakes: nothing lives there, the request asks
+      for the impossible, the request breaks a written rule.
+    - GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.
+    - Stateless: the server forgets the conversation, never the data.
             """
     ).callout(kind="success")
     return
@@ -3685,14 +3625,12 @@ def _(mo):
 def _(mo):
     mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 7 Conclusion</h3>
-      <ul>
-        <li>A model checks shape (fields, types, ranges), not truth: it is only as good as the rules you wrote.</li>
-        <li>Pydantic converts <code>"42"</code> to 42 and accepts a name of three spaces unless you say otherwise (<code>strict</code>; <code>str_strip_whitespace</code> plus <code>min_length=1</code>).</li>
-        <li>A rejection is a precise list of errors, and FastAPI sends that list back as a 422.</li>
-      </ul>
-    </div>
+    ### Chapter 7 Conclusion
+
+    - A model checks shape (fields, types, ranges), not truth: it is only as good as the rules you wrote.
+    - Pydantic converts `"42"` to 42 and accepts a name of three spaces unless you say otherwise
+      (`strict`; `str_strip_whitespace` plus `min_length=1`).
+    - A rejection is a precise list of errors, and FastAPI sends that list back as a 422.
             """
     ).callout(kind="success")
     return
@@ -3737,17 +3675,6 @@ def _(mo):
 
     FastAPI turns validated models into running endpoints *and* the documentation for them, so
     the two drift apart far less.
-
-    Lifecycle:
-
-    1. Define model
-    2. Attach model to endpoint
-    3. FastAPI emits OpenAPI
-    4. Tools consume docs automatically
-
-    $$
-    \\text{Type Hints} + \\text{Validation Models} \\rightarrow \\text{Machine-readable API contract}
-    $$
             """
     ).callout(kind="neutral")
     return
@@ -3758,9 +3685,6 @@ def _(mo):
     mo.md(
         """
     ### FastAPI = Type Hints → OpenAPI
-
-    FastAPI reads the type hints and Pydantic models from chapter 7 and builds validated endpoints
-    from them. Write the model once; the documentation comes for free.
 
     Most restaurants write the menu by hand. Then the kitchen changes a recipe and the menu
     quietly starts lying, and every customer who orders from it is disappointed. FastAPI does not
@@ -3781,16 +3705,8 @@ def _(mo):
       you can click to try each endpoint. Open it and press *Try it out*.
     - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual instead.
 
-    You start the server with **uvicorn**, the program that actually listens on a port and
-    hands incoming requests to your FastAPI code:
-
-    ```bash
-    uvicorn sw03_demo_api:app
-    ```
-
-    `sw03_demo_api` is the file and `app` is the variable inside it. While you *edit* the API,
-    add `--reload` to restart the server on every save. Leave it out during the lecture: it also
-    restarts when marimo saves a notebook in the same folder, and every restart resets `data/`.
+    The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
+    *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
             """
     ).callout(kind="neutral")
     return
@@ -3858,7 +3774,7 @@ def _(mo):
     1. Start the API in a terminal: `uvicorn sw03_demo_api:app`
     2. Click **1) Check API status** to verify the server is reachable.
     3. Edit the JSON payload and click **2) POST /products**. Click it again: the name is taken
-       now, so the server answers `400`.
+       now, so the server answers `400` (the widget stays until the API restarts).
     4. Choose a product id and click **3) GET /products/{id}** to compare results.
             """
     ).callout(kind="info")
@@ -3866,8 +3782,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL", full_width=True)
+def _(api_base_url, mo):
     fastapi_check = mo.ui.run_button(label="1) Check API status")
     fastapi_payload = mo.ui.text_area(
         value='{"name": "Lecture Demo Widget", "price": 99.9, "description": "Created live in Chapter 8", "category_id": 1}',
@@ -3881,14 +3796,13 @@ def _(mo):
 
     mo.vstack(
         [
-            mo.hstack([fastapi_base_url, fastapi_check], widths=[5, 1], align="end"),
+            mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
             fastapi_payload,
             mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
         ],
         gap=0.8,
     ).callout(kind="neutral")
     return (
-        fastapi_base_url,
         fastapi_check,
         fastapi_get,
         fastapi_item_id,
@@ -3898,28 +3812,36 @@ def _(mo):
 
 
 @app.cell
-def _(call_api, fastapi_base_url, mo, requests):
+def _(api_base_url, call_api, mo, requests):
     def ch8_api(method, path, body=None):
-        """call_api against the base URL above. If nothing answers, stop the cell with a start hint."""
-        base = fastapi_base_url.value.rstrip("/")
+        """call_api against the base URL above. Stops the cell with a hint if nothing answers, or not with JSON."""
+        base = api_base_url.value.rstrip("/")
         try:
-            return call_api(method, base + path, body)
+            status, answer = call_api(method, base + path, body)
         except requests.RequestException:
             mo.stop(
                 True,
                 mo.md(f"Could not reach `{base}`. Start the API first: `uvicorn sw03_demo_api:app`.").callout(kind="danger"),
             )
+        if answer and isinstance(answer, str):  # HTML or plain text, e.g. the Streamlit dashboard's port
+            mo.stop(
+                True,
+                mo.md(f"`{base}{path}` answered `{status}`, but not with JSON. Is that the sales API?").callout(kind="danger"),
+            )
+        return status, answer
 
-    return (ch8_api,)
+    # The sale the chapter 8 labs send: 10 units of product 1, sold in country 3.
+    sale_slip = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
+    return ch8_api, sale_slip
 
 
 @app.cell
-def _(ch8_api, fastapi_base_url, fastapi_check, mo):
+def _(api_base_url, ch8_api, fastapi_check, mo):
     mo.stop(
         not fastapi_check.value,
         mo.md("Start `uvicorn sw03_demo_api:app` in a terminal, then click **1) Check API status**.").callout(kind="neutral"),
     )
-    _base = fastapi_base_url.value.rstrip("/")
+    _base = api_base_url.value.rstrip("/")
     _status, _schema = ch8_api("GET", "/openapi.json")
     mo.stop(
         _status != 200,
@@ -3936,7 +3858,7 @@ def _(ch8_api, fastapi_base_url, fastapi_check, mo):
                 f"**{_schema['info']['title']} {_schema['info']['version']} is running.** "
                 f"Docs: [{_base}/docs]({_base}/docs)",
                 "",
-                f"The routes this chapter uses, read from `/openapi.json` ({len(_schema['paths'])} routes in all):",
+                f"The paths this chapter uses, read from `/openapi.json` ({len(_schema['paths'])} paths in all):",
                 "",
                 *_routes,
             ]
@@ -3994,11 +3916,11 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, pydantic, run_gates):
+def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
     mo.stop(not run_gates.value, mo.md("Click **Send seven slips through both gates** to compare them.").callout(kind="neutral"))
     from sw03_demo_api import SaleCreate as _SaleCreate  # gate 1: the server's own model, no network
 
-    _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
+    _ok = sale_slip
     _slips = {
         "a good sale": _ok,
         "rating of 9": {**_ok, "customer_rating": 9},
@@ -4055,15 +3977,11 @@ def _(ch8_api, mo, pydantic, run_gates):
     the 400s are business rules somebody wrote by hand.
             """
     ).callout(kind="info")
-    _table = mo.ui.table(
+    _table = static_table(
         _rows,
         label="The same seven slips, checked twice",
-        selection=None,
-        pagination=False,
-        show_download=False,
-        show_search=False,
         wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
-        column_widths={"gate 1: your laptop": 420, "gate 2: the server": 420},
+        column_widths={"gate 1: your laptop": 470, "gate 2: the server": 470},
     )
     mo.vstack([_table, _note], gap=0.6)
     return
@@ -4076,9 +3994,9 @@ def _(mo):
         [
             mo.md("### Mini-lab: Press It Twice"),
             mo.md(
-                "The lift button or the ticket dispenser? Let us stop asserting it. Each verb is "
-                "sent to the running API **twice in a row**, against one sale, and we look at what "
-                "changed. Needs the running API."
+                "The lift button or the ticket dispenser? Chapter 6 had you press them by hand; here "
+                "all four verbs go to the running API **twice in a row**, against one sale, side by "
+                "side. Needs the running API."
             ).callout(kind="info"),
             run_twice,
         ],
@@ -4088,13 +4006,12 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, run_twice, static_table):
+def _(ch8_api, mo, run_twice, sale_slip, static_table):
     mo.stop(not run_twice.value, mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral"))
-    _sale = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
 
-    _post1, _first = ch8_api("POST", "/sales", _sale)
+    _post1, _first = ch8_api("POST", "/sales", sale_slip)
     mo.stop(_post1 != 201, mo.md(f"`POST /sales` answered `{_post1}`: `{_first}`").callout(kind="danger"))
-    _post2, _second = ch8_api("POST", "/sales", _sale)
+    _post2, _second = ch8_api("POST", "/sales", sale_slip)
     _one = f"/sales/{_first['sale_id']}"
     _put1, _ = ch8_api("PUT", _one, {"units_sold": 25})
     _put2, _ = ch8_api("PUT", _one, {"units_sold": 25})
@@ -4140,10 +4057,9 @@ def _(ch8_api, mo, run_twice, static_table):
     second press booked a second sale. That is exactly why a checkout page begs you not to hit
     refresh, and why a payment that times out is frightening in a way a profile edit is not.
 
-    **Now the trap.** The second DELETE answered `404`, not `204`. That looks like a
-    contradiction, and it is not. Idempotent is a promise about the **effect on the world**, not
-    about the status code. The sale is equally gone after one press or five; only the answer to
-    "did *you* delete it" changed.
+    **The 404 from chapter 6 is back.** The second DELETE answered `404`, not `204`, and the sale
+    is just as gone. Idempotent is a promise about the **effect on the world**, not about the
+    status code; only the answer to "did *you* delete it" changed.
 
     One more honest note: idempotence is a promise the API author makes, not something HTTP
     enforces. A carelessly written `PUT` can behave exactly like `POST`. It holds here because
@@ -4173,7 +4089,7 @@ def _(mo):
 
 
 @app.cell
-def _(Path, ch8_api, duckdb, mo, run_follow, static_table):
+def _(Path, ch8_api, duckdb, mo, run_follow, sale_slip, static_table):
     mo.stop(not run_follow.value, mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral"))
     _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
     mo.stop(
@@ -4183,11 +4099,7 @@ def _(Path, ch8_api, duckdb, mo, run_follow, static_table):
     _con = duckdb.connect()
     _count = f"SELECT count(*) FROM '{_sales_file.as_posix()}'"
     _before = _con.sql(_count).fetchone()[0]
-    _status, _created = ch8_api(
-        "POST",
-        "/sales",
-        {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5},
-    )
+    _status, _created = ch8_api("POST", "/sales", sale_slip)
     mo.stop(_status != 201, mo.md(f"`POST /sales` answered `{_status}`: `{_created}`").callout(kind="danger"))
     try:
         _after = _con.sql(_count).fetchone()[0]
@@ -4222,7 +4134,7 @@ def _(Path, ch8_api, duckdb, mo, run_follow, static_table):
     `country_id {_created["country_id"]}`: ids, no names, every fact written exactly once. That is
     the normalisation the data tier cares about. The **response** has {len(_created)} fields, with
     "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}"
-    spelled out. The logic tier did the joining, so the chart in chapter 10 does not have to. Even
+    spelled out. The logic tier did the joining, so the dashboard in `sw03_demo_streamlit.py` does not have to. Even
     the date changes shape: the file keeps a timestamp, the API sends a plain date.
 
     **One honest callback.** We just read that file behind the API's back. The API takes a lock
@@ -4248,7 +4160,7 @@ def _(mo):
     **Predict first, then run it.**
 
     Anna and Ben both open product 1 in a browser tab, at the same starting price. Anna applies a
-    10% raise. Ben adds a 20 franc surcharge. Both click save. Both see "saved", and both get
+    10% raise. Ben adds a 20-franc surcharge. Both click save. Both see "saved", and both get
     `200 OK` from the API you built.
 
     **What is the price afterwards?**
@@ -4292,7 +4204,7 @@ def _(ch8_api, mo, run_two_analysts, static_table):
         {"step": "2. Anna opens the product", "price": _anna_sees, "server said": "200 OK"},
         {"step": "3. Ben opens the same product", "price": _ben_sees, "server said": "200 OK"},
         {"step": "4. Anna saves a 10% raise", "price": _after_anna, "server said": "200 OK"},
-        {"step": "5. Ben saves a 20 surcharge", "price": _after_ben, "server said": "200 OK"},
+        {"step": "5. Ben saves a CHF 20 surcharge", "price": _after_ben, "server said": "200 OK"},
         {"step": "6. price afterwards", "price": _final, "server said": "-"},
         {"step": "what it should have been", "price": _correct, "server said": "-"},
     ]
@@ -4318,14 +4230,32 @@ def _(ch8_api, mo, run_two_analysts, static_table):
     **The fix is not more locking.** It is to stop sending *the answer* and start sending *the
     change* (`{{"raise_percent": 10}}`), or to make the client say which version it read and let
     the server refuse if that version is stale. HTTP has that second option built in: `If-Match`
-    with an ETag, answered by `412 Precondition Failed`. This is the one thing the whole day has
-    been circling: correctness is a property of the design, not of the tools.
+    with an ETag, answered by `412 Precondition Failed`. Correctness is a property of the design,
+    not of the tools.
         """
     ).callout(kind="danger")
     mo.vstack(
         [static_table(_steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"), _note],
         gap=0.6,
     )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
+    ### Chapter 8 Conclusion
+
+    - One model drives the validation, the endpoint and `/docs`, so the documentation cannot drift
+      from the rules. A hand-written docstring still can.
+    - Shape can be checked anywhere, on your laptop or at the server (422); facts only at the
+      server (400). Only the server computes `total_price`.
+    - GET, PUT and DELETE are safe to press twice; POST books a second sale.
+    - A lock per request cannot stop a lost update split over two requests: send the change, or
+      make the client say which version it read (`If-Match`).
+            """
+    ).callout(kind="success")
     return
 
 
@@ -4364,7 +4294,7 @@ def _(mo):
 
     *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
 
-    Framework choice is a product decision, not a taste: match the tool to your team's skills and
+    Framework choice is a product decision, not a matter of taste: match the tool to your team's skills and
     to how much UI control the product needs. The usual trade-off:
 
     $$
@@ -4382,10 +4312,10 @@ def _(mo, static_table):
     ### Choosing a Frontend Stack
 
     **First, what a frontend actually is.** A restaurant has three rooms. The **cold store** holds
-    the ingredients and has exactly one job, keeping them correct: that was chapters 1 to 5. The
+    the ingredients, keeps them correct and gets them out fast: chapters 1 to 5. The
     **kitchen** holds the recipes and the rules, and nothing leaves without being checked, whether
     the order came from a table, a phone or a delivery app: chapters 6 to 8. The **dining room**
-    is what the guest sees, the menu and the plating and the waiter: chapters 9 and 10.
+    is what the guest sees, the tables, the plating and the waiter: chapters 9 and 10.
 
     A frontend is the dining room. It owns no ingredients and no recipes. It writes an order slip,
     which is an HTTP request to a path, hands it through the hatch, and arranges whatever comes
@@ -4394,7 +4324,7 @@ def _(mo, static_table):
     This is the payoff for splitting the tiers at all. Change supplier, Parquet for DuckDB, and no
     guest notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not
     change one line. **This repo already contains that dining room:** `sw03_demo_streamlit.py`,
-    talking to the API you started in chapter 8.
+    talking to the API you started in chapter 6.
 
     *Where the picture breaks.* A waiter cannot cook, but a frontend **does** compute: it sorts,
     formats, aggregates and draws every chart in that dashboard. So do not read this as "the
@@ -4503,6 +4433,21 @@ def _(fw_control, fw_js, fw_speed, mo, static_table):
 def _(mo):
     mo.md(
         """
+    ### Chapter 9 Conclusion
+
+    - A frontend sends requests and arranges the answers. It owns no rules, so the API enforces
+      every rule again.
+    - Choose by your team's skills and how much UI control the product needs: fast iteration
+      usually costs control.
+            """
+    ).callout(kind="success")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
     ### Bridge to Next Chapter
 
     Tables show exact values; charts show patterns faster, including patterns that are not there.
@@ -4519,7 +4464,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md("""
-    ## 10. Marimo Charts Lab
+    ## 10. Honest Charts (Signal vs Noise)
     """)
     return
 
@@ -4534,7 +4479,7 @@ def _(mo):
 
     *Still in the **presentation tier**, and the last decision of the whole stack: what a chart claims is what people believe.*
 
-    Charts help humans detect patterns quickly. A linear regression summarizes a trend with two numbers:
+    Charts help humans detect patterns quickly. A linear regression summarises a trend with two numbers:
 
     $$
     y = \\alpha + \\beta x
@@ -4563,11 +4508,13 @@ def _(mo):
 
     Set the slope to 0 and the noise high: the equation still prints confidently, and the ± tells
     you not to believe it. Still, about 1 seed in 20 clears the bar at slope 0: that is what
-    95% means. Then set the slope to 0.4: $R^2$ calls the line nearly useless, yet the
-    slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
+    95% means.
+
+    Then put the noise back to 1.4 and set the slope to 0.4: $R^2$ calls the line nearly useless,
+    yet the slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
     how predictable single points are, not whether a trend exists.
 
-    Then the mini-lab below asks one question of real data three different ways, and gets three
+    The mini-lab below then asks one question of real data three different ways, and gets three
     different answers.
     """
     ).callout(kind="neutral")
@@ -4662,6 +4609,7 @@ def _(mo):
                 """
     One question, asked of the repo's real 3,360 sales: **does spending more make customers
     happier?** Nothing below adds or removes a single sale. Only the way we look changes.
+    (The lab reads the seed files directly, a notebook shortcut past the API; the dashboard asks the API.)
     """
             ).callout(kind="info"),
             honest_view,
@@ -4777,7 +4725,8 @@ def _(mo):
     and `reset`, `read`, `write`), not one endpoint. Swap Streamlit for React and neither lower
     tier notices.
 
-    If you remember one thing: correctness first, then performance, then usability.
+    If you remember one thing: correctness is designed in, not bought with a tool. Get it first,
+    then performance, then usability.
     """
     ).callout(kind="neutral")
     return
