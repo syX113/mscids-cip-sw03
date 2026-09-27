@@ -1974,14 +1974,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 4. Compression & Encoding (Parquet, Gzip)")
-    _section
+    mo.md("""
+    ## 4. Compression & Encoding (Parquet, Gzip)
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter4_guide = mo.md(
+    mo.md(
         """
     ### Chapter 4 Introduction
 
@@ -2000,46 +2001,38 @@ def _(mo):
     Quick timing model:
 
     $$
-    T_{total} \\approx T_{io} + T_{decompress} + T_{compute}
+    T_{\\text{total}} \\approx T_{\\text{io}} + T_{\\text{decompress}} + T_{\\text{compute}}
     $$
             """
     ).callout(kind="neutral")
-    _chapter4_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
-        ### Compression & Encoding
+    ### Compression & Encoding
 
-        Compression reduces storage and I/O. Columnar formats (like Parquet) compress well because
-        similar values are adjacent.
+    Compression reduces storage and I/O. Columnar formats (like Parquet) compress well because
+    similar values are adjacent.
 
-        Compression ratio (lower is better):
+    Compression ratio (lower is better):
 
-        $$
-        r = \\frac{\\text{compressed size}}{\\text{original size}}
-        \\qquad
-        \\text{Savings} = 1 - r
-        $$
+    $$
+    r = \\frac{\\text{compressed size}}{\\text{original size}}
+    \\qquad
+    \\text{savings} = 1 - r
+    $$
 
-        Where:
-        - $r$: compression ratio  
-        - $\\text{compressed size}$: file size after compression  
-        - $\\text{original size}$: baseline uncompressed file size  
-        - $\\text{Savings}$: fraction of size removed by compression
+    We compare JSON/CSV to gzip and Parquet with different codecs.
 
-        We compare JSON/CSV to gzip and Parquet with different codecs.
-
-    **Compression level.** gzip takes a level from 1 to 9. Level 1 compresses quickly and
-    saves less; level 9 works hardest and saves most; level 6 is the default compromise.
-    The gain from 1 to 9 is usually small while the CPU cost is not, which is why almost
-    nobody runs level 9 in production. Watch the level rows in the table below.
-                """
+    **Compression level.** gzip takes a level from 1 (fast, saves less) to 9 (slow, saves most).
+    The `gzip` tool and zlib default to 6; Python's `gzip.compress` defaults to 9. Going from 6
+    to 9 buys almost nothing while the CPU cost roughly doubles. Watch the level rows in the
+    benchmark and the timing lab below.
+            """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
@@ -2048,375 +2041,194 @@ def _(mo):
     budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)", show_value=True, debounce=True)
     budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio", show_value=True, debounce=True)
     budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day", show_value=True, debounce=True)
-    _note = mo.md("Set the estimated compression ratio and scan frequency to quantify daily I/O savings (reduced bytes read/written).").callout(kind="info")
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Mini-lab: Compression Cost Impact"),
             mo.hstack([budget_size_gb, budget_ratio], widths="equal"),
             budget_scans_day,
-            _note,
+            mo.md("Set the compression ratio and scan frequency to estimate the I/O saved per day. A first-order estimate, not a benchmark.").callout(kind="info"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return budget_ratio, budget_scans_day, budget_size_gb
 
 
 @app.cell
-def _(budget_ratio, budget_scans_day, budget_size_gb, mo, static_table):
-    raw_gb = budget_size_gb.value
-    _compression_ratio = budget_ratio.value
-    comp_gb = raw_gb * _compression_ratio
-    saved_gb = raw_gb - comp_gb
-    daily_io_saved = saved_gb * budget_scans_day.value
-    _table = static_table(
+def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
+    _on_disk = budget_size_gb.value * budget_ratio.value
+    _saved = budget_size_gb.value - _on_disk
+    mo.hstack(
         [
-            {"metric": "compressed size (GB)", "value": round(comp_gb, 2)},
-            {"metric": "saved size per scan (GB)", "value": round(saved_gb, 2)},
-            {"metric": "daily I/O saved (GB)", "value": round(daily_io_saved, 2)},
+            mo.stat(f"{_on_disk:,.1f} GB", label="On disk after compression", bordered=True),
+            mo.stat(f"{_saved:,.1f} GB", label="Less to read per full scan", bordered=True),
+            mo.stat(f"{_saved * budget_scans_day.value:,.1f} GB", label="Less I/O per day", bordered=True),
         ],
-        label="Compression budget impact",
+        widths="equal",
     )
-    _note = mo.md("Use this as a first-order estimate before deeper benchmarking.").callout(kind="info")
-    _panel = mo.vstack([_table, _note], gap=0.6)
-    _panel
     return
 
 
 @app.cell
 def _(mo):
-    _pca_disclaimer = mo.Html(
+    mo.Html(
         """
     <div class="disclaimer-red">
-      Disclaimer: PCA will be discussed in-depth in the <strong>Machine Learning 2</strong> module.
+      Disclaimer: PCA will be discussed in depth in the <strong>Machine Learning 2</strong> module.
       Here it is only used as a simple example to illustrate compression ideas.
     </div>
             """
     )
-    _pca_disclaimer
     return
 
 
 @app.cell
 def _(mo):
-    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="PCA components (rank k)", show_value=True, debounce=True)
+    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="Components kept (rank k)", show_value=True, debounce=True)
     image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True, debounce=True)
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
             mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
-            mo.md("Left is the reference cat image. Right is reconstructed from only `k` PCA components per color channel.").callout(kind="info"),
+            mo.md(
+                "Left is the original cat. Right is rebuilt from only the top `k` singular vectors per colour channel "
+                "(rank-k SVD, the maths behind PCA)."
+            ).callout(kind="info"),
             mo.md("Further Details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)").callout(kind="neutral"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return image_demo_rank, image_demo_width
 
 
 @app.cell
-def _(
-    Image,
-    ImageDraw,
-    gzip,
-    image_demo_rank,
-    image_demo_width,
-    io,
-    math,
-    mo,
-    np,
-    static_table,
-):
-    _width = image_demo_width.value
-    _height = int(_width * 0.74)
-    _img = Image.new("RGB", (_width, _height), color=(238, 242, 248))
-    _draw = ImageDraw.Draw(_img)
+def _(Image, ImageDraw, image_demo_width, np):
+    # Drawn here, so the lab needs no image file. This cell reads only the width: dragging k
+    # reuses the SVD below instead of redoing it.
+    _w = image_demo_width.value
+    _h = int(_w * 0.74)
+    _img = Image.new("RGB", (_w, _h))
+    _d = ImageDraw.Draw(_img)
+    for _y in range(_h):  # soft vertical gradient
+        _t = _y / (_h - 1)
+        _d.line([(0, _y), (_w, _y)], fill=(int(218 + 18 * _t), int(229 + 14 * _t), int(242 + 10 * _t)))
+    _step = max(6, _w // 45)  # a checker texture, so compression artefacts show
+    for _x in range(0, _w, _step):
+        for _y in range(0, _h, _step):
+            if (_x // _step + _y // _step) % 2 == 0:
+                _d.rectangle([_x, _y, min(_w - 1, _x + _step), min(_h - 1, _y + _step)], fill=(225, 232, 245))
 
-    # Soft gradient background.
-    for _y in range(_height):
-        _r = int(218 + 18 * (_y / max(1, _height - 1)))
-        _g = int(229 + 14 * (_y / max(1, _height - 1)))
-        _b = int(242 + 10 * (_y / max(1, _height - 1)))
-        _draw.line([(0, _y), (_width, _y)], fill=(_r, _g, _b))
+    _cx, _cy = _w // 2, int(_h * 0.56)
+    _r = int(min(_w, _h) * 0.24)
 
-    # Add a deterministic checker texture to reveal compression artifacts.
-    _step = max(6, _width // 45)
-    for _x in range(0, _width, _step):
-        for _y in range(0, _height, _step):
-            if ((_x // _step) + (_y // _step)) % 2 == 0:
-                _draw.rectangle(
-                    [_x, _y, min(_width - 1, _x + _step), min(_height - 1, _y + _step)],
-                    outline=None,
-                    fill=(225, 232, 245),
-                )
+    def _p(_fx, _fy):
+        """The point (fx, fy) face radii away from the centre of the face."""
+        return _cx + int(_fx * _r), _cy + int(_fy * _r)
 
-    # Draw a cute cat face as the source image.
-    _cx = _width // 2
-    _cy = int(_height * 0.56)
-    _r = int(min(_width, _height) * 0.24)
-    _fur = (220, 192, 158)
-    _fur_dark = (96, 74, 56)
-    _ear_inner = (246, 186, 198)
+    _fur, _dark, _line = (220, 192, 158), (96, 74, 56), (88, 67, 54)
+    _ex, _ey = int(0.50 * _r), _cy - int(0.14 * _r)
+    _ew, _eh = int(0.25 * _r), int(0.18 * _r)
+    _pw, _ph, _sp = max(4, int(0.08 * _r)), max(7, int(0.20 * _r)), max(3, int(0.05 * _r))
+    for _s in (-1, 1):  # ears; every feature but the face and nose comes in a mirrored pair
+        _d.polygon([_p(_s * 0.82, -0.52), _p(_s * 0.40, -1.35), _p(_s * 0.03, -0.58)], fill=_fur, outline=_dark, width=3)
+        _d.polygon([_p(_s * 0.70, -0.56), _p(_s * 0.40, -1.16), _p(_s * 0.12, -0.62)], fill=(246, 186, 198))
+    _d.ellipse([_cx - _r, _cy - _r, _cx + _r, _cy + _r], fill=_fur, outline=_dark, width=3)
+    _d.ellipse([_p(-0.45, 0.05), _p(0.45, 0.62)], fill=(236, 214, 190))
+    for _s in (-1, 1):  # eyes, pupils, sparkles
+        _x = _cx + _s * _ex
+        _d.ellipse([(_x - _ew, _ey - _eh), (_x + _ew, _ey + _eh)], fill=(143, 198, 128), outline=(40, 40, 40), width=2)
+        _d.ellipse([(_x - _pw, _ey - _ph), (_x + _pw, _ey + _ph)], fill=(18, 22, 20))
+        _d.ellipse([(_x - _sp, _ey - _sp), (_x + _sp, _ey + _sp)], fill=(255, 255, 255))
+    _ny = _cy + int(0.13 * _r)
+    _d.polygon([(_cx, _ny), (_cx - int(0.13 * _r), _ny + int(0.15 * _r)), (_cx + int(0.13 * _r), _ny + int(0.15 * _r))], fill=(234, 150, 165), outline=(120, 74, 86))
+    _d.line([(_cx, _ny + int(0.15 * _r)), _p(0, 0.48)], fill=_line, width=2)
+    for _s in (-1, 1):  # mouth, cheeks, forehead marks, whiskers
+        _d.arc([_p(min(0, _s * 0.24), 0.38), _p(max(0, _s * 0.24), 0.62)], start=200, end=340, fill=_line, width=2)
+        _d.ellipse([_p(min(_s * 0.70, _s * 0.44), 0.16), _p(max(_s * 0.70, _s * 0.44), 0.36)], fill=(247, 178, 186))
+        _d.line([_p(0, -0.34), _p(_s * 0.11, -0.48)], fill=(187, 151, 118), width=2)
+        for _o in (-1, 0, 1):
+            _dy = _o * int(0.13 * _r)
+            _d.line([(_cx + _s * int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + _s * int(0.95 * _r), _cy + int(0.13 * _r) + _dy)], fill=_line, width=2)
 
-    _draw.polygon(
-        [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)), (_cx - int(0.40 * _r), _cy - int(1.35 * _r)), (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
-        fill=_fur,
-        outline=_fur_dark,
-        width=3,
-    )
-    _draw.polygon(
-        [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)), (_cx + int(0.40 * _r), _cy - int(1.35 * _r)), (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
-        fill=_fur,
-        outline=_fur_dark,
-        width=3,
-    )
-    _draw.polygon(
-        [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)), (_cx - int(0.40 * _r), _cy - int(1.16 * _r)), (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
-        fill=_ear_inner,
-        outline=None,
-    )
-    _draw.polygon(
-        [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)), (_cx + int(0.40 * _r), _cy - int(1.16 * _r)), (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
-        fill=_ear_inner,
-        outline=None,
-    )
+    ch4_cat = np.asarray(_img)
+    # One SVD per colour channel, run as a batch of three. It is the slow step, so once per width.
+    ch4_cat_svd = np.linalg.svd(ch4_cat.transpose(2, 0, 1) / 255.0, full_matrices=False)
+    return ch4_cat, ch4_cat_svd
 
-    _draw.ellipse(
-        [(_cx - _r), (_cy - _r), (_cx + _r), (_cy + _r)],
-        fill=_fur,
-        outline=_fur_dark,
-        width=3,
-    )
-    _draw.ellipse(
-        [(_cx - int(0.45 * _r)), (_cy + int(0.05 * _r)), (_cx + int(0.45 * _r)), (_cy + int(0.62 * _r))],
-        fill=(236, 214, 190),
-        outline=None,
-    )
 
-    _eye_w = int(0.25 * _r)
-    _eye_h = int(0.18 * _r)
-    _eye_y = _cy - int(0.14 * _r)
-    _left_eye_x = _cx - int(0.50 * _r)
-    _right_eye_x = _cx + int(0.50 * _r)
-    _draw.ellipse(
-        [(_left_eye_x - _eye_w, _eye_y - _eye_h), (_left_eye_x + _eye_w, _eye_y + _eye_h)],
-        fill=(143, 198, 128),
-        outline=(40, 40, 40),
-        width=2,
-    )
-    _draw.ellipse(
-        [(_right_eye_x - _eye_w, _eye_y - _eye_h), (_right_eye_x + _eye_w, _eye_y + _eye_h)],
-        fill=(143, 198, 128),
-        outline=(40, 40, 40),
-        width=2,
-    )
-    _pupil_w = max(4, int(0.08 * _r))
-    _pupil_h = max(7, int(0.20 * _r))
-    _draw.ellipse(
-        [(_left_eye_x - _pupil_w, _eye_y - _pupil_h), (_left_eye_x + _pupil_w, _eye_y + _pupil_h)],
-        fill=(18, 22, 20),
-    )
-    _draw.ellipse(
-        [(_right_eye_x - _pupil_w, _eye_y - _pupil_h), (_right_eye_x + _pupil_w, _eye_y + _pupil_h)],
-        fill=(18, 22, 20),
-    )
-    _spark = max(3, int(0.05 * _r))
-    _draw.ellipse(
-        [(_left_eye_x - _spark, _eye_y - _spark), (_left_eye_x + _spark, _eye_y + _spark)],
-        fill=(255, 255, 255),
-    )
-    _draw.ellipse(
-        [(_right_eye_x - _spark, _eye_y - _spark), (_right_eye_x + _spark, _eye_y + _spark)],
-        fill=(255, 255, 255),
-    )
+@app.cell
+def _(ch4_cat, ch4_cat_svd, gzip, image_demo_rank, io, mo, np, static_table):
+    _k = image_demo_rank.value
+    _u, _s, _vt = ch4_cat_svd
+    _u, _s, _vt = _u[:, :, :_k], _s[:, :_k], _vt[:, :_k]
+    _rebuilt = np.rint(np.clip((_u * _s[:, None]) @ _vt, 0, 1) * 255).astype(np.uint8).transpose(1, 2, 0)
+    _pca = io.BytesIO()  # what the lossy method has to store: the kept factors, as float16
+    np.savez_compressed(_pca, *(_m.astype(np.float16) for _m in (_u, _s, _vt)))
+    _gz = gzip.compress(ch4_cat.tobytes(), 6)
+    _gz_back = np.frombuffer(gzip.decompress(_gz), np.uint8).reshape(ch4_cat.shape)
 
-    _nose_y = _cy + int(0.13 * _r)
-    _draw.polygon(
-        [(_cx, _nose_y), (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)), (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
-        fill=(234, 150, 165),
-        outline=(120, 74, 86),
-    )
-    _draw.line(
-        [(_cx, _nose_y + int(0.15 * _r)), (_cx, _cy + int(0.48 * _r))],
-        fill=(88, 67, 54),
-        width=2,
-    )
-    _draw.arc(
-        [(_cx - int(0.24 * _r), _cy + int(0.38 * _r)), (_cx, _cy + int(0.62 * _r))],
-        start=200,
-        end=340,
-        fill=(88, 67, 54),
-        width=2,
-    )
-    _draw.arc(
-        [(_cx, _cy + int(0.38 * _r)), (_cx + int(0.24 * _r), _cy + int(0.62 * _r))],
-        start=200,
-        end=340,
-        fill=(88, 67, 54),
-        width=2,
-    )
-    _draw.ellipse(
-        [(_cx - int(0.70 * _r), _cy + int(0.16 * _r)), (_cx - int(0.44 * _r), _cy + int(0.36 * _r))],
-        fill=(247, 178, 186),
-        outline=None,
-    )
-    _draw.ellipse(
-        [(_cx + int(0.44 * _r), _cy + int(0.16 * _r)), (_cx + int(0.70 * _r), _cy + int(0.36 * _r))],
-        fill=(247, 178, 186),
-        outline=None,
-    )
-    _draw.line(
-        [(_cx, _cy - int(0.34 * _r)), (_cx - int(0.11 * _r), _cy - int(0.48 * _r))],
-        fill=(187, 151, 118),
-        width=2,
-    )
-    _draw.line(
-        [(_cx, _cy - int(0.34 * _r)), (_cx + int(0.11 * _r), _cy - int(0.48 * _r))],
-        fill=(187, 151, 118),
-        width=2,
-    )
-
-    for _offset in [-1, 0, 1]:
-        _dy = _offset * int(0.13 * _r)
-        _draw.line(
-            [(_cx - int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx - int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
-            fill=(88, 67, 54),
-            width=2,
-        )
-        _draw.line(
-            [(_cx + int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
-            fill=(88, 67, 54),
-            width=2,
-        )
-
-    _arr = np.asarray(_img, dtype=np.float32) / 255.0
-    _rank = int(min(image_demo_rank.value, _arr.shape[0], _arr.shape[1]))
-    _reconstructed = np.zeros_like(_arr)
-    _factors = []
-
-    for _channel_idx in range(3):
-        _channel = _arr[:, :, _channel_idx]
-        _u, _s, _vt = np.linalg.svd(_channel, full_matrices=False)
-        _ur = _u[:, :_rank]
-        _sr = _s[:_rank]
-        _vtr = _vt[:_rank, :]
-        _reconstructed[:, :, _channel_idx] = (_ur * _sr) @ _vtr
-        _factors.append((_ur.astype(np.float32), _sr.astype(np.float32), _vtr.astype(np.float32)))
-
-    _reconstructed = np.clip(_reconstructed, 0.0, 1.0)
-    _mse = float(np.mean((_arr - _reconstructed) ** 2))
-    _psnr = float("inf") if _mse <= 1e-12 else 10.0 * math.log10(1.0 / _mse)
-
-    _ref_uint8 = (_arr * 255.0).astype(np.uint8)
-    _rec_uint8 = (_reconstructed * 255.0).astype(np.uint8)
-    _ref_img = Image.fromarray(_ref_uint8)
-    _rec_img = Image.fromarray(_rec_uint8)
-
-    _ref_buf = io.BytesIO()
-    _ref_img.save(_ref_buf, format="PNG", optimize=True)
-    _ref_bytes = _ref_buf.getvalue()
-
-    _rec_buf = io.BytesIO()
-    _rec_img.save(_rec_buf, format="PNG", optimize=True)
-    _rec_bytes = _rec_buf.getvalue()
-
-    _raw_rgb_bytes = _arr.shape[0] * _arr.shape[1] * 3
-
-    _comparison_images = mo.hstack(
+    _table = static_table(
         [
-            mo.image(
-                src=_ref_bytes,
-                width="100%",
-                caption="Reference cat image (display preview)",
-            ),
-            mo.image(
-                src=_rec_bytes,
-                width="100%",
-                caption=(f"PCA reconstruction (k={_rank}, display preview)"),
-            ),
+            {
+                "method": _method,
+                "bytes": _size,
+                "ratio (compressed/raw)": round(_size / ch4_cat.nbytes, 4),
+                "identical to the original?": "yes" if np.array_equal(_back, ch4_cat) else "no",
+                "worst pixel off by (of 255)": int(np.abs(_back.astype(int) - ch4_cat).max()),
+            }
+            for _method, _size, _back in (
+                ("gzip (lossless method)", len(_gz), _gz_back),
+                (f"PCA k={_k} (lossy method)", len(_pca.getvalue()), _rebuilt),
+            )
+        ],
+        label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression",
+    )
+    _note = mo.md(
+        """
+    **Two different promises, and confusing them is expensive.**
+
+    **Lossless** is a letter folded to fit an envelope. Every word is still there; unfold it and
+    you get the original back exactly, byte for byte. gzip, PNG and Parquet are lossless. This is
+    the only kind you may use on a sales ledger.
+
+    **Lossy** is a summary. Usually much smaller, still useful, and the original is gone forever.
+    PCA here, JPEG and MP3 in the world. Fine for a photo, where nobody can tell. Never fine for a
+    price.
+
+    The last two columns are the whole difference: gzip *promises* an exact copy, PCA only a
+    close one (push `k` high enough and close can round to exact, but nothing promised it). Notice
+    which row is actually smaller, too. On this image the lossless method wins, because a smooth
+    drawing repeats itself enormously and repetition is exactly what lossless compression removes.
+            """
+    ).callout(kind="info")
+    _pipeline = mo.Html(
+        """
+    <div class="section-card flow-card">
+      <div class="flow-diagram">
+        <div class="flow-box">Image as 3 matrices (R, G, B)</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Keep the top k components</div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box">Rebuilt image</div>
+      </div>
+    </div>
+        """
+    )
+    _images = mo.hstack(
+        [
+            mo.image(ch4_cat, width="100%", caption="Original"),
+            mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
         ],
         widths="equal",
         gap=0.8,
     )
-    _payload16 = {}
-    for _channel_idx, (_ur, _sr, _vtr) in enumerate(_factors):
-        _payload16[f"u{_channel_idx}"] = _ur.astype(np.float16)
-        _payload16[f"s{_channel_idx}"] = _sr.astype(np.float16)
-        _payload16[f"vt{_channel_idx}"] = _vtr.astype(np.float16)
-
-    _npz16_buf = io.BytesIO()
-    np.savez_compressed(_npz16_buf, **_payload16)
-    _pca_npz16_bytes = len(_npz16_buf.getvalue())
-    _pca_ratio = _pca_npz16_bytes / max(1, _raw_rgb_bytes)
-    _psnr_display = "infinite" if _psnr == float("inf") else round(_psnr, 2)
-
-    # The same image, squeezed losslessly, so the two kinds sit in one table.
-    _orig_u8 = (_arr * 255.0).astype(np.uint8)
-    _gz_bytes = gzip.compress(_orig_u8.tobytes(), 6)
-    _gz_back = np.frombuffer(gzip.decompress(_gz_bytes), dtype=np.uint8).reshape(_orig_u8.shape)
-    _gz_identical = bool(np.array_equal(_gz_back, _orig_u8))
-    _pca_worst = int(np.max(np.abs(_rec_uint8.astype(int) - _orig_u8.astype(int))))
-
-    _comparison_table = static_table(
-        [
-            {
-                "method": "gzip (lossless)",
-                "bytes": len(_gz_bytes),
-                "ratio (compressed/raw)": round(len(_gz_bytes) / max(1, _raw_rgb_bytes), 4),
-                "identical to the original?": "yes" if _gz_identical else "no",
-                "worst pixel off by (of 255)": 0,
-            },
-            {
-                "method": f"PCA k={_rank} (lossy)",
-                "bytes": _pca_npz16_bytes,
-                "ratio (compressed/raw)": round(_pca_ratio, 4),
-                "identical to the original?": "no",
-                "worst pixel off by (of 255)": _pca_worst,
-            },
-        ],
-        label=f"Same {_raw_rgb_bytes:,}-byte image, two kinds of compression",
-    )
-    _comparison_note = mo.md(
-        """
-    **Two different promises, and confusing them is expensive.**
-
-    **Lossless** is a photocopy shrunk to fit A5. Every word is still there; enlarge it and you
-    get the original back exactly, byte for byte. gzip, PNG and Parquet are lossless. This is the
-    only kind you may use on a sales ledger.
-
-    **Lossy** is a summary. Much smaller, still useful, and the original is gone forever. PCA
-    here, JPEG and MP3 in the world. Fine for a photo, where nobody can tell. Never fine for a price.
-
-    The `identical` column is the whole difference, and it is why gzip has no quality score:
-    there is no quality to score. Notice which row is actually smaller, too. On this image the
-    lossless method wins, because a smooth drawing repeats itself enormously and repetition is
-    exactly what lossless compression removes.
-            """
-    ).callout(kind="info")
-    _pipeline = mo.md(
-        """
-    <div class="section-card flow-card">
-      <div class="flow-diagram">
-        <div class="flow-box">Reference image matrix</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Keep top-k PCA components</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Reconstructed image</div>
-      </div>
-    </div>
-                """
-    )
-
-    _output = mo.vstack([_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6)
-
-    _output
+    mo.vstack([_pipeline, _images, _table, _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    run_lossy_money = mo.ui.button(label="Run lossy vs lossless on money", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_lossy_money = mo.ui.run_button(label="Run lossy vs lossless on money", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: The Cat Trick, Applied to the Sales Ledger"),
             mo.md(
@@ -2431,77 +2243,59 @@ def _(mo):
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_lossy_money,)
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, pd, run_lossy_money, static_table, tempfile):
-    if run_lossy_money.value == 0:
-        _output = mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral")
-    else:
-        _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
-        _truth = round(float(_src["total_price"].sum()), 2)
+def _(SALES_SEED, io, mo, pd, run_lossy_money, static_table):
+    mo.stop(
+        not run_lossy_money.value,
+        mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral"),
+    )
+    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
+    _truth = round(float(_src["total_price"].sum()), 2)
+    _rows = []
+    for _label, _digits, _codec in (
+        ("exact (lossless)", None, "snappy"),
+        ("exact + gzip (lossless)", None, "gzip"),
+        ("rounded to the franc (lossy)", 0, "gzip"),
+        ("rounded to 10 francs (lossy)", -1, "gzip"),
+        ("rounded to 100 francs (lossy)", -2, "gzip"),
+    ):
+        _stored = _src if _digits is None else _src.assign(total_price=_src["total_price"].round(_digits))
+        _blob = _stored.to_parquet(index=False, compression=_codec)  # no path: the file's bytes
+        _total = round(float(pd.read_parquet(io.BytesIO(_blob))["total_price"].sum()), 2)
+        _rows.append(
+            {
+                "how the prices are stored": _label,
+                "bytes": len(_blob),
+                "total revenue it reports": _total,
+                "off by": round(_total - _truth, 2),
+            }
+        )
+    _exact, _exact_gz, *_, _hundred = (_row["bytes"] for _row in _rows)
 
-        with tempfile.TemporaryDirectory() as _td:
-            _dir = Path(_td)
-
-            def _store(_frame, _name, **_kw):
-                _path = _dir / _name
-                _frame.to_parquet(_path, index=False, **_kw)
-                _back = pd.read_parquet(_path)
-                return _path.stat().st_size, round(float(_back["total_price"].sum()), 2)
-
-            _rows = []
-            for _label, _frame, _kw in (
-                ("exact", _src, {}),
-                ("exact + gzip", _src, {"compression": "gzip"}),
-            ):
-                _bytes, _total = _store(_frame, f"{_label}.parquet", **_kw)
-                _rows.append(
-                    {
-                        "how the prices are stored": f"{_label} (lossless)",
-                        "bytes": _bytes,
-                        "total revenue it reports": _total,
-                        "off by": round(_total - _truth, 2),
-                    }
-                )
-            for _digits, _label in ((0, "rounded to the franc"), (-1, "rounded to 10 francs"), (-2, "rounded to 100 francs")):
-                _lossy = _src.copy()
-                _lossy["total_price"] = _lossy["total_price"].round(_digits)
-                _bytes, _total = _store(_lossy, f"lossy{_digits}.parquet", compression="gzip")
-                _rows.append(
-                    {
-                        "how the prices are stored": f"{_label} (lossy)",
-                        "bytes": _bytes,
-                        "total revenue it reports": _total,
-                        "off by": round(_total - _truth, 2),
-                    }
-                )
-
-        _note = mo.md(
-            f"""
-    **The lossy files really are smaller.** Rounding to the nearest 100 francs saves roughly 40%
-    of the bytes, which is a bigger win than gzip managed on the exact data.
+    _note = mo.md(
+        f"""
+    **The lossy files really are smaller.** Rounding to the nearest 100 francs cuts another
+    {1 - _hundred / _exact_gz:.0%} off the gzipped file, a bigger win than gzip itself managed on
+    the exact data ({1 - _exact_gz / _exact:.0%}).
 
     **And the last column is why nobody does this.** The true total is
     `{_truth:,.2f}`. Every lossy row reports a different number, and none of them is flagged: the
     file loads cleanly, the column is still a decimal, every tool downstream is perfectly happy.
 
     This is the same trick that was completely acceptable on the cat. The difference is not the
-    technique, it is **what the numbers mean**. Nobody can see a pixel that is 5 shades off. Every
-    accountant can see a total that is off by hundreds of francs, and by then the original is
-    gone.
+    technique, it is **what the numbers mean**. Nobody minds a cat whose pixels are a few shades
+    off on average. Every accountant can see a total that is off by hundreds of francs, and by
+    then the original is gone.
 
     So the rule is not "lossy compression is bad". It is: **lossy compression is a decision about
     whether an approximation of this particular value is still the truth you need.** For a photo,
     usually yes. For money, an identifier or a date, never.
-                """
-        ).callout(kind="danger")
-        _output = mo.vstack(
-            [static_table(_rows, label="Same 3,360 prices, stored five ways"), _note], gap=0.6
-        )
-    _output
+            """
+    ).callout(kind="danger")
+    mo.vstack([static_table(_rows, label=f"Same {len(_src):,} prices, stored five ways"), _note], gap=0.6)
     return
 
 
@@ -2509,25 +2303,32 @@ def _(Path, SALES_SEED, mo, pd, run_lossy_money, static_table, tempfile):
 def _(mo):
     compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows", show_value=True)
     compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns", show_value=True)
-    compress_seed = mo.ui.slider(1, 999, value=11, label="Seed", show_value=True)
-    run_compress = mo.ui.button(label="Run compression benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
-    _controls = mo.vstack(
-        [mo.hstack([compress_rows, compress_cols], widths="equal"), compress_seed, run_compress],
+    compress_repeat = mo.ui.switch(label="Only 5 distinct values per column")
+    run_compress = mo.ui.run_button(label="Run compression benchmark", kind="success")
+    mo.vstack(
+        [
+            mo.md("### Mini-lab: Which Format Is Smallest?"),
+            mo.md(
+                "**Predict first.** JSON, CSV, gzip or Parquet: which one wins? "
+                "Would your answer change if every column held only five different values?"
+            ).callout(kind="info"),
+            mo.hstack([compress_rows, compress_cols], widths="equal"),
+            compress_repeat,
+            run_compress,
+        ],
         gap=0.6,
     ).callout(kind="neutral")
-    _controls
-    return compress_cols, compress_rows, compress_seed, run_compress
+    return compress_cols, compress_repeat, compress_rows, run_compress
 
 
 @app.cell
 def _(
-    Path,
     compress_cols,
+    compress_repeat,
     compress_rows,
-    compress_seed,
     csv,
     gzip,
+    io,
     json,
     mo,
     pa,
@@ -2535,206 +2336,136 @@ def _(
     random,
     run_compress,
     static_table,
-    tempfile,
 ):
-    def _make_records(count, num_cols, seed_value):
-        rng = random.Random(seed_value)
-        records = []
-        for idx in range(count):
-            row = {"id": idx, "category": rng.choice(["A", "B", "C", "D"])}
-            for c in range(num_cols):
-                row[f"metric_{c}"] = round(rng.random() * 1000, 5)
-            records.append(row)
-        return records
+    mo.stop(not run_compress.value, mo.md("Click **Run compression benchmark** to execute.").callout(kind="neutral"))
+    _rng = random.Random(11)  # fixed seed: the same settings always give the same table
+    _pool = [round(_rng.random() * 1000, 5) for _ in range(5)]
 
-    if run_compress.value == 0:
-        _output = mo.md("Click **Run compression benchmark** to execute.").callout(kind="neutral")
-    else:
-        _records = _make_records(
-            compress_rows.value,
-            compress_cols.value,
-            compress_seed.value + run_compress.value,
-        )
+    def _measurement():
+        return _rng.choice(_pool) if compress_repeat.value else round(_rng.random() * 1000, 5)
 
-        _results = []
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _tmpdir = Path(_tmpdir)
+    _records = [
+        {"id": _i, "category": _rng.choice("ABCD"), **{f"metric_{_c}": _measurement() for _c in range(compress_cols.value)}}
+        for _i in range(compress_rows.value)
+    ]
+    _csv = io.StringIO()
+    _writer = csv.DictWriter(_csv, fieldnames=_records[0])
+    _writer.writeheader()
+    _writer.writerows(_records)
 
-            json_path = _tmpdir / "data.json"
-            with json_path.open("w", encoding="utf-8") as _f:
-                json.dump(_records, _f)
-            json_size = json_path.stat().st_size
+    # Sizes measured in memory: the bytes a file would hold, without writing one.
+    _texts = {"JSON": json.dumps(_records).encode(), "CSV": _csv.getvalue().encode()}
+    _sizes = {_name: len(_blob) for _name, _blob in _texts.items()}
+    # Level 1 is fastest, 9 squeezes hardest (Python's default), 6 is zlib's default.
+    _sizes |= {f"{_name}+gzip (level {_lvl})": len(gzip.compress(_blob, _lvl)) for _name, _blob in _texts.items() for _lvl in (1, 6, 9)}
+    _table = pa.Table.from_pylist(_records)
+    for _codec in ("snappy", "gzip", "zstd", "brotli"):
+        _buf = io.BytesIO()
+        pq.write_table(_table, _buf, compression=_codec)
+        _sizes[f"Parquet ({_codec})"] = len(_buf.getvalue())
 
-            _csv_path = _tmpdir / "data.csv"
-            with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                _writer = csv.DictWriter(_f, fieldnames=_records[0].keys())
-                _writer.writeheader()
-                _writer.writerows(_records)
-            csv_size = _csv_path.stat().st_size
+    _best = min(_sizes, key=_sizes.get)
+    _note = mo.md(
+        f"""
+    **Smallest here: {_best}**, at {_sizes[_best] / _sizes['JSON']:.0%} of the JSON bytes.
+    `ratio vs JSON` is size ÷ JSON size: 0.25 means a quarter of the bytes to read from disk or network.
 
-            baseline = json_size
-            for label, _source_path, size in [
-                ("JSON", json_path, json_size),
-                ("CSV", _csv_path, csv_size),
-            ]:
-                _results.append(
-                    {
-                        "format": label,
-                        "size (bytes)": size,
-                        "ratio vs JSON": round(size / baseline, 4),
-                    }
-                )
+    **And why the ranking is not a law.** Compression removes **repetition**, so the winner
+    depends on your columns, not on the format's reputation. Distinct 5-decimal measurements
+    hold almost none: Parquet stores each one as 8 bytes of float64, while gzipped text pays only
+    for the digits you wrote. Five repeated values per column are exactly what Parquet's
+    dictionary encoding lives on. At the default 2,000 rows x 6 columns, flipping the switch moves
+    the win from gzipped CSV to Parquet.
 
-            # Gzip compression. Level 1 is fastest, 9 squeezes hardest, 6 is the default.
-            for label, _source_path in [("JSON+gzip", json_path), ("CSV+gzip", _csv_path)]:
-                for _level in (1, 6, 9):
-                    gz_path = _source_path.with_suffix(f"{_source_path.suffix}.{_level}.gz")
-                    with _source_path.open("rb") as src, gzip.open(gz_path, "wb", compresslevel=_level) as dst:
-                        dst.write(src.read())
-                    _results.append(
-                        {
-                            "format": f"{label} (level {_level})",
-                            "size (bytes)": gz_path.stat().st_size,
-                            "ratio vs JSON": round(gz_path.stat().st_size / baseline, 4),
-                        }
-                    )
-
-            table = pa.Table.from_pylist(_records)
-            for codec in ["snappy", "gzip", "zstd", "brotli"]:
-                parquet_path = _tmpdir / f"data_{codec}.parquet"
-                try:
-                    pq.write_table(table, parquet_path, compression=codec)
-                except Exception:
-                    continue
-                _results.append(
-                    {
-                        "format": f"Parquet ({codec})",
-                        "size (bytes)": parquet_path.stat().st_size,
-                        "ratio vs JSON": round(parquet_path.stat().st_size / baseline, 4),
-                    }
-                )
-
-        _table = static_table(_results, label="Compression ratios (baseline: JSON size)")
-        _note = mo.md(
-            """
-    How to read this table:
-
-    - `ratio vs JSON = 1.00` means same size as JSON.
-    - `< 1.00` means the format is smaller than JSON (good for I/O).
-    - `> 1.00` means the format is larger than JSON.
-
-    Why this matters:
-
-    - In analytics, we often scan many rows and columns.
-    - Smaller files mean fewer bytes read from disk/network.
-
-    **And why the ranking is not a law.** Compression does not make files smaller; it removes
-    **repetition**. So the winner depends on your columns, not on the format's reputation.
-    On 2,000 rows of six columns, measured with this same code:
-
-    - columns of distinct measurements: Parquet 125,490 bytes, JSON+gzip 131,586. Parquet wins.
-    - the same shape, but each column holding five repeated values: Parquet 17,622 bytes,
-      JSON+gzip 15,650. Parquet **loses**.
-
-    Nothing about Parquet changed. What changed is how much repetition there was to remove.
-    A column of 2,000 different measurements has almost none. Before you pick a format, look at
-    your columns.
-                """
-        ).callout(kind="info")
-
-        _output = mo.vstack([_table, _note], gap=0.6)
-
-    _output
+    Nothing about Parquet changed. Before you pick a format, look at your columns.
+        """
+    ).callout(kind="info")
+    mo.vstack(
+        [
+            static_table(
+                [{"format": _name, "size (bytes)": _size, "ratio vs JSON": round(_size / _sizes["JSON"], 4)} for _name, _size in _sizes.items()],
+                label="Compression ratios (baseline: JSON size)",
+            ),
+            _note,
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    run_ctime = mo.ui.button(label="Run compression timing", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_ctime = mo.ui.run_button(label="Run compression timing", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Does Compression Make the Query *Faster*?"),
             mo.md(
                 "This chapter opened by asking whether compression cuts total query time, not just "
-                "file size. So far we have only measured size. Now we time the whole job: read the "
-                "file, parse it, and sum one column. Best of 7 runs."
+                "file size. So far we have only measured size. Now we time the whole job on the sales "
+                "file already in memory: unpack it if needed, parse it, and sum one column. "
+                "Best of 5 bursts of 20 runs."
             ).callout(kind="info"),
             run_ctime,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_ctime,)
 
 
 @app.cell
-def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table, time):
-    if run_ctime.value == 0:
-        _output = mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral")
-    else:
-        _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
+def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table):
+    mo.stop(not run_ctime.value, mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral"))
+    import timeit as _timeit
 
-        def _best(_fn, _n=7):
-            _times = []
-            for _ in range(_n):
-                _t0 = time.perf_counter()
-                _fn()
-                _times.append(time.perf_counter() - _t0)
-            return min(_times)
+    _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
-        def _answer(_blob, _gzipped):
-            _data = gzip.decompress(_blob) if _gzipped else _blob
-            return pd.read_csv(io.BytesIO(_data))["total_price"].sum()
+    def _ms(_fn, _calls=20):
+        """Milliseconds per call, fastest of 5 bursts. A burst averages out sub-millisecond noise."""
+        return min(_timeit.repeat(_fn, number=_calls, repeat=5)) / _calls * 1000
 
-        _plain_time = _best(lambda: _answer(_raw, False))
-        _rows = [
+    def _answer(_csv_bytes):
+        return pd.read_csv(io.BytesIO(_csv_bytes))["total_price"].sum()
+
+    _plain = _ms(lambda: _answer(_raw))
+    _rows = [{"variant": "plain CSV", "bytes": len(_raw), "read + parse + sum (ms)": round(_plain, 2), "vs plain": "1.00x", "compress (ms)": "-", "decompress (ms)": "-"}]
+    for _level in (1, 6, 9):
+        _blob = gzip.compress(_raw, _level)
+        _read = _ms(lambda _b=_blob: _answer(gzip.decompress(_b)))
+        _rows.append(
             {
-                "variant": "plain CSV",
-                "bytes": len(_raw),
-                "read + parse + sum (ms)": round(_plain_time * 1000, 2),
-                "vs plain": "1.00x",
-                "compress (ms)": "-",
-                "decompress (ms)": "-",
+                "variant": f"gzip level {_level}",
+                "bytes": len(_blob),
+                "read + parse + sum (ms)": round(_read, 2),
+                "vs plain": f"{_read / _plain:.2f}x",
+                "compress (ms)": round(_ms(lambda _lv=_level: gzip.compress(_raw, _lv), 2), 2),
+                "decompress (ms)": round(_ms(lambda _b=_blob: gzip.decompress(_b)), 2),
             }
-        ]
-        for _level in (1, 6, 9):
-            _t0 = time.perf_counter()
-            _blob = gzip.compress(_raw, _level)
-            _ctime = time.perf_counter() - _t0
-            _rtime = _best(lambda _b=_blob: _answer(_b, True))
-            _dtime = _best(lambda _b=_blob: gzip.decompress(_b))
-            _rows.append(
-                {
-                    "variant": f"gzip level {_level}",
-                    "bytes": len(_blob),
-                    "read + parse + sum (ms)": round(_rtime * 1000, 2),
-                    "vs plain": f"{_rtime / _plain_time:.2f}x",
-                    "compress (ms)": round(_ctime * 1000, 2),
-                    "decompress (ms)": round(_dtime * 1000, 2),
-                }
-            )
-
-        _note = mo.md(
-            """
-    **The answer is no, not here.** The gzipped file is roughly a third of the size and takes
-    *longer* to answer the same question.
-
-    Compression trades CPU for I/O. The bytes it saved were bytes the operating system had
-    already cached, so reading them was nearly free, and the CPU work to unpack them was not.
-    When I/O is already cheap, that is a bad trade. Send the same file across a network and the
-    trade flips, which is why compression is normal for transfer and a judgement call on a local
-    disk.
-
-    Look at levels 6 and 9 too. They land a few dozen bytes apart, and level 9 spent roughly
-    twice the CPU to find them. Decompression costs about the same at every level, so **the
-    level you pick is a decision about writing, not reading.**
-                """
-        ).callout(kind="warn")
-        _output = mo.vstack(
-            [static_table(_rows, label="Same question, four ways to store the file"), _note],
-            gap=0.6,
         )
-    _output
+    _plain_row, _l1, _l6, _l9 = _rows
+    if min(_row["read + parse + sum (ms)"] for _row in (_l1, _l6, _l9)) > _plain_row["read + parse + sum (ms)"]:
+        _verdict = (
+            f"**The answer is no, not here.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size "
+            "and still takes *longer* to answer the same question."
+        )
+    else:
+        _verdict = "**Here it is a wash:** unpacking costs about as much as the smaller file saves."
+
+    _note = mo.md(
+        f"""
+    {_verdict}
+
+    Compression trades CPU for I/O. Here the file already sits in memory, so there is no I/O to
+    save: the extra bytes cost nothing to read, while unpacking them costs CPU on every query.
+    Send the same file across a network and the trade flips, which is why compression is normal
+    for transfer and a judgement call on a local disk.
+
+    Look at levels 6 and 9 too. They land {abs(_l6['bytes'] - _l9['bytes']):,} bytes apart, and
+    level 9 spent {_l9['compress (ms)'] / _l6['compress (ms)']:.1f}x the CPU to find them.
+    Decompression costs about the same at every level, so **the level you pick is a decision
+    about writing, not reading.**
+        """
+    ).callout(kind="warn")
+    mo.vstack([static_table(_rows, label="Same question, four ways to store the file"), _note], gap=0.6)
     return
 
 
@@ -2743,65 +2474,37 @@ def _(mo):
     dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows", show_value=True, debounce=True)
     dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values", show_value=True, debounce=True)
     dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Average bytes per original value", show_value=True, debounce=True)
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Dictionary Encoding Intuition (Toy Model)"),
             mo.hstack([dict_rows, dict_unique], widths="equal"),
             dict_value_bytes,
-            mo.md("We estimate storage in two ways:\n" "1) store full values directly, and 2) store a dictionary + compact integer codes.").callout(kind="info"),
+            mo.md(
+                "We estimate storage two ways: (1) store every value in full, or (2) store a dictionary "
+                "of the unique values plus a compact integer code per row."
+            ).callout(kind="info"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return dict_rows, dict_unique, dict_value_bytes
 
 
 @app.cell
 def _(dict_rows, dict_unique, dict_value_bytes, math, mo, static_table):
-    _rows_count = dict_rows.value
-    _unique_values = min(dict_unique.value, _rows_count)
-    _bytes_per_value = dict_value_bytes.value
-
-    _code_bits = max(1, math.ceil(math.log2(_unique_values)))
-    _raw_bytes = _rows_count * _bytes_per_value
-    _dictionary_bytes = _unique_values * _bytes_per_value
-    _encoded_index_bytes = _rows_count * (_code_bits / 8)
-    _encoded_total_bytes = _dictionary_bytes + _encoded_index_bytes
-    _encoded_ratio = _encoded_total_bytes / max(_raw_bytes, 1)
-    _savings = 1 - _encoded_ratio
+    _code_bits = math.ceil(math.log2(dict_unique.value))
+    _raw_bytes = dict_rows.value * dict_value_bytes.value
+    _dictionary_bytes = dict_unique.value * dict_value_bytes.value
+    _index_bytes = dict_rows.value * _code_bits / 8
+    _ratio = (_dictionary_bytes + _index_bytes) / _raw_bytes
 
     _table = static_table(
         [
-            {
-                "metric": "Raw storage (no dictionary)",
-                "formula": "rows x bytes_per_value",
-                "value": int(_raw_bytes),
-            },
-            {
-                "metric": "Dictionary storage",
-                "formula": "unique_values x bytes_per_value",
-                "value": int(_dictionary_bytes),
-            },
-            {
-                "metric": "Code size per row",
-                "formula": "ceil(log2(unique_values)) bits",
-                "value": int(_code_bits),
-            },
-            {
-                "metric": "Encoded indexes storage",
-                "formula": "rows x code_bits/8",
-                "value": round(_encoded_index_bytes, 2),
-            },
-            {
-                "metric": "Estimated encoded/ raw ratio",
-                "formula": "(dictionary + indexes) / raw",
-                "value": round(_encoded_ratio, 4),
-            },
-            {
-                "metric": "Estimated savings",
-                "formula": "1 - ratio",
-                "value": f"{round(_savings * 100, 2)}%",
-            },
+            {"metric": "Raw storage (no dictionary)", "formula": "rows x bytes_per_value", "value": _raw_bytes},
+            {"metric": "Dictionary storage", "formula": "unique_values x bytes_per_value", "value": _dictionary_bytes},
+            {"metric": "Code size per row", "formula": "ceil(log2(unique_values)) bits", "value": _code_bits},
+            {"metric": "Encoded indexes storage", "formula": "rows x code_bits/8", "value": round(_index_bytes, 2)},
+            {"metric": "Estimated encoded/raw ratio", "formula": "(dictionary + indexes) / raw", "value": round(_ratio, 4)},
+            {"metric": "Estimated savings", "formula": "1 - ratio", "value": f"{(1 - _ratio) * 100:.2f}%"},
         ],
         label="Dictionary encoding intuition (toy calculation)",
     )
@@ -2814,15 +2517,13 @@ def _(dict_rows, dict_unique, dict_value_bytes, math, mo, static_table):
     - Columnar formats often benefit because repeated values are common in a column.
             """
     ).callout(kind="info")
-
-    _panel = mo.vstack([_table, _note], gap=0.6)
-    _panel
+    mo.vstack([_table, _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
@@ -2833,25 +2534,24 @@ def _(mo):
     \\text{query time} \\approx \\text{I/O time} + \\text{compute time}
     $$
 
-    DuckDB helps reduce both parts for many analytical workloads (query/data access patterns).
+    DuckDB cuts both: it reads only the columns and row groups a query needs, then runs the maths
+    on whole columns at once.
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
 @app.cell
 def _(mo):
-    _db_disclaimer = mo.Html(
+    mo.Html(
         """
     <div class="disclaimer-red">
-      Disclaimer: Databases will be discussed in-depth later in the semester in the
+      Disclaimer: Databases will be discussed in depth later in the semester in the
       <strong>Database Management for Data Scientists (DBM)</strong> module.
       Here we focus only on practical intuition for analytics workflows.
     </div>
             """
     )
-    _db_disclaimer
     return
 
 
