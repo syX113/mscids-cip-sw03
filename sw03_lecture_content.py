@@ -4354,14 +4354,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 9. Frontend Framework Comparison")
-    _section
+    mo.md("""
+    ## 9. Frontend Framework Comparison
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter9_guide = mo.md(
+    mo.md(
         """
     ### Chapter 9 Introduction
 
@@ -4369,60 +4370,19 @@ def _(mo):
 
     *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
 
-    Framework choice is a product decision, not only a technical preference.
-    Pick the tool that best matches team skill and delivery constraints.
-
-    Common axes:
-    - speed of iteration
-    - UI control depth
-    - long-term maintainability
-
-    Heuristic framing:
+    Framework choice is a product decision, not a taste: match the tool to your team's skills and
+    to how much UI control the product needs. The usual trade-off:
 
     $$
-    \\text{fit score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{control} + w_j \\cdot \\text{team JS readiness}
+    \\text{Iteration Speed} \\uparrow \\;\\Rightarrow\\; \\text{UI Control} \\downarrow
     $$
-            """
+    """
     ).callout(kind="neutral")
-    _chapter9_guide
     return
 
 
 @app.cell
 def _(mo, static_table):
-    framework_rows = [
-        {
-            "framework": "Marimo",
-            "strengths": "Reactive notebooks, tight data + UI loop",
-            "tradeoffs": "Notebook-first; less suited to huge web apps",
-            "use_case": "Interactive labs, teaching, analysis apps",
-        },
-        {
-            "framework": "Dash",
-            "strengths": "Plotly integration, component ecosystem",
-            "tradeoffs": "Callback complexity for large apps",
-            "use_case": "Interactive analytics",
-        },
-        {
-            "framework": "Streamlit",
-            "strengths": "Very fast Python app prototyping, simple widget model",
-            "tradeoffs": "Less layout/state control for complex multi-page apps",
-            "use_case": "Data apps, dashboards, quick internal tools",
-        },
-        {
-            "framework": "Flask",
-            "strengths": "Full control, flexible templates + APIs",
-            "tradeoffs": "More setup, no built-in UI",
-            "use_case": "Custom web apps + APIs",
-        },
-        {
-            "framework": "React",
-            "strengths": "Highly flexible, modern UI patterns",
-            "tradeoffs": "Requires JS/TS stack, more tooling",
-            "use_case": "Production web apps",
-        },
-    ]
-
     _framework_note = mo.md(
         """
     ### Choosing a Frontend Stack
@@ -4448,31 +4408,27 @@ def _(mo, static_table):
     directly, with `curl` or a script or another team's app, so a rule that lives only in the
     dining room is not a rule at all. That is why this repo deliberately states the same rule
     twice: the Streamlit form sets `min_value=1` for units sold, and the API states it again as
-    `units_sold: int = Field(ge=1, ...)`. The dining room may repeat a rule for politeness.
-    Never instead.
+    `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
+    limit; only the kitchen knows it. The dining room may repeat a rule for politeness. Never instead.
 
-    Think in terms of trade‑offs (explicit engineering compromises): speed vs. control, Python‑native vs. JS ecosystems, and expected scale.
-
-    A simple framing:
-
-    $$
-    \\text{Iteration Speed} \\uparrow \\quad \\Rightarrow \\quad \\text{UI Control} \\downarrow
-    $$
-
-    Interpretation:
-    - faster iteration often comes with less low-level UI control; more control usually needs more engineering effort
-
-    Useful showcase/example pages:
-    - Marimo gallery: https://marimo.io/gallery
-    - Dash example gallery: https://dash.gallery/Portal/
-    - React community/resources: https://react.dev/community
-    - Flask patterns/tutorial examples: https://flask.palletsprojects.com/en/stable/patterns/
-            """
+    Showcases: [Marimo gallery](https://marimo.io/gallery) ·
+    [Dash gallery](https://dash.gallery/Portal/) ·
+    [React community](https://react.dev/community) ·
+    [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
+    """
     ).callout(kind="neutral")
-
-    _framework_table = static_table(framework_rows, label="Framework comparison")
-    _panel = mo.vstack([_framework_note, _framework_table], gap=0.6)
-    _panel
+    _columns = ("framework", "you write", "strengths", "trade-offs", "use case")
+    _frameworks = [
+        ("Marimo", "Python", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps", "Labs, teaching, analysis apps"),
+        ("Dash", "Python", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps", "Interactive analytics"),
+        ("Streamlit", "Python", "Fastest prototyping, simple widgets", "Little layout and state control", "Dashboards, internal tools"),
+        ("Flask", "Python + HTML templates, some JS", "Full control, templates + APIs", "More setup, no built-in UI", "Custom web apps + APIs"),
+        ("React", "JavaScript / TypeScript", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling", "Production web apps"),
+    ]
+    _framework_table = static_table(
+        [dict(zip(_columns, _row, strict=True)) for _row in _frameworks], label="Framework comparison"
+    )
+    mo.vstack([_framework_note, _framework_table], gap=0.6)
     return
 
 
@@ -4485,9 +4441,9 @@ def _(mo):
         """
     Set three numbers about *your team*, not about the frameworks.
 
-    **JavaScript** is the programming language browsers run. Marimo and Streamlit let you
-    avoid it and stay in Python; React is written in it. So a low score here is not a
-    weakness, it just points at different tools.
+    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you
+    stay in Python; React is written in JavaScript, and a Flask app needs some as soon as a page
+    has to react. So a low score here is not a weakness, it just points at different tools.
 
     Each framework scores the three inputs with its own weights, and every weight row adds
     up to the same total (3.0) so the scores stay comparable:
@@ -4497,16 +4453,15 @@ def _(mo):
     \\qquad \\text{with} \\quad w^f_s + w^f_c + w^f_j = 3
     $$
 
-    For the two Python-native tools, $j_f = 6 - j$: they get *more* attractive when the team
-    knows *less* JavaScript. For the others $j_f = j$. Heuristic only - validate against
+    For the three Python-native tools, $j_f = 6 - j$: they get *more* attractive when the team
+    knows *less* JavaScript. For Flask and React $j_f = j$. Heuristic only: validate it against
     real team constraints.
-            """
+    """
     ).callout(kind="info")
-    _panel = mo.vstack(
+    mo.vstack(
         [mo.md("### Mini-lab: Framework Fit Assistant"), fw_speed, fw_control, fw_js, _note],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return fw_control, fw_js, fw_speed
 
 
@@ -4516,67 +4471,68 @@ def _(fw_control, fw_js, fw_speed, mo, static_table):
     # so no framework wins just by carrying more weight than the others.
     _weights = {
         # framework:   (fast iteration, fine UI control, JavaScript), python_native
-        "Marimo":      ((1.4, 0.6, 1.0), True),
+        "Marimo":      ((1.3, 0.5, 1.2), True),
         "Streamlit":   ((1.6, 0.4, 1.0), True),
-        "Dash":        ((1.0, 1.0, 1.0), False),
+        "Dash":        ((1.0, 1.0, 1.0), True),
         "Flask":       ((0.6, 1.6, 0.8), False),
         "React":       ((0.4, 1.4, 1.2), False),
     }
     # Python-native tools benefit from a team that knows LITTLE JavaScript, hence 6 - j.
-    _framework_scores = {
-        name: w_s * fw_speed.value
-        + w_c * fw_control.value
-        + w_j * ((6 - fw_js.value) if python_native else fw_js.value)
+    # Rounded like the table, so two scores that look equal are equal.
+    _scores = {
+        name: round(w_s * fw_speed.value + w_c * fw_control.value + w_j * (6 - fw_js.value if python_native else fw_js.value), 2)
         for name, ((w_s, w_c, w_j), python_native) in _weights.items()
     }
-    _ranked_frameworks = sorted(_framework_scores.items(), key=lambda x: x[1], reverse=True)
-    _fit_table = static_table(
+    _ranked = sorted(_scores.items(), key=lambda item: item[1], reverse=True)
+    _top = [name for name, score in _ranked if score == _ranked[0][1]]
+    mo.vstack(
         [
-            {
-                "framework": name,
-                "score": round(score, 2),
-                "weights (speed / control / JS)": " / ".join(str(w) for w in _weights[name][0]),
-            }
-            for name, score in _ranked_frameworks
+            static_table(
+                [
+                    {
+                        "framework": name,
+                        "score": score,
+                        "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0])),
+                    }
+                    for name, score in _ranked
+                ],
+                label="Teaching score (higher = better fit)",
+            ),
+            mo.md(f"Current top fit: **{' / '.join(_top)}**" + (" (a tie)" if len(_top) > 1 else "")).callout(kind="info"),
         ],
-        label="Teaching score (higher = better fit)",
+        gap=0.6,
     )
-    _fit_message = mo.md(f"Current top fit: **{_ranked_frameworks[0][0]}**").callout(kind="info")
-    _fit_panel = mo.vstack([_fit_table, _fit_message], gap=0.6)
-    _fit_panel
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
-    Tables show exact values; charts show patterns faster.
-    We close with visual analysis so trends and relationships are easier to explain.
-
-    A key model we will visualize:
+    Tables show exact values; charts show patterns faster, including patterns that are not there.
+    We close by asking when a chart deserves to be believed.
 
     $$
-    y = \\alpha + \\beta x
+    \\text{what you plot} = \\text{signal} + \\text{noise}
     $$
-            """
+    """
     ).callout(kind="neutral")
-    _transition
     return
 
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 10. Marimo Charts Lab")
-    _section
+    mo.md("""
+    ## 10. Marimo Charts Lab
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter10_guide = mo.md(
+    mo.md(
         """
     ### Chapter 10 Introduction
 
@@ -4584,58 +4540,58 @@ def _(mo):
 
     *Still in the **presentation tier**, and the last decision of the whole stack: what a chart claims is what people believe.*
 
-    Charts help humans detect patterns quickly.
-    Regression summarizes trend direction with two numbers:
+    Charts help humans detect patterns quickly. A linear regression summarizes a trend with two numbers:
 
     $$
     y = \\alpha + \\beta x
     $$
 
-    - $\\alpha$: baseline level
+    - $\\alpha$: baseline level, the value of y where x is 0
     - $\\beta$: change in y for one unit change in x
-            """
+    """
     ).callout(kind="neutral")
-    _chapter10_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
-    ### Marimo Charts Lab
+    ### Lab: Signal or Noise?
 
-    Use the controls below to generate a dataset where **you** set the true slope and the noise,
-    then watch what the regression reports back:
+    Generate a dataset where **you** set the true slope and the noise, then watch what the
+    regression reports back. It gives two separate answers:
 
-    - **XY scatter + linear regression**, with the equation and its $R^2$
-    - a verdict that says whether the line means anything at all
+    - **Trend:** $\\beta$ plus or minus its margin of error (two standard errors, about 95%
+      confidence). If that range includes 0, the data cannot tell the slope from zero.
+    - **Fit:** $R^2$, the share of the up-and-down in y that the line explains: how well it
+      predicts a *single* point.
 
-    Set the slope to 0 and the noise high. The equation still prints confidently. The $R^2$ is
-    what tells you not to believe it. Then the mini-lab below asks the same question of real data
-    three different ways, and gets three different answers.
-            """
+    Set the slope to 0 and the noise high: the equation still prints confidently, and the ± tells
+    you not to believe it. Then set the slope to 0.4: $R^2$ calls the line nearly useless, yet the
+    slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
+    how predictable single points are, not whether a trend exists.
+
+    Then the mini-lab below asks one question of real data three different ways, and gets three
+    different answers.
+    """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
 @app.cell
 def _(mo):
-    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows (max 1000)", show_value=True, debounce=True)
-    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True, debounce=True)
-    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="Trend slope", show_value=True, debounce=True)
+    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="True slope", show_value=True, debounce=True)
     chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level", show_value=True, debounce=True)
-
-    _controls = mo.vstack(
+    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows", show_value=True, debounce=True)
+    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True, debounce=True)
+    mo.vstack(
         [
-            mo.hstack([chart_rows, chart_seed], widths="equal"),
             mo.hstack([chart_slope, chart_noise], widths="equal"),
+            mo.hstack([chart_rows, chart_seed], widths="equal"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
     return chart_noise, chart_rows, chart_seed, chart_slope
 
 
@@ -4649,130 +4605,42 @@ def _(
     mo,
     pd,
     random,
-    static_table,
     statistics,
 ):
     _rng = random.Random(chart_seed.value)
-    _rows = []
-    for _idx in range(chart_rows.value):
-        _x = _rng.gauss(0, 1)
-        _y = chart_slope.value * _x + _rng.gauss(0, chart_noise.value)
-        _rows.append(
-            {
-                "idx": _idx,
-                "x": _x,
-                "y": _y,
-                "category": _rng.choice(["A", "B", "C", "D"]),
-            }
-        )
+    _xs = [_rng.gauss(0, 1) for _ in range(chart_rows.value)]
+    _ys = [chart_slope.value * _x + _rng.gauss(0, chart_noise.value) for _x in _xs]
+    _beta, _alpha = statistics.linear_regression(_xs, _ys)
+    _r2 = statistics.correlation(_xs, _ys) ** 2
+    # Standard error of the slope: how far beta would wander if you drew the sample again.
+    _se = ((1 - _r2) / (len(_xs) - 2)) ** 0.5 * statistics.stdev(_ys) / statistics.stdev(_xs)
+    _real = abs(_beta) > 2 * _se  # the ± range below excludes 0
 
-    def _stats(values):
-        return {
-            "mean": statistics.mean(values),
-            "median": statistics.median(values),
-            "std": statistics.pstdev(values),
-            "min": min(values),
-            "max": max(values),
-        }
-
-    _x_vals = [row["x"] for row in _rows]
-    _y_vals = [row["y"] for row in _rows]
-    _stats_x = _stats(_x_vals)
-    _stats_y = _stats(_y_vals)
-    _stats_table = static_table(
-        [
-            {
-                "metric": k,
-                "x": round(_stats_x[k], 3),
-                "y": round(_stats_y[k], 3),
-            }
-            for k in _stats_x.keys()
-        ],
-        label="Summary statistics (x, y)",
+    _trend = (
+        "clearly **not zero**: the trend is real."
+        if _real
+        else "**indistinguishable from zero**: this is noise, however confident the equation looks."
     )
-
-    _df = pd.DataFrame(_rows)
-
-    def _linear_regression(xs, ys):
-        if len(xs) < 2:
-            return None
-        _mean_x = statistics.mean(xs)
-        _mean_y = statistics.mean(ys)
-        _var_x = sum((x - _mean_x) ** 2 for x in xs)
-        if _var_x == 0:
-            return None
-        _cov = sum((x - _mean_x) * (y - _mean_y) for x, y in zip(xs, ys))
-        _slope = _cov / _var_x
-        _intercept = _mean_y - _slope * _mean_x
-        # R^2: the share of the up-and-down in y that the line actually explains.
-        _var_y = sum((y - _mean_y) ** 2 for y in ys)
-        _r_squared = (_cov * _cov) / (_var_x * _var_y) if _var_y else 0.0
-        return _slope, _intercept, _r_squared
-
-    _scatter = (
-        alt.Chart(_df)
-        .mark_circle(size=60, opacity=0.6, color="#2f6fed")
-        .encode(
-            x=alt.X("x:Q"),
-            y=alt.Y("y:Q"),
-            tooltip=[
-                alt.Tooltip("x:Q"),
-                alt.Tooltip("y:Q"),
-            ],
-        )
+    _fit = (
+        "most of the spread: single points sit close to the line"
+        if _r2 >= 0.5
+        else "part of the spread: a trend with plenty of scatter around it"
+        if _r2 >= 0.15
+        else "almost none of the spread: single points are hard to predict"
     )
-    _scatter_layers = _scatter
-    _formula = None
-    _lr = _linear_regression(_x_vals, _y_vals)
-    if _lr:
-        _beta, _alpha, _r2 = _lr
-        _x_min = min(_x_vals)
-        _x_max = max(_x_vals)
-        _reg_df = pd.DataFrame(
-            {
-                "x": [_x_min, _x_max],
-                "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
-            }
-        )
-        _reg_line = alt.Chart(_reg_df).mark_line(color="#f59e0b", strokeWidth=2.5).encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
-        _scatter_layers = _scatter + _reg_line
-        # A line can always be drawn. R^2 says whether it means anything.
-        if _r2 >= 0.5:
-            _verdict = f"R&sup2; = {_r2:.2f} - the line explains most of the spread. This looks like **signal**."
-            _verdict_kind = "success"
-        elif _r2 >= 0.15:
-            _verdict = f"R&sup2; = {_r2:.2f} - the line explains only part of the spread. **Weak** evidence."
-            _verdict_kind = "info"
-        else:
-            _verdict = f"R&sup2; = {_r2:.2f} - the line explains almost nothing. This is **noise**, even though the equation looks confident."
-            _verdict_kind = "warn"
-        _formula = mo.vstack(
-            [
-                mo.md(
-                    f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
-                    f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$, "
-                    f"$R^2$ = ${_r2:.3f}$"
-                ).callout(kind="info"),
-                mo.md(_verdict).callout(kind=_verdict_kind),
-            ],
-            gap=0.4,
-        )
-    else:
-        _formula = mo.md("Regression could not be computed for this sample.").callout(kind="warn")
+    _verdict = mo.md(
+        f"$y = {_alpha:.2f} {_beta:+.2f}\\,x$ &nbsp; (you set the slope to {chart_slope.value:g})  \n"
+        f"**Trend:** $\\beta = {_beta:.2f} \\pm {2 * _se:.2f}$, {_trend}  \n"
+        f"**Fit:** $R^2 = {_r2:.2f}$, the line explains {_fit}."
+    ).callout(kind="success" if _real else "warn")
 
-    _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
-
-    _panel = mo.vstack(
-        [
-            _formula,
-            mo.md("#### XY scatter + regression"),
-            _scatter_chart,
-            _stats_table,
-        ],
-        gap=0.8,
+    _points = (
+        alt.Chart(pd.DataFrame({"x": _xs, "y": _ys}))
+        .mark_circle(size=40, opacity=0.6, color="#3b82f6")
+        .encode(x=alt.X("x:Q").axis(tickCount=8), y="y:Q")
     )
-
-    _panel
+    _line = _points.transform_regression("x", "y").mark_line(color="#f59e0b", strokeWidth=4)
+    mo.vstack([_verdict, (_points + _line).properties(width="container", height=320)], gap=0.8)
     return
 
 
@@ -4787,104 +4655,86 @@ def _(mo):
         value="A - aggregate the dots",
         label="Ask the same question a different way",
     )
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Mini-lab: Three Ways to Change the Finding Without Changing the Data"),
             mo.md(
                 """
     One question, asked of the repo's real 3,360 sales: **does spending more make customers
     happier?** Nothing below adds or removes a single sale. Only the way we look changes.
-                """
+    """
             ).callout(kind="info"),
             honest_view,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (honest_view,)
 
 
 @app.cell
-def _(SEED_DIR, duckdb, honest_view, mo, static_table, statistics):
-    def _fit(_xs, _ys):
-        _mx, _my = statistics.mean(_xs), statistics.mean(_ys)
-        _vx = sum((_x - _mx) ** 2 for _x in _xs)
-        _vy = sum((_y - _my) ** 2 for _y in _ys)
-        if not _vx or not _vy:
-            return None, None
-        _cov = sum((_x - _mx) * (_y - _my) for _x, _y in zip(_xs, _ys))
-        return _cov / _vx, (_cov * _cov) / (_vx * _vy)
-
+def _(SEED_DIR, duckdb, honest_view, mo, static_table):
     _con = duckdb.connect()
-    _join = (
-        f"FROM '{(SEED_DIR / 'sales.parquet').as_posix()}' s "
-        f"JOIN '{(SEED_DIR / 'products.parquet').as_posix()}' p USING (product_id) "
-        f"JOIN '{(SEED_DIR / 'categories.parquet').as_posix()}' c USING (category_id)"
+    _con.execute(
+        f"""
+        CREATE VIEW sales AS
+        SELECT c.name AS category, p.name AS product, date_trunc('month', s.sale_date) AS month,
+               s.total_price AS x, s.customer_rating AS y
+        FROM '{(SEED_DIR / "sales.parquet").as_posix()}' s
+        JOIN '{(SEED_DIR / "products.parquet").as_posix()}' p USING (product_id)
+        JOIN '{(SEED_DIR / "categories.parquet").as_posix()}' c USING (category_id)
+        """
     )
 
-    def _measure(_label, _sql):
-        _df = _con.execute(_sql).df()
-        _slope, _r2 = _fit(_df["x"].tolist(), _df["y"].tolist())
-        return {
-            "what we plotted": _label,
-            "dots (n)": len(_df),
-            "slope (rating per CHF 10k)": None if _slope is None else round(_slope * 10000, 3),
-            "R²": None if _r2 is None else round(_r2, 3),
-        }
+    def _measure(label, source="sales", *params):
+        # DuckDB fits the line itself: regr_slope and regr_r2 are ordinary least squares.
+        _n, _slope, _r2 = _con.execute(
+            f"SELECT count(*), regr_slope(y, x) * 10000, regr_r2(y, x) FROM {source}", params
+        ).fetchone()
+        return {"what we plotted": label, "dots (n)": _n, "slope (rating per CHF 10k)": round(_slope, 3), "R²": round(_r2, 3)}
+
+    def _averaged(group_by):
+        return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
 
     if honest_view.value.startswith("A"):
         _rows = [
-            _measure("one dot per sale", f"SELECT total_price x, customer_rating y {_join}"),
-            _measure(
-                "one dot per product per month",
-                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
-                "GROUP BY p.name, date_trunc('month', s.sale_date)",
-            ),
-            _measure(
-                "one dot per category per month",
-                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
-                "GROUP BY c.name, date_trunc('month', s.sale_date)",
-            ),
-            _measure(
-                "one dot per category",
-                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} GROUP BY c.name",
-            ),
+            _measure("one dot per sale"),
+            _measure("one dot per product per month", _averaged("product, month")),
+            _measure("one dot per category per month", _averaged("category, month")),
+            _measure("one dot per category", _averaged("category")),
         ]
-        _lesson = """
-    **$R^2$ went from "weak" to "publishable" and no new information entered the room.**
+        _lesson = f"""
+    **$R^2$ climbed from {_rows[0]["R²"]:.2f} to {_rows[-1]["R²"]:.2f} and no new information entered the room.**
 
-    Every row above is the same 3,360 sales. Averaging dots together does not strengthen a
-    relationship, it **deletes the disagreement** that was telling you the relationship is weak.
-    The last row has three dots and a story you could put on a slide.
+    Every row above is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
+    strengthen a relationship, it **deletes the disagreement** that was telling you the
+    relationship is weak. The last row has {_rows[-1]["dots (n)"]} dots and a story you could put on a slide.
 
     This is why a goodness-of-fit number is meaningless without its sample size. Always read
-    $R^2$ and $n$ together, which is why the table prints both.
-            """
+    $R^2$ and $n$ together, which is why the table prints both. The dashboard's *What goes with a
+    good rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
+    """
     elif honest_view.value.startswith("B"):
-        _cats = [_r[0] for _r in _con.execute(f"SELECT DISTINCT c.name {_join} ORDER BY 1").fetchall()]
-        _rows = [_measure("all sales pooled together", f"SELECT total_price x, customer_rating y {_join}")]
-        _rows += [
-            _measure(f"only {_c}", f"SELECT total_price x, customer_rating y {_join} WHERE c.name = '{_c}'")
-            for _c in _cats
-        ]
-        _lesson = """
+        _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
+        _rows = [_measure("all sales pooled together")]
+        _rows += [_measure(f"only {_c}", "sales WHERE category = ?", _c) for _c in _cats]
+        _down = [_c for _c, _row in zip(_cats, _rows[1:], strict=True) if _row["slope (rating per CHF 10k)"] < 0]
+        _up = [_c for _c in _cats if _c not in _down]
+        _lesson = f"""
     **The pooled line does not describe any of the groups.**
 
-    Pooled, the slope is positive: spend more, be happier. Look inside Hardware and the slope is
-    *negative*. The upward line is not describing customers at all. It is describing the gaps
-    **between** categories, because Services happen to be expensive and well rated while Hardware
-    is mid-priced and rated worst.
+    Pooled, the slope is positive: spend more, be happier. Inside {" and ".join(_down)} it points
+    the other way, and only {" and ".join(_up)} still slopes upward. The upward pooled line is mostly
+    describing the gaps **between** categories: Services happen to be expensive and well rated,
+    while Hardware is mid-priced and rated worst.
 
-    Three groups' worth of difference, wearing three thousand dots' worth of authority. When a
-    relationship reverses inside every subgroup, that has a name: Simpson's paradox.
-            """
+    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here
+    it reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap.
+    Three groups' worth of difference, wearing three thousand dots' worth of authority.
+    """
     else:
         _rows = [
-            _measure("all sales", f"SELECT total_price x, customer_rating y {_join}"),
-            _measure(
-                "every sale except Services",
-                f"SELECT total_price x, customer_rating y {_join} WHERE c.name <> 'Services'",
-            ),
+            _measure("all sales"),
+            _measure("every sale except Services", "sales WHERE category <> 'Services'"),
         ]
         _lesson = """
     **One group out of three decided the direction of the answer.**
@@ -4895,89 +4745,67 @@ def _(SEED_DIR, duckdb, honest_view, mo, static_table, statistics):
     That is the warning worth leaving this chapter with. $R^2$ tells you how tightly the dots hug
     the line. It never tells you whether the line was the right line to draw, and it will not
     warn you when one group is carrying the entire result.
-            """
+    """
 
-    _output = mo.vstack(
+    mo.vstack(
         [
-            static_table(_rows, label="Same 3,360 sales, same question"),
+            static_table(_rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"),
             mo.md(_lesson).callout(kind="warn"),
         ],
         gap=0.6,
     )
-    _output
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Wrap-up
 
-    We built one data product, one tier at a time. This is the map from the start of the notebook,
-    now filled in:
+    We built one data product, one tier at a time. The map from the start, filled in:
 
-    **Data tier — where the bytes rest**
+    - **Data tier, where the bytes rest:** keep writes correct (ch. 1), pick a format (ch. 2),
+      choose a layout (ch. 3), shrink it (ch. 4), query it with DuckDB (ch. 5).
+    - **Logic tier, the rules and the API:** agree on a contract (ch. 6), check what comes in
+      with Pydantic (ch. 7), serve it with FastAPI (ch. 8).
+    - **Presentation tier, what people see:** choose a frontend (ch. 9), show the numbers
+      honestly (ch. 10).
 
-    1. Keep writes correct under concurrency (ch. 1)
-    2. Choose efficient serialization formats (ch. 2)
-    3. Use columnar layout and compression for analytics (ch. 3-4)
-    4. Query files with DuckDB (ch. 5)
+    Each tier only talks to its neighbour. Move the sales from Parquet files into a DuckDB
+    database and only the three storage functions at the top of `sw03_demo_api.py` change
+    (`reset`, `read` and `write`), not one endpoint. Swap Streamlit for React and neither lower
+    tier notices.
 
-    **Logic tier — the rules and the API**
-
-    5. Expose data through REST APIs (ch. 6)
-    6. Validate contracts with Pydantic, then serve them with FastAPI (ch. 7-8)
-
-    **Presentation tier — what people actually see**
-
-    7. Choose a frontend and present results in charts (ch. 9-10)
-
-    Each tier only talks to its neighbour. That is what let us swap Parquet for DuckDB without
-    touching the API, and what would let you swap Streamlit for React without touching either.
-
-    If students remember one thing: correctness first, then performance, then usability.
-            """
+    If you remember one thing: correctness first, then performance, then usability.
+    """
     ).callout(kind="neutral")
-    _transition
     return
 
 
 @app.cell
 def _(mo):
-    _links_section = mo.md("## Some Useful Links")
-    _links_section
+    mo.md("""
+    ## Some Useful Links
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _links = mo.md(
-        """
-    <div class="section-card">
-      <p>Reference material for deeper dives and lookup:</p>
-      <ul>
-        <li>Marimo documentation: <code>https://marimo.io</code></li>
-        <li>Marimo gallery: <code>https://marimo.io/gallery</code></li>
-        <li>DuckDB documentation: <code>https://duckdb.org/docs</code></li>
-        <li>SQLite documentation: <code>https://www.sqlite.org/docs.html</code></li>
-        <li>Apache Parquet: <code>https://parquet.apache.org</code></li>
-        <li>Apache Arrow: <code>https://arrow.apache.org</code></li>
-        <li>Apache Avro: <code>https://avro.apache.org</code></li>
-        <li>FastAPI documentation: <code>https://fastapi.tiangolo.com</code></li>
-        <li>Streamlit documentation: <code>https://docs.streamlit.io</code></li>
-        <li>Pydantic documentation: <code>https://docs.pydantic.dev</code></li>
-        <li>OpenAPI specification: <code>https://spec.openapis.org/oas/latest.html</code></li>
-        <li>HTTP Semantics (RFC 9110): <code>https://www.rfc-editor.org/rfc/rfc9110</code></li>
-        <li>HTTP status code reference: <code>https://en.wikipedia.org/wiki/List_of_HTTP_status_codes</code></li>
-        <li>Dash examples: <code>https://dash.plotly.com/examples</code></li>
-        <li>React community/resources: <code>https://react.dev/community</code></li>
-        <li>Flask patterns/tutorial examples: <code>https://flask.palletsprojects.com/en/stable/patterns/</code></li>
-      </ul>
-    </div>
-            """
-    )
-    _links
+    mo.md("""
+    - [marimo docs](https://docs.marimo.io) · [gallery](https://marimo.io/gallery)
+    - [DuckDB](https://duckdb.org/docs) · [SQLite](https://www.sqlite.org/docs.html)
+    - [Apache Parquet](https://parquet.apache.org) · [Arrow](https://arrow.apache.org) ·
+      [Avro](https://avro.apache.org)
+    - [FastAPI](https://fastapi.tiangolo.com) · [Pydantic](https://docs.pydantic.dev) ·
+      [Streamlit](https://docs.streamlit.io)
+    - [OpenAPI spec](https://spec.openapis.org/oas/latest.html) ·
+      [HTTP semantics, RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) ·
+      [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes)
+    - [Dash gallery](https://dash.gallery/Portal/) · [React community](https://react.dev/community) ·
+      [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
+    """)
     return
 
 
