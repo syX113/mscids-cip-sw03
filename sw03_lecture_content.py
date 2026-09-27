@@ -330,72 +330,61 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _title = mo.md(
-        """
+    mo.md("""
     <div class="hero">
       <div class="eyebrow">CIP - SW03 Lecture Studio</div>
       <div class="hero-title">Storage, Serialization, APIs & Apps</div>
       <div class="hero-subtitle">
         One data product, built in <strong>three tiers</strong>: where the data rests,
-        what serves it, and what people look at. We build each tier in turn and stack
-        them &mdash; race conditions, serialization trade&#8209;offs, columnar analytics,
-        API design, and rapid app prototyping.
+        what serves it, and what people look at. We build them from the bottom up,
+        one chapter per decision.
       </div>
       <div class="hero-pills">
-        <span class="pill">ACID & Concurrency</span>
-        <span class="pill">Atomicity Transfers</span>
-        <span class="pill">Serialization Benchmarks</span>
-        <span class="pill">Columnar Analytics</span>
-        <span class="pill">APIs & FastAPI</span>
-        <span class="pill">Indexes & Plans</span>
-        <span class="pill">Marimo Charts</span>
+        <span class="pill">Locks & ACID</span>
+        <span class="pill">Serialization</span>
+        <span class="pill">Row vs Column</span>
+        <span class="pill">Compression</span>
+        <span class="pill">DuckDB & Indexes</span>
+        <span class="pill">REST Contract</span>
+        <span class="pill">Pydantic</span>
+        <span class="pill">FastAPI</span>
+        <span class="pill">Frontends</span>
+        <span class="pill">Honest Charts</span>
       </div>
     </div>
-            """
-    )
-    _title
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _agenda = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
-      <h2>Discussed Topics  </h2>
+      <h2>Discussed Topics</h2>
       <div class="grid-2">
-        <div>
-          <ul>
-            <li>File locks and why databases matter (ACID vs. files)</li>
-            <li>Atomicity demo: transfer + rollback</li>
-            <li>Serialization & deserialization benchmarks (JSON, Pickle, Arrow, Avro)</li>
-            <li>Column‑based vs row‑based storage</li>
-            <li>Compression & encoding (Parquet, gzip, compression ratios)</li>
-            <li>DuckDB for analytics on files + schema‑on‑read vs write</li>
-          </ul>
-        </div>
-        <div>
-          <ul>
-            <li>REST APIs (GET, POST, PUT, DELETE)</li>
-            <li>Pydantic models for validation</li>
-            <li>FastAPI demo + automatic documentation</li>
-            <li>Indexing demo (SQLite) + query plans</li>
-            <li>Frontend framework comparison (Streamlit, Dash, Flask, React, Marimo)</li>
-            <li>Marimo charts lab: regression, category scatter, trend lines</li>
-          </ul>
-        </div>
+        <ol>
+          <li>File locks vs databases: lost updates, locks, ACID, an atomic transfer</li>
+          <li>Serialization benchmarks: JSON, CSV, Pickle, Arrow, Parquet, Avro</li>
+          <li>Row-based vs column-based storage</li>
+          <li>Compression & encoding: lossless vs lossy, Parquet codecs, dictionaries</li>
+          <li>DuckDB: SQL on files, indexes & query plans, schema-on-read vs -write</li>
+        </ol>
+        <ol start="6">
+          <li>REST: the API contract, four verbs, status codes</li>
+          <li>Pydantic models: validation at the trust boundary</li>
+          <li>FastAPI live: the demo API and its automatic <code>/docs</code></li>
+          <li>Frontends: Streamlit, Dash, Flask, React, Marimo</li>
+          <li>Honest charts: a regression lab, one question asked three ways</li>
+        </ol>
       </div>
     </div>
-            """
-    )
-    _agenda
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _tier_map = mo.md(
-        """
+    mo.md("""
     <div class="section-card flow-card">
       <h3>The Map: One Product, Three Tiers</h3>
       <p>
@@ -432,27 +421,23 @@ def _(mo):
         Keep this picture in mind. At the start of every chapter we say which tier we are standing in.
       </div>
     </div>
-            """
-    )
-    _tier_map
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _legend = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
       <h3>How to Read This Notebook</h3>
       <div class="focus-grid">
-        <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
-        <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
-        <div class="focus-item"><strong>Discussion blocks</strong>: interpretation and trade-offs (explicit design compromises).</div>
+        <div class="focus-item"><strong>Chapters</strong>: open with a Key Question and the tier we are in, close with a Conclusion and a Bridge.</div>
+        <div class="focus-item"><strong>Formulas</strong>: a quick quantitative model of the idea.</div>
+        <div class="focus-item"><strong>Mini-labs</strong>: controls to test that model. Heavy ones wait for their Run button.</div>
+        <div class="focus-item"><strong>Discussion</strong>: questions for the room. Click one to reveal the answer.</div>
       </div>
     </div>
-            """
-    )
-    _legend
+    """)
     return
 
 
@@ -530,84 +515,41 @@ def _(mo, requests):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 1. File Locks vs Databases (ACID)")
-    _section
+    mo.md("""
+    ## 1. File Locks vs Databases (ACID)
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter1_guide = mo.md(
+    mo.md(
         """
     ### Chapter 1 Introduction
 
     > **Key Question:** When many users update shared data at the same time, do we preserve correctness?
 
-    We are standing in the **data tier**. Databases promise four things, abbreviated **ACID**:
+    We are standing in the **data tier**, at its very bottom: before we pick a format or a layout,
+    writes have to be correct. Databases promise four things, abbreviated **ACID**. A plain file,
+    on its own, promises none of them:
 
-    - **A — Atomicity:** all-or-nothing updates
-    - **C — Consistency:** the data obeys its rules before and after every change
-    - **I — Isolation:** one write should not corrupt another
-    - **D — Durability:** committed data survives crashes
+    | | Database promise | Plain file |
+    |:---|:---|:---|
+    | **A**tomicity | all or nothing | a crash can leave half a change |
+    | **C**onsistency | the data obeys its rules before and after every change | no rules at all |
+    | **I**solation | concurrent transactions behave as if run one at a time | writers overwrite each other |
+    | **D**urability | committed data survives a crash | only after flush + fsync |
 
-    Practical signal to watch:
-
-    $$
-    \\text{lost update rate} = \\frac{E - A}{E}
-    $$
-
-    Higher values indicate that concurrent writes are interfering.
+    The signal to watch: with $W$ workers adding $I$ increments each, the counter should end at
+    $E = W \\times I$. Whatever the actual value $A$ falls short is lost updates, $L = E - A$.
             """
     ).callout(kind="neutral")
-    _chapter1_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
-        """
-    ### Why Files Are Not ACID
-
-    Files are great for **simple storage**, but they do **not** provide ACID guarantees:
-
-    - **Atomicity**: file writes can be partial or interleaved.
-    - **Consistency**: no built‑in rules about valid states.
-    - **Isolation**: concurrent writers can overwrite each other.
-    - **Durability**: durability depends on flush/fsync timing.
-
-    **What to observe:** when multiple workers update a shared file, the *actual* value drops below the *expected* value because increments are lost.
-
-    In our experiment, the expected final counter is:
-
-    $$
-    E = W \\times I
-    $$
-
-    and the number of lost updates is:
-
-    $$
-    L = E - A
-    $$
-
-    Where:
-    - $E$: expected final counter value  
-    - $W$: number of concurrent workers  
-    - $I$: increments per worker  
-    - $A$: actual final counter value observed  
-    - $L$: lost updates
-
-    Databases coordinate concurrency, ensure isolation, and provide crash recovery.
-            """
-    ).callout(kind="neutral")
-    _explanation
-    return
-
-
-@app.cell
-def _(mo):
-    _lost_update_diagram = mo.md(
-        """
+    mo.md("""
     <div class="section-card flow-card">
       <h3>Visual: Lost Update Timeline (Who Does What, When)</h3>
       <div class="lost-update-wrap">
@@ -624,7 +566,7 @@ def _(mo):
 
           <div class="lu-step">2</div>
           <div class="lu-event lu-write">writes 42</div>
-          <div class="lu-event lu-idle">waiting</div>
+          <div class="lu-event">adds 1 to its stale 41</div>
           <div class="lu-state">42</div>
 
           <div class="lu-step">3</div>
@@ -635,15 +577,13 @@ def _(mo):
       </div>
       <div class="flow-note"><strong>Expected after 2 increments: 43.</strong> Observed: 42, so one update was lost.</div>
     </div>
-            """
-    )
-    _lost_update_diagram
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _lock_metaphor = mo.md(
+    mo.md(
         """
     ### What a Lock Actually Is
 
@@ -665,33 +605,35 @@ def _(mo):
     - There is a second kind of key that many people may hold at once, for looking but not touching.
       The code below asks for the exclusive one, `LOCK_EX`.
     - The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
-      which is why this technique stops working across a network filesystem.
+      which is why file locks are unreliable across a network filesystem.
     - **Where it breaks:** the flatmate rule is only as good as the flatmates. A database does not
-      rely on an agreement - it refuses to hand out the data in the first place. That is the
-      difference you are about to measure.
+      rely on an agreement: every write goes through its lock, whether the program asked or not.
+      Whether that is enough is what you are about to measure.
             """
     ).callout(kind="neutral")
-    _lock_metaphor
     return
 
 
 @app.cell
 def _(mo):
-    strategies = mo.ui.multiselect(
-        options=["no_lock", "thread_lock", "file_lock", "sqlite_naive", "sqlite"],
-        value=["no_lock", "file_lock", "sqlite_naive", "sqlite"],
-        label="Strategies to run",
+    # Checkboxes, not a multiselect: the room sees every strategy and whether it is on.
+    strategies = mo.ui.dictionary(
+        {
+            key: mo.ui.checkbox(value=key != "thread_lock", label=f"`{key}`")
+            for key in ["no_lock", "thread_lock", "file_lock", "sqlite_naive", "sqlite"]
+        }
     )
     workers = mo.ui.slider(2, 8, value=4, label="Concurrent workers", show_value=True)
-    iterations = mo.ui.slider(20, 600, step=20, value=60, label="Increments per worker", show_value=True)
-    jitter = mo.ui.slider(0, 5, value=1, step=1, label="Artificial jitter (ms) per update", show_value=True)
-    run_race = mo.ui.button(label="Run counter experiment", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    # Capped so the slowest setting (8 x 120 x 3 ms, paid in a queue) still finishes in seconds.
+    iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments per worker", show_value=True)
+    jitter = mo.ui.slider(0, 3, value=1, step=1, label="Artificial jitter (ms) per update", show_value=True)
+    run_race = mo.ui.run_button(label="Run counter experiment", kind="success")
     _term_note = mo.md(
         """
     **Strategy notes**
-    - `no_lock`: plain file writes, race conditions likely (overlapping unsynchronized updates)
-    - `thread_lock`: Python lock in one process
-    - `file_lock`: OS file lock around write, the key on the hook from the section above
+    - `no_lock`: plain file writes, nothing stops two workers from overlapping
+    - `thread_lock`: a Python lock, which only works inside one process
+    - `file_lock`: OS file lock (`flock`) held from the read to the write, the key on the hook from the section above
     - `sqlite_naive`: a real database, used the way most people first use one. Read the value,
       add one in Python, write it back.
     - `sqlite`: the same database, one statement, `UPDATE counter SET value = value + 1`,
@@ -701,23 +643,22 @@ def _(mo):
     whether the read and the write were locked together as one step. A transaction protects the
     steps you actually put inside it, and nothing else.
 
-    **Jitter (ms)** adds delay to each update, which increases overlap between workers.
+    **Jitter (ms)** is a pause between the read and the write. It widens the gap the race lives in,
+    and a locked strategy pays it one worker at a time.
             """
     ).callout(kind="info")
 
-    _controls = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Concurrency demo: file vs locks vs database"),
             mo.hstack([workers, iterations], widths="equal"),
             jitter,
-            strategies,
+            mo.hstack([mo.md("Strategies to run"), strategies.hstack(justify="start", gap=1.5)], justify="start", gap=1.5),
             run_race,
             _term_note,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
     return iterations, jitter, run_race, strategies, workers
 
 
@@ -727,7 +668,6 @@ def _(
     iterations,
     jitter,
     mo,
-    os,
     run_race,
     sqlite3,
     static_table,
@@ -737,331 +677,188 @@ def _(
     time,
     workers,
 ):
-    def _run_file_counter(path, iterations, workers, lock_mode, jitter_s):
-        """Increment a shared file counter with different locking strategies."""
-        path.write_text("0")
-        thread_lock = threading.Lock() if lock_mode == "thread_lock" else None
-        file_lock_supported = False
-        fcntl = None
-        if lock_mode == "file_lock":
-            try:
-                import fcntl  # type: ignore
+    mo.stop(
+        not run_race.value,
+        mo.md("Click **Run counter experiment** to simulate concurrent writes.").callout(kind="neutral"),
+    )
 
-                file_lock_supported = True
-            except Exception:
-                file_lock_supported = False
+    from concurrent.futures import ThreadPoolExecutor as _Pool
+    from contextlib import nullcontext as _nullcontext
 
-        def update_once():
-            with path.open("r+", encoding="utf-8") as f:
-                if lock_mode == "file_lock" and file_lock_supported:
-                    fcntl.flock(f, fcntl.LOCK_EX)
-                value = f.read().strip()
-                current = int(value) if value else 0
-                if jitter_s:
-                    time.sleep(jitter_s)
-                f.seek(0)
-                f.truncate()
-                f.write(str(current + 1))
-                f.flush()
-                os.fsync(f.fileno())
-                if lock_mode == "file_lock" and file_lock_supported:
-                    fcntl.flock(f, fcntl.LOCK_UN)
+    try:
+        import fcntl as _fcntl
+    except ImportError:  # Windows has no flock
+        _fcntl = None
+
+    _workers, _increments, _jitter_s = workers.value, iterations.value, jitter.value / 1000
+
+    def _race(worker):
+        """Run `worker` in every thread at once; return the seconds until the last one finished."""
+        start = time.perf_counter()
+        with _Pool(_workers) as pool:
+            for future in [pool.submit(worker) for _ in range(_workers)]:
+                future.result()  # a worker that crashed raises here instead of passing as a lost update
+        return time.perf_counter() - start
+
+    def _file_counter(path, mode):
+        # Fixed width: nobody ever reads an empty or half-written number, so the only race
+        # left is the read-modify-write gap this demo is about.
+        path.write_text(f"{0:010d}")
+        guard = threading.Lock() if mode == "thread_lock" else _nullcontext()
 
         def worker():
-            for _ in range(iterations):
-                if thread_lock:
-                    with thread_lock:
-                        update_once()
+            for _ in range(_increments):
+                with guard, path.open("r+") as f:
+                    if mode == "file_lock" and _fcntl:
+                        _fcntl.flock(f, _fcntl.LOCK_EX)  # released when the file closes
+                    current = int(f.read())
+                    if _jitter_s:
+                        time.sleep(_jitter_s)
+                    f.seek(0)
+                    f.write(f"{current + 1:010d}")
+
+        return _race(worker), int(path.read_text())
+
+    def _sqlite_counter(path, one_statement):
+        con = sqlite3.connect(path)
+        con.executescript(
+            "PRAGMA journal_mode=WAL; CREATE TABLE counter (value INTEGER NOT NULL); INSERT INTO counter VALUES (0);"
+        )
+        con.close()
+
+        def worker():
+            conn = sqlite3.connect(path, timeout=30, isolation_level=None)
+            conn.execute("PRAGMA synchronous=OFF")  # this demo is about isolation, not durability
+            for _ in range(_increments):
+                if one_statement:
+                    conn.execute("BEGIN IMMEDIATE")
+                    conn.execute("UPDATE counter SET value = value + 1")
+                    conn.execute("COMMIT")
                 else:
-                    update_once()
-
-        threads = [threading.Thread(target=worker) for _ in range(workers)]
-        start = time.perf_counter()
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        duration = time.perf_counter() - start
-        final_value = int(path.read_text().strip() or "0")
-        return final_value, duration, file_lock_supported
-
-    def _run_sqlite_naive_counter(db_path, iterations, workers):
-        """The way most people first use a database: read it, add one in Python, write it back."""
-        con = sqlite3.connect(db_path)
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("CREATE TABLE counter (value INTEGER NOT NULL)")
-        con.execute("INSERT INTO counter VALUES (0)")
-        con.commit()
-        con.close()
-
-        def worker():
-            conn = sqlite3.connect(db_path, timeout=5, isolation_level=None)
-            for _ in range(iterations):
-                current = conn.execute("SELECT value FROM counter").fetchone()[0]
-                conn.execute("UPDATE counter SET value = ?", (current + 1,))
+                    (current,) = conn.execute("SELECT value FROM counter").fetchone()
+                    if _jitter_s:
+                        time.sleep(_jitter_s)
+                    conn.execute("UPDATE counter SET value = ?", (current + 1,))
             conn.close()
 
-        threads = [threading.Thread(target=worker) for _ in range(workers)]
-        start = time.perf_counter()
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        duration = time.perf_counter() - start
-        conn = sqlite3.connect(db_path)
-        final_value = conn.execute("SELECT value FROM counter").fetchone()[0]
-        conn.close()
-        return final_value, duration
-
-    def _run_sqlite_counter(db_path, iterations, workers):
-        """Increment a counter inside SQLite with transactions."""
-        con = sqlite3.connect(db_path)
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("CREATE TABLE counter (value INTEGER NOT NULL)")
-        con.execute("INSERT INTO counter VALUES (0)")
-        con.commit()
+        seconds = _race(worker)
+        con = sqlite3.connect(path)
+        (value,) = con.execute("SELECT value FROM counter").fetchone()
         con.close()
+        return seconds, value
 
-        def worker():
-            conn = sqlite3.connect(db_path, timeout=5, isolation_level=None)
-            for _ in range(iterations):
-                for _attempt in range(8):
-                    try:
-                        conn.execute("BEGIN IMMEDIATE")
-                        conn.execute("UPDATE counter SET value = value + 1")
-                        conn.execute("COMMIT")
-                        break
-                    except sqlite3.OperationalError as exc:
-                        if "locked" in str(exc).lower():
-                            time.sleep(0.002)
-                            continue
-                        raise
-            conn.close()
+    _labels = {
+        "no_lock": "file (no lock)",
+        "thread_lock": "file (thread lock)",
+        "file_lock": "file (flock)" if _fcntl else "file (no flock on this OS, ran unlocked)",
+        "sqlite_naive": "sqlite (read, +1 in Python, write)",
+        "sqlite": "sqlite transaction",
+    }
+    _expected = _workers * _increments
+    _rows = []
+    with mo.status.spinner(title="Racing the workers ..."), tempfile.TemporaryDirectory() as _tmp:
+        for _key, _label in _labels.items():
+            if not strategies.value[_key]:
+                continue
+            if _key.startswith("sqlite"):
+                _seconds, _actual = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
+            else:
+                _seconds, _actual = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
+            _rows.append(
+                {
+                    "strategy": _label,
+                    "expected": _expected,
+                    "actual": _actual,
+                    "lost updates": _expected - _actual,
+                    "duration (ms)": round(_seconds * 1000, 1),
+                }
+            )
 
-        threads = [threading.Thread(target=worker) for _ in range(workers)]
-        start = time.perf_counter()
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        duration = time.perf_counter() - start
-        conn = sqlite3.connect(db_path)
-        final_value = conn.execute("SELECT value FROM counter").fetchone()[0]
-        conn.close()
-        return final_value, duration
-
-    if run_race.value == 0:
-        _output = mo.md("Click **Run counter experiment** to simulate concurrent writes.").callout(kind="neutral")
-    else:
-        _expected_counter = workers.value * iterations.value
-        jitter_s = jitter.value / 1000
-
-        race_rows = []
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _tmp_path = Path(_tmpdir)
-            if "no_lock" in strategies.value:
-                value, _duration, _ = _run_file_counter(
-                    _tmp_path / "counter.txt",
-                    iterations.value,
-                    workers.value,
-                    "no_lock",
-                    jitter_s,
-                )
-                race_rows.append(
-                    {
-                        "strategy": "file (no lock)",
-                        "expected": _expected_counter,
-                        "actual": value,
-                        "lost updates": _expected_counter - value,
-                        "duration (ms)": round(_duration * 1000, 2),
-                    }
-                )
-
-            if "thread_lock" in strategies.value:
-                value, _duration, _ = _run_file_counter(
-                    _tmp_path / "counter_locked.txt",
-                    iterations.value,
-                    workers.value,
-                    "thread_lock",
-                    jitter_s,
-                )
-                race_rows.append(
-                    {
-                        "strategy": "file (thread lock)",
-                        "expected": _expected_counter,
-                        "actual": value,
-                        "lost updates": _expected_counter - value,
-                        "duration (ms)": round(_duration * 1000, 2),
-                    }
-                )
-
-            if "file_lock" in strategies.value:
-                value, _duration, supported = _run_file_counter(
-                    _tmp_path / "counter_flock.txt",
-                    iterations.value,
-                    workers.value,
-                    "file_lock",
-                    jitter_s,
-                )
-                race_rows.append(
-                    {
-                        "strategy": "file (fcntl lock)" if supported else "file (lock unsupported)",
-                        "expected": _expected_counter,
-                        "actual": value,
-                        "lost updates": _expected_counter - value,
-                        "duration (ms)": round(_duration * 1000, 2),
-                    }
-                )
-
-            if "sqlite_naive" in strategies.value:
-                value, _duration = _run_sqlite_naive_counter(
-                    str(_tmp_path / "counter_naive.db"),
-                    iterations.value,
-                    workers.value,
-                )
-                race_rows.append(
-                    {
-                        "strategy": "sqlite (read, +1 in Python, write)",
-                        "expected": _expected_counter,
-                        "actual": value,
-                        "lost updates": _expected_counter - value,
-                        "duration (ms)": round(_duration * 1000, 2),
-                    }
-                )
-
-            if "sqlite" in strategies.value:
-                value, _duration = _run_sqlite_counter(
-                    str(_tmp_path / "counter.db"),
-                    iterations.value,
-                    workers.value,
-                )
-                race_rows.append(
-                    {
-                        "strategy": "sqlite transaction",
-                        "expected": _expected_counter,
-                        "actual": value,
-                        "lost updates": _expected_counter - value,
-                        "duration (ms)": round(_duration * 1000, 2),
-                    }
-                )
-
-        _table = static_table(race_rows, label="Concurrency results")
-        _summary = mo.md(
-            """
+    mo.vstack(
+        [
+            static_table(_rows, label="Concurrency results"),
+            mo.md(
+                """
     **How to read the table**
 
-    - **No lock**: often lowest wall-clock runtime, but can be incorrect (lost updates).
-    - **File lock**: correct here, but at a cost, because writers queue and latency rises.
+    - **No lock**: fast, and wrong. Increments simply vanish.
+    - **File lock**: correct, but writers queue, so every millisecond of jitter is paid one
+      worker at a time.
     - **SQLite, read-modify-write in Python**: a real database, and it still loses updates.
       Watch how close the final value lands to *one* worker's total, as if the others never ran.
     - **SQLite, one statement in a transaction**: correct, because the read and the write are a
-      single indivisible step no other writer can interleave with.
+      single indivisible step no other writer can interleave with. It is quick too: there is no
+      gap for the jitter to widen, and the lock is held for microseconds.
 
     The lost-update counts for the unlocked rows will not repeat between runs. That is the lesson,
     not a flaw: a race has no fixed answer.
                 """
-        ).callout(kind="info")
-
-        _output = mo.vstack([_table, _summary], gap=0.6)
-
-    _output
+            ).callout(kind="info"),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    _interleave_intro = mo.md(
+    mo.md(
         """
     ### Interleaving Simulator: Why Lost Updates Happen
 
-    The file counter uses a **read → modify → write** sequence. Without a lock, two workers can interleave:
-
-    1. Worker A reads 0  
-    2. Worker B reads 0  
-    3. Worker A writes 1  
-    4. Worker B writes 1  ← lost update (A’s increment disappears)
-
-    The simulator below shuffles these steps to make the race condition visible (non-deterministic interleaving of operations).
+    Every increment is two steps: **read** the shared value into a local copy, then **write**
+    copy + 1. Here two workers, A and B, take those steps in a random order, and the seed picks
+    the order. A write whose copy no longer matches the shared value is a **stale write**: it
+    erases every increment made since that copy was read. The trace marks each one.
             """
     ).callout(kind="neutral")
-    _interleave_intro
     return
 
 
 @app.cell
 def _(mo):
     interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker (simulated)", show_value=True, debounce=True)
-    interleave_seed = mo.ui.slider(1, 999, value=13, label="Interleaving seed", show_value=True, debounce=True)
+    interleave_seed = mo.ui.slider(1, 999, value=7, label="Interleaving seed", show_value=True, debounce=True)
     show_trace = mo.ui.switch(value=True, label="Show step-by-step trace")
 
-    _controls = mo.vstack(
-        [
-            mo.hstack([interleave_steps, interleave_seed], widths="equal"),
-            show_trace,
-        ],
+    mo.vstack(
+        [mo.hstack([interleave_steps, interleave_seed], widths="equal"), show_trace],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
     return interleave_seed, interleave_steps, show_trace
 
 
 @app.cell
 def _(interleave_seed, interleave_steps, mo, random, show_trace, static_table):
     _rng = random.Random(interleave_seed.value)
-
-    def _build_ops():
-        ops = []
-        for idx in range(interleave_steps.value):
-            ops.append(("read", idx))
-            ops.append(("write", idx))
-        return ops
-
-    _ops = {"A": _build_ops(), "B": _build_ops()}
-
-    _local = {"A": None, "B": None}
-    _shared = 0
-    _log = []
-    _step = 0
-
+    _ops = {w: ["read", "write"] * interleave_steps.value for w in "AB"}
+    _local, _shared, _log = {}, 0, []
     while _ops["A"] or _ops["B"]:
-        _available = [w for w in ("A", "B") if _ops[w]]
-        _worker = _rng.choice(_available)
-        _op = _ops[_worker].pop(0)
-        _action, _idx = _op
+        _worker = _rng.choice([w for w in "AB" if _ops[w]])
+        _action = _ops[_worker].pop(0)
         _before = _shared
         if _action == "read":
             _local[_worker] = _shared
-            _after = _shared
-            _note = "read shared"
         else:
-            _shared = (_local[_worker] or 0) + 1
-            _after = _shared
-            _note = "write local+1"
-
+            _shared = _local[_worker] + 1
         _log.append(
             {
-                "step": _step,
+                "step": len(_log) + 1,
                 "worker": _worker,
                 "action": _action,
-                "shared_before": _before,
-                "local_value": _local[_worker],
-                "shared_after": _after,
-                "note": _note,
+                "shared before": _before,
+                "local copy": _local[_worker],
+                "shared after": _shared,
+                "note": "stale write" if _action == "write" and _local[_worker] != _before else "",
             }
         )
-        _step += 1
 
     _expected = interleave_steps.value * 2
     _lost = _expected - _shared
-    _summary = mo.md(f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**.").callout(kind="info")
-
-    _panel_items = [_summary]
-    if show_trace.value:
-        _panel_items.append(static_table(_log, label="Interleaving trace"))
-
-    _panel = mo.vstack(_panel_items, gap=0.6)
-    _panel
+    _summary = mo.md(f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**.").callout(
+        kind="danger" if _lost else "success"
+    )
+    mo.vstack([_summary, static_table(_log, label="Interleaving trace")] if show_trace.value else [_summary], gap=0.6)
     return
 
 
@@ -1072,32 +869,16 @@ def _(mo):
     ### Atomicity Demo: Transfer With Failure
 
     Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
+    A transfer must keep $B_{Alice} + B_{Bob}$ constant. Without a transaction, a crash between
+    **debit** and **credit** breaks that; a database rolls the partial work back.
 
-    A transfer should preserve the total balance:
+    This demo is about atomicity alone: one transfer, no concurrent writers.
 
-    $$
-    B_{total} = B_{Alice} + B_{Bob}
-    $$
-
-    Where:
-    - $B_{total}$: total money in the system  
-    - $B_{Alice}$: Alice's balance  
-    - $B_{Bob}$: Bob's balance
-
-    Without transactions, a crash between **debit** and **credit** can violate this invariant.
-    Databases roll back the partial work, so the total remains consistent.
-
-    **What this demo highlights:**
-    - The invariant to preserve (total balance)
-    - The failure point between steps (crash after debit)
-    - The commit/rollback boundary that restores consistency
-    - Atomicity is separate from isolation (we are not modeling concurrency here)
-
-    **Try this:** run once with failure **on** (see the file total break),
-    then run with failure **off** (both systems remain consistent).
+    **Try this:** run once with failure **on** (the file total breaks), then with failure
+    **off** (both totals hold).
             """
     ).callout(kind="neutral")
-    _atomic_flow = mo.Html(
+    _atomic_flow = mo.md(
         """
     <div class="section-card flow-card">
       <h3>Transaction Boundary</h3>
@@ -1108,12 +889,10 @@ def _(mo):
         <div class="flow-arrow">&rarr;</div>
         <div class="flow-box">Commit or Rollback</div>
       </div>
-      <div class="flow-note">Atomicity means either all steps commit or none do.</div>
     </div>
             """
     )
-    _panel = mo.vstack([_atomic_intro, _atomic_flow], gap=0.6)
-    _panel
+    mo.vstack([_atomic_intro, _atomic_flow], gap=0.6)
     return
 
 
@@ -1121,14 +900,12 @@ def _(mo):
 def _(mo):
     atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount", show_value=True)
     atomic_fail = mo.ui.switch(value=True, label="Inject failure after debit")
-    run_atomic = mo.ui.button(label="Run atomicity demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
+    run_atomic = mo.ui.run_button(label="Run atomicity demo", kind="success")
 
-    _controls = mo.vstack(
+    mo.vstack(
         [mo.hstack([atomic_amount, atomic_fail], widths="equal"), run_atomic],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
     return atomic_amount, atomic_fail, run_atomic
 
 
@@ -1144,186 +921,104 @@ def _(
     static_table,
     tempfile,
 ):
-    if run_atomic.value == 0:
-        _output = mo.md("Click **Run atomicity demo** to simulate the transfer step-by-step.").callout(kind="neutral")
-    else:
-        _initial = {"Alice": 1000, "Bob": 500}
-        _expected_total = sum(_initial.values())
-        _timeline = []
+    mo.stop(
+        not run_atomic.value,
+        mo.md("Click **Run atomicity demo** to run the transfer step by step.").callout(kind="neutral"),
+    )
 
-        def _normalize_state(state):
-            if isinstance(state, dict):
-                _state = dict(state)
-            else:
-                try:
-                    _state = dict(state)
-                except Exception:
-                    _state = {}
-            return {
-                "Alice": _state.get("Alice", 0),
-                "Bob": _state.get("Bob", 0),
-            }
+    _initial = {"Alice": 1000, "Bob": 500}
+    _expected = sum(_initial.values())
+    _amount = atomic_amount.value
+    _timeline = []
 
-        def _add_timeline(system, step, state, note):
-            _state = _normalize_state(state)
-            _timeline.append(
-                {
-                    "system": system,
-                    "step": step,
-                    "Alice": _state["Alice"],
-                    "Bob": _state["Bob"],
-                    "total": sum(_state.values()),
-                    "note": note,
-                }
-            )
+    def _add_timeline(system, step, state, note):
+        _timeline.append({"system": system, "step": step, **state, "total": sum(state.values()), "note": note})
 
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _tmpdir = Path(_tmpdir)
-            _file_path = _tmpdir / "ledger.json"
-            _file_path.write_text(json.dumps(_initial), encoding="utf-8")
+    with tempfile.TemporaryDirectory() as _tmp:
+        # File ledger: debit and credit are two separate writes, and nothing ties them together.
+        _file_path = Path(_tmp) / "ledger.json"
+        _ledger = dict(_initial)
+        _file_path.write_text(json.dumps(_ledger))
+        _add_timeline("file (JSON)", "start", _ledger, "initial balances")
+        _ledger["Alice"] -= _amount
+        _file_path.write_text(json.dumps(_ledger))
+        _add_timeline("file (JSON)", "debit", _ledger, "Alice debited")
+        if atomic_fail.value:
+            _add_timeline("file (JSON)", "crash", _ledger, "crash before credit")
+        else:
+            _ledger["Bob"] += _amount
+            _file_path.write_text(json.dumps(_ledger))
+            _add_timeline("file (JSON)", "credit", _ledger, "Bob credited")
+        _file_total = sum(json.loads(_file_path.read_text()).values())
 
-            _add_timeline("file (JSON)", "start", dict(_initial), "initial balances")
-            _file_balances = dict(_initial)
-            _file_balances["Alice"] -= atomic_amount.value
-            _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
-            _add_timeline("file (JSON)", "debit", dict(_file_balances), "Alice debited")
-            if not atomic_fail.value:
-                _file_balances["Bob"] += atomic_amount.value
-                _file_path.write_text(json.dumps(_file_balances), encoding="utf-8")
-                _add_timeline("file (JSON)", "credit", dict(_file_balances), "Bob credited")
-            else:
-                _add_timeline("file (JSON)", "crash", dict(_file_balances), "crash before credit")
+        # SQLite ledger: both updates inside one transaction.
+        _con = sqlite3.connect(Path(_tmp) / "ledger.db", isolation_level=None)
+        _con.execute("CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)")
+        _con.executemany("INSERT INTO accounts VALUES (?, ?)", _initial.items())
 
-            _file_final = json.loads(_file_path.read_text(encoding="utf-8"))
+        def _balances():
+            return dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
 
-            _db_path = _tmpdir / "ledger.db"
-            _con = sqlite3.connect(str(_db_path), isolation_level=None)
-            _con.execute("CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)")
-            _con.executemany("INSERT INTO accounts VALUES (?, ?)", list(_initial.items()))
+        _add_timeline("sqlite", "start", _balances(), "initial balances")
+        _con.execute("BEGIN")
+        _con.execute("UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'", (_amount,))
+        _add_timeline("sqlite", "debit (txn)", _balances(), "uncommitted debit")
+        try:
+            if atomic_fail.value:
+                raise RuntimeError("simulated crash after debit")
+            _con.execute("UPDATE accounts SET balance = balance + ? WHERE name = 'Bob'", (_amount,))
+            _con.execute("COMMIT")
+            _add_timeline("sqlite", "commit", _balances(), "transaction committed")
+        except RuntimeError:
+            _con.execute("ROLLBACK")
+            _add_timeline("sqlite", "rollback", _balances(), "transaction rolled back")
+        _db_total = sum(_balances().values())
+        _con.close()
 
-            try:
-                _con.execute("BEGIN")
-                _add_timeline("sqlite", "start", dict(_initial), "initial balances")
-                _con.execute(
-                    "UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'",
-                    (atomic_amount.value,),
-                )
-                _db_after_debit = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
-                _add_timeline(
-                    "sqlite",
-                    "debit (txn)",
-                    _db_after_debit,
-                    "uncommitted debit",
-                )
-                if atomic_fail.value:
-                    raise RuntimeError("Simulated crash after debit")
-                _con.execute(
-                    "UPDATE accounts SET balance = balance + ? WHERE name = 'Bob'",
-                    (atomic_amount.value,),
-                )
-                _con.execute("COMMIT")
-                _db_final = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
-                _add_timeline("sqlite", "commit", _db_final, "transaction committed")
-            except Exception:
-                try:
-                    _con.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
-                _db_final = dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
-                _add_timeline("sqlite", "rollback", _db_final, "transaction rolled back")
-
-            _db_rows = _con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall()
-            _con.close()
-
-        if not _db_rows:
-            _db_rows = list(_initial.items())
-
-        _initial_table = static_table(
-            [{"account": k, "balance": v} for k, v in _initial.items()],
-            label="Initial balances",
+    def _bar(label, total):
+        fill = "good" if total == _expected else "bad"
+        return (
+            f'<div class="bar-row"><div class="bar-label">{label}</div>'
+            f'<div class="bar-track"><div class="bar-fill {fill}" style="width: {total / _expected:.1%}"></div></div>'
+            f'<div class="bar-value">{total:,} / {_expected:,}</div></div>'
         )
-        _file_table = static_table(
-            [{"account": k, "balance": v} for k, v in _file_final.items()],
-            label="File ledger (JSON)",
-        )
-        _db_table = static_table(
-            [{"account": name, "balance": bal} for name, bal in _db_rows],
-            label="SQLite ledger (transaction)",
-        )
-        _timeline_table = static_table(_timeline, label="Step-by-step timeline")
 
-        _file_total = sum(_file_final.values())
-        _db_total = sum(row[1] for row in _db_rows)
-        _status = "Failure injected" if atomic_fail.value else "No failure"
-        _file_ok = _file_total == _expected_total
-        _db_ok = _db_total == _expected_total
-
-        _file_status = "consistent" if _file_ok else "BROKEN"
-        _db_status = "consistent" if _db_ok else "BROKEN"
-        _file_kind = "success" if _file_ok else "danger"
-        _db_kind = "success" if _db_ok else "danger"
-
-        def _total_bar(label, total, expected, bar_class):
-            pct = 0.0 if expected == 0 else min(100.0, (total / expected) * 100.0)
-            return f"""
-    <div class="bar-row">
-      <div class="bar-label">{label}</div>
-      <div class="bar-track">
-        <div class="bar-fill {bar_class}" style="width: {pct:.1f}%"></div>
-      </div>
-      <div class="bar-value">{total:,} / {expected:,}</div>
-    </div>
-                """
-
-        _total_chart = mo.Html(
-            f"""
+    _total_chart = mo.md(
+        f"""
     <div class="section-card">
       <h3>Total Balance Snapshot</h3>
-      <div class="bar-chart">
-        {_total_bar("File total", _file_total, _expected_total, "good" if _file_ok else "bad")}
-        {_total_bar("SQLite total", _db_total, _expected_total, "good" if _db_ok else "bad")}
-      </div>
+      <div class="bar-chart">{_bar("File total", _file_total)}{_bar("SQLite total", _db_total)}</div>
     </div>
-                """
+            """
+    )
+    _file_ok = _file_total == _expected
+    _file_callout = mo.md(
+        "**File:** debit and credit are two separate writes. "
+        + (
+            "Both landed, because nothing crashed."
+            if _file_ok
+            else f"The crash came between them: {_amount:,} left Alice and never reached Bob."
         )
+    ).callout(kind="success" if _file_ok else "danger")
+    _db_callout = mo.md(
+        "**SQLite:** both updates sit in one transaction. "
+        + ("The crash rolled the debit back, so the total holds." if atomic_fail.value else "They committed together.")
+    ).callout(kind="success" if _db_total == _expected else "danger")
 
-        _summary = mo.md(
-            f"""
-    **Scenario:** {_status}  
-    **Expected total:** `{_expected_total}`  
-    **File total:** `{_file_total}` → **{_file_status}**  
-    **SQLite total:** `{_db_total}` → **{_db_status}**
-
-    When failure is injected, the file-based ledger can end in a **partial state**,
-    while the database rolls back to the consistent total.
-                """
-        ).callout(kind="info")
-
-        _file_callout = mo.md("File writes are **not atomic**: debit and credit can be split by a crash.").callout(kind=_file_kind)
-        _db_callout = mo.md("SQLite uses **transactions**: either both updates happen or none.").callout(kind=_db_kind)
-
-        _output = mo.vstack(
-            [
-                _initial_table,
-                _timeline_table,
-                _total_chart,
-                _file_callout,
-                _file_table,
-                _db_callout,
-                _db_table,
-                _summary,
-            ],
-            gap=0.6,
-        )
-
-    _output
+    mo.vstack(
+        [
+            static_table(_timeline, label="Step-by-step timeline"),
+            _total_chart,
+            mo.hstack([_file_callout, _db_callout], widths="equal"),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    _qa_block_concurrency = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
       <h3>Discussion — Atomicity & Concurrency</h3>
       <details>
@@ -1341,49 +1036,45 @@ def _(mo):
         Choose based on the cost of wrong data vs. downtime.</p>
       </details>
     </div>
-            """
-    )
-    _qa_block_concurrency
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _conclusion_concurrency = mo.md(
+    mo.md(
         """
-    <div class="section-card">
-      <h3>Chapter 1 Conclusion</h3>
-      <ul>
-        <li>Without proper synchronization, file updates lose increments under concurrency.</li>
-        <li>Atomicity + isolation are easier to enforce with database transactions than plain files.</li>
-        <li>Always track invariants (expected vs actual) to detect correctness issues early.</li>
-      </ul>
-    </div>
+    ### Chapter 1 Conclusion
+
+    - Unsynchronized file updates lose increments under concurrency.
+    - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Put the read
+      and the write in one statement or one transaction.
+    - A transaction also makes a multi-step change all-or-nothing: the crashed transfer rolled back
+      in SQLite, while the file kept half of it.
+    - Track invariants (expected vs actual, the total balance) to catch correctness bugs early.
             """
     ).callout(kind="success")
-    _conclusion_concurrency
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
-    The previous section showed a **correctness** problem: many writers can break data if updates are not coordinated.
+    This chapter showed a **correctness** problem: many writers can break data if updates are not coordinated.
     Now we switch to a **data representation** problem (serialization format choice): once data is correct, which format should be used to store/send it?
 
     Simple idea:
 
     $$
-    \\text{transfer time} \\approx \\frac{\\text{bytes}}{\\text{throughput}}
+    \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
     $$
 
     So better formats can reduce waiting by shrinking bytes or speeding parsing.
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
