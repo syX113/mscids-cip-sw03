@@ -1,5 +1,7 @@
 [server]
-showEmailPrompt = false  # skip the one-time "Welcome to Streamlit! Email:" question
+# No "Email:" question and no "install agent skills" pop-up over the dashboard.
+# The browser does not open by itself: open the Local URL the terminal prints.
+headless = true
 
 [browser]
 gatherUsageStats = false

@@ -175,7 +175,7 @@ resets `data/` and then edits the same files a running API reads. Starting the A
 | 📖 API docs (ReDoc) | `http://127.0.0.1:8000/redoc` |
 | ❤️ API health | `http://127.0.0.1:8000/health` |
 | ⚡ Marimo | Printed in terminal, usually `http://127.0.0.1:2718` (or next free port) |
-| 🎛️ Streamlit | Printed in terminal, usually `http://localhost:8501` |
+| 🎛️ Streamlit | Printed in terminal as Local URL, usually `http://localhost:8501`; open it in your browser |
 
 The API supports all four REST verbs (`GET`, `POST`, `PUT`, `DELETE`) on regions, countries,
 categories, products and sales. Try them from `/docs`.

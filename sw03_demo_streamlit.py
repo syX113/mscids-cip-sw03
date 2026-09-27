@@ -10,6 +10,7 @@ import statistics
 from collections.abc import Callable
 from datetime import date
 from typing import Any
+from urllib.parse import urlsplit
 
 import altair as alt
 import pandas as pd
@@ -19,7 +20,6 @@ import streamlit as st
 st.set_page_config(page_title="Sales Analysis Dashboard", page_icon=":material/monitoring:", layout="wide")
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
-API_COMMAND = "uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000"
 
 # What the dashboard can group by (label -> column) and measure (label -> column, aggregation, d3 number format).
 # Money is in francs: "$" in a d3 format prints the currency the chart theme below sets, "CHF ".
@@ -35,9 +35,9 @@ METRICS = {
     "Average Rating": ("customer_rating", "mean", ".2f"),
 }
 PREDICTORS = {
-    "Average Order Value": ("total_price", "mean", "$,.0f"),
+    "Average Order Value": ("total_price", "mean", "$.3~s"),
     "Average Units Sold": ("units_sold", "mean", ",.1f"),
-    "Total Sales": ("total_price", "sum", "$,.0f"),
+    "Total Sales": ("total_price", "sum", "$.3~s"),
     "Total Units Sold": ("units_sold", "sum", ",.0f"),
 }
 REGRESSION_LEVELS = {  # level -> (one dot per ..., coloured by)
@@ -123,7 +123,12 @@ def fetch_sales(url: str, params: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def line_chart(df: pd.DataFrame, metric: str, compare: str, split_by_category: bool) -> alt.Chart:
+def by_name(channel: type, field: str, names: list[str], shown: pd.Series) -> Any:
+    """Colour or shape per name, pinned to every name there is: a filter never repaints the lines it keeps."""
+    return channel(f"{field}:N", scale=alt.Scale(domain=names), legend=alt.Legend(values=sorted(shown.unique())))
+
+
+def line_chart(df: pd.DataFrame, metric: str, compare: str, split_by_category: bool, names: list[str]) -> alt.Chart:
     column, agg, fmt = METRICS[metric]
     groups = ["month", DIMENSIONS[compare]] + (["category_name"] if split_by_category else [])
     monthly = df.groupby(groups, as_index=False).agg(value=(column, agg))
@@ -132,8 +137,13 @@ def line_chart(df: pd.DataFrame, metric: str, compare: str, split_by_category: b
         .mark_line(point=not split_by_category, strokeWidth=2)
         .encode(
             x=alt.X("month:T", title="Month", axis=alt.Axis(format="%b %Y")),
-            y=alt.Y("value:Q", title=metric, axis=alt.Axis(format=fmt)),
-            color=alt.Color(f"{DIMENSIONS[compare]}:N", title=compare),
+            y=alt.Y(
+                "value:Q",
+                title=metric,
+                axis=alt.Axis(format=fmt),
+                scale=alt.Scale(domain=[1, 5]) if agg == "mean" else alt.Undefined,  # a rating keeps its 1-5 scale
+            ),
+            color=by_name(alt.Color, DIMENSIONS[compare], names, monthly[DIMENSIONS[compare]]).title(compare),
             tooltip=[
                 alt.Tooltip("month:T", title="Month", format="%b %Y"),
                 alt.Tooltip(f"{DIMENSIONS[compare]}:N", title=compare),
@@ -172,7 +182,7 @@ def heatmap(df: pd.DataFrame, rows: str, columns: str, metric: str) -> alt.Layer
             alt.Tooltip("value:Q", title=metric, format=fmt),
         ],
     )
-    labels = base.mark_text(fontSize=13).encode(text=alt.Text("value:Q", format=fmt))
+    labels = base.mark_text(fontSize=13).encode(text=alt.Text("value:Q", format=fmt.replace("~", "")))
     return (rects + labels).properties(height=alt.Step(44))
 
 
@@ -190,7 +200,7 @@ def regression_points(df: pd.DataFrame, level: str) -> pd.DataFrame:
     )
 
 
-def regression_chart(points: pd.DataFrame, x: str, colour: str) -> tuple[alt.LayerChart, str] | None:
+def regression_chart(points: pd.DataFrame, x: str, colour: str, names: list[str]) -> tuple[alt.LayerChart, str] | None:
     try:
         slope, intercept = statistics.linear_regression(points[x], points["Average Rating"])
         r_squared = statistics.correlation(points[x], points["Average Rating"]) ** 2
@@ -201,18 +211,20 @@ def regression_chart(points: pd.DataFrame, x: str, colour: str) -> tuple[alt.Lay
         alt.Chart(points)
         .mark_point(filled=True, size=70, opacity=0.7)
         .encode(
-            x=alt.X(f"{x}:Q", scale=alt.Scale(zero=False), axis=alt.Axis(format=x_format)),
+            x=alt.X(f"{x}:Q", scale=alt.Scale(zero=False), axis=alt.Axis(format=x_format, labelSeparation=8)),
             y=alt.Y("Average Rating:Q", scale=alt.Scale(domain=[1, 5])),
-            color=f"{colour}:N",
-            shape=f"{colour}:N",  # a second cue next to colour, for colour-blind readers
+            color=by_name(alt.Color, colour, names, points[colour]),
+            shape=by_name(alt.Shape, colour, names, points[colour]),  # a second cue, for colour-blind readers
             tooltip=["Dot", alt.Tooltip(f"{x}:Q", format=x_format), alt.Tooltip("Average Rating:Q", format=".2f")],
         )
     )
     trend = alt.Chart(points).transform_regression(x, "Average Rating").mark_line(color="#0b2a2e", strokeWidth=2.5)
     trend = trend.encode(x=f"{x}:Q", y="Average Rating:Q")
     sign = "+" if slope >= 0 else "−"
+    money = x_format.startswith("$")  # slope per CHF 10k, as in lecture ch. 10, not 8.78e-06 per franc
+    term = f"({x.lower()} / CHF 10k)" if money else x.lower()
     caption = (
-        f"Model: rating = {intercept:.2f} {sign} {abs(slope):.3g} × {x.lower()}"
+        f"Model: rating = {intercept:.2f} {sign} {abs(slope) * (1e4 if money else 1):.3g} × {term}"
         f" · R² = {r_squared:.2f} · n = {len(points):,} dots"
     )
     return (dots + trend).properties(height=420), caption
@@ -222,15 +234,17 @@ def dashboard(api_url: str) -> None:
     options = fetch_json(f"{api_url}/meta/options")
     first = date.fromisoformat(options["min_date"]) if options["min_date"] else date.today()  # None: no sales yet
     last = date.fromisoformat(options["max_date"]) if options["max_date"] else date.today()
+    # every name per dimension, filtered or not, so each name keeps its colour whichever filters are on
+    names = dict(zip(DIMENSIONS, (options[key] for key in ("regions", "countries", "categories", "products"))))
 
     with st.container(border=True):
-        c1, c2, c3 = st.columns([4, 3, 3])
+        c1, c2 = st.columns(2)
         regions = c1.pills("Sales Region", options["regions"], selection_mode="multi")
         categories = c2.pills("Category", options["categories"], selection_mode="multi")
-        picked = c3.date_input("Date range", (first, last), min_value=first, max_value=last, format="YYYY-MM-DD")
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         countries = c1.multiselect("Country", options["countries"], placeholder="All countries")
         products = c2.multiselect("Product", options["products"], placeholder="All products")
+        picked = c3.date_input("Date range", (first, last), min_value=first, max_value=last, format="YYYY-MM-DD")
         st.caption("A filter with nothing picked keeps everything.")
     start, end = picked if len(picked) == 2 else (first, last)
     params = {"region": regions, "country": countries, "category": categories, "product": products}
@@ -242,20 +256,21 @@ def dashboard(api_url: str) -> None:
     total = sales["total_price"].sum()
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Transactions", len(sales), format="%,d", border=True)
-    k2.metric("Total Sales", f"CHF {total / 1e6:,.1f}M" if total >= 1e6 else f"CHF {total:,.0f}", border=True)
+    k2.metric("Total Sales (CHF)", f"{total / 1e6:,.1f}M" if total >= 1e6 else f"{total / 1e3:,.1f}k", border=True)
     k3.metric("Units Sold", int(sales["units_sold"].sum()), format="%,d", border=True)
     k4.metric("Average Rating", f"{sales['customer_rating'].mean():.2f} / 5", border=True)
 
     with st.container(border=True):
-        st.subheader("Sales over time")
+        st.subheader("Sales over time", anchor=False)
         c1, c2, c3 = st.columns(3, vertical_alignment="bottom")
         metric = c1.selectbox("Metric", list(METRICS))
         compare = c2.selectbox("Compare lines by", list(DIMENSIONS))
         split = c3.checkbox("Split by category", disabled=compare == "Category")
-        st.altair_chart(line_chart(sales, metric, compare, split and compare != "Category"), width="stretch")
+        chart = line_chart(sales, metric, compare, split and compare != "Category", names[compare])
+        st.altair_chart(chart, width="stretch")
 
     with st.container(border=True):
-        st.subheader("Sales heatmap")
+        st.subheader("Sales heatmap", anchor=False)
         c1, c2, c3 = st.columns(3)
         rows = c1.selectbox("Rows", ["Sales Region", "Country"], index=1)
         columns = c2.selectbox("Columns", ["Category", "Product"])
@@ -263,15 +278,17 @@ def dashboard(api_url: str) -> None:
         st.altair_chart(heatmap(sales, rows, columns, metric), width="stretch")
 
     with st.container(border=True):
-        st.subheader("What goes with a good rating?")
+        st.subheader("What goes with a good rating?", anchor=False)
         c1, c2 = st.columns(2)
         level = c1.selectbox("Aggregation level", list(REGRESSION_LEVELS))
-        x = c2.selectbox("Predictor (X)", list(PREDICTORS))
+        # one sale per dot: its average is its total, so only the first two predictors differ
+        x = c2.selectbox("Predictor (X)", list(PREDICTORS)[:2] if level == "Sale" else list(PREDICTORS))
         st.caption(
             "Monthly levels average many sales into one dot: fewer, smoother dots"
             " and a higher R² than single sales support (lecture ch. 10)."
         )
-        fitted = regression_chart(regression_points(sales, level), x, REGRESSION_LEVELS[level][1])
+        colour = REGRESSION_LEVELS[level][1]
+        fitted = regression_chart(regression_points(sales, level), x, colour, names[colour])
         if fitted is None:
             st.info("Too little variation in the filtered sales to fit a line.")
         else:
@@ -283,7 +300,7 @@ def dashboard(api_url: str) -> None:
 
 
 def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str, pick_key: str) -> None:
-    """Send one write. On success: toast, fresh data, and the edit box shows the saved row if it is listed."""
+    """Send one write. On success: a confirmation, fresh data, and the edit box shows the saved row if it is listed."""
     try:
         row = api(method, url, json=payload)
     except RuntimeError as exc:
@@ -292,7 +309,7 @@ def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str,
     st.cache_data.clear()
     st.session_state.saves += 1  # new form keys, so the create forms start empty again
     st.session_state.reselect = {pick_key: row[id_col]}
-    st.session_state.flash = f"{'Created' if method == 'POST' else 'Updated'} {noun} #{row[id_col]}"
+    st.session_state.flash = {pick_key: f"{'Created' if method == 'POST' else 'Updated'} {noun} #{row[id_col]}"}
     st.rerun()
 
 
@@ -307,11 +324,14 @@ def record_tab(
     column_order: list[str] | None = None,
 ) -> None:
     """The table as the API returns it, then a create form and an edit form side by side."""
-    table = pd.DataFrame(rows).set_index(id_col)
-    # Lookup tables read in id order, so a new row lands at the bottom; sales stay newest first.
-    st.dataframe(table if column_order else table.sort_index(), column_order=column_order, column_config=COLUMNS)
-    by_id = {row[id_col]: row for row in rows}
     pick_key = f"pick {path}"
+    if rows:  # empty only once every row was deleted; the New form still works then
+        table = pd.DataFrame(rows).set_index(id_col)
+        # Lookup tables read in id order, so a new row lands at the bottom; sales stay newest first.
+        st.dataframe(table if column_order else table.sort_index(), column_order=column_order, column_config=COLUMNS)
+    if message := st.session_state.get("flash", {}).pop(pick_key, None):
+        st.success(message, icon=":material/check_circle:")
+    by_id = {row[id_col]: row for row in rows}
     new, edit = st.columns(2, gap="large")
     with new.container(border=True):
         st.subheader(f"New {noun}", anchor=False)
@@ -322,6 +342,8 @@ def record_tab(
     with edit.container(border=True):
         st.subheader(f"Edit {noun}", anchor=False)
         picked = st.selectbox(f"Pick a {noun}", list(by_id), format_func=lambda i: label(by_id[i]), key=pick_key)
+        if picked is None:
+            return
         with st.form(f"edit {path} {picked}", border=False):
             payload = fields(by_id[picked])
             if st.form_submit_button(f"Update {noun}", type="primary", icon=":material/save:"):
@@ -344,6 +366,7 @@ def records(api_url: str) -> None:
         fetch_json(f"{api_url}/{table}") for table in ("regions", "countries", "categories", "products")
     )
     sales = fetch_sales(f"{api_url}/sales", {"limit": 200}).to_dict("records")  # the API sends newest first
+    newest = sales[0]["sale_date"] if sales else date.today()  # a new sale lands at the end of the data
 
     def name(row: dict[str, Any]) -> str:
         return row["name"]
@@ -381,9 +404,7 @@ def records(api_url: str) -> None:
 
     def sale(row: dict[str, Any]) -> dict[str, Any]:
         payload = {
-            "sale_date": st.date_input(
-                "Sale date", row.get("sale_date", date.today()), format="YYYY-MM-DD"
-            ).isoformat(),
+            "sale_date": st.date_input("Sale date", row.get("sale_date", newest), format="YYYY-MM-DD").isoformat(),
             "product_id": choose("Product", products, "product_id", row, product_name),
             "country_id": choose("Country", countries, "country_id", row, country_name),
             "units_sold": st.number_input("Units sold", min_value=1, value=row.get("units_sold", 10), step=1),
@@ -418,8 +439,6 @@ def records(api_url: str) -> None:
 
 st.session_state.setdefault("saves", 0)
 st.session_state.update(st.session_state.pop("reselect", {}))  # before any widget: select the row just saved
-if flash := st.session_state.pop("flash", None):
-    st.toast(flash, icon=":material/check_circle:")
 
 # The look config.toml cannot express: a soft teal-to-cream page, a tinted hero card, larger tab labels,
 # and less empty space above the hero (with the header strip transparent, also when the sidebar is collapsed).
@@ -455,7 +474,8 @@ except RuntimeError as exc:
 if problem:
     st.error(f"Cannot reach the Sales Analysis API at **{api_base_url}**.", icon=":material/cloud_off:")
     st.write("Start it in another terminal, or fix the base URL in the sidebar:")
-    st.code(API_COMMAND, language="bash")
+    port = urlsplit(api_base_url).netloc.partition(":")[2] or 8000  # the port the sidebar URL expects
+    st.code(f"uvicorn sw03_demo_api:app --host 127.0.0.1 --port {port}", language="bash")
     st.caption(problem)
     st.button("Try again", icon=":material/refresh:")
     st.stop()
