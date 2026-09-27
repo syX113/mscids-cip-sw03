@@ -1047,7 +1047,7 @@ def _(mo):
         """
     ### Chapter 1 Conclusion
 
-    - Unsynchronized file updates lose increments under concurrency.
+    - Unsynchronised file updates lose increments under concurrency.
     - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Put the read
       and the write in one statement or one transaction.
     - A transaction also makes a multi-step change all-or-nothing: the crashed transfer rolled back
@@ -1064,7 +1064,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Chapter 1 kept the data correct. Next: what should it look like as bytes, stored or sent?
+    Correct data still has to be stored and sent, and every byte of it is waited for:
 
     $$
     \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
@@ -1619,9 +1619,9 @@ def _(mo):
     If a query scans only *k* columns out of *C*, the I/O pattern changes:
 
     $$
-    IO_{row} \\approx N \\times C
+    \\text{IO}_{\\text{row}} \\approx N \\times C
     \\qquad
-    IO_{col} \\approx N \\times k
+    \\text{IO}_{\\text{col}} \\approx N \\times k
     $$
 
     Where:
@@ -1730,7 +1730,7 @@ def _(best_seconds, mo, n_rows, np, run_storage, static_table):
     away. In the column layout the values lie side by side and every byte fetched is used.
 
     **Read down the table:** as the column count grows, the row side slows down while the column
-    side stays put. That is $IO_{row} / IO_{col} = C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
+    side stays put. That is $\\text{IO}_{\\text{row}} / \\text{IO}_{\\text{col}} = C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
     goes further and never reads the unused columns from disk.
             """
     ).callout(kind="info")
@@ -3316,7 +3316,7 @@ def _(mo):
     `data/seed/` every time it starts, so nothing you change or delete here is permanent.
                 """
             ),
-            mo.hstack([ch6_preset, api_base_url], widths="equal"),
+            mo.hstack([ch6_preset, api_base_url], widths="equal", align="end"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -3782,7 +3782,7 @@ def _(mo):
 
 
 @app.cell
-def _(api_base_url, mo):
+def _(mo):
     fastapi_check = mo.ui.run_button(label="1) Check API status")
     fastapi_payload = mo.ui.text_area(
         value='{"name": "Lecture Demo Widget", "price": 99.9, "description": "Created live in Chapter 8", "category_id": 1}',
@@ -3793,7 +3793,12 @@ def _(api_base_url, mo):
     fastapi_post = mo.ui.run_button(label="2) POST /products", kind="success")
     fastapi_item_id = mo.ui.number(start=1, step=1, value=1, label="Product id")
     fastapi_get = mo.ui.run_button(label="3) GET /products/{id}")
+    return fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload, fastapi_post
 
+
+@app.cell
+def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload, fastapi_post, mo):
+    # Display only, so editing the shared URL re-renders these widgets instead of rebuilding them.
     mo.vstack(
         [
             mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
@@ -3802,13 +3807,7 @@ def _(api_base_url, mo):
         ],
         gap=0.8,
     ).callout(kind="neutral")
-    return (
-        fastapi_check,
-        fastapi_get,
-        fastapi_item_id,
-        fastapi_payload,
-        fastapi_post,
-    )
+    return
 
 
 @app.cell
@@ -3981,7 +3980,7 @@ def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
         _rows,
         label="The same seven slips, checked twice",
         wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
-        column_widths={"gate 1: your laptop": 470, "gate 2: the server": 470},
+        column_widths={"gate 1: your laptop": 410, "gate 2: the server": 410},
     )
     mo.vstack([_table, _note], gap=0.6)
     return
