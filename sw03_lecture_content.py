@@ -3725,14 +3725,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 8. FastAPI Demo + Automatic Docs")
-    _section
+    mo.md("""
+    ## 8. FastAPI Demo + Automatic Docs
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter8_guide = mo.md(
+    mo.md(
         """
     ### Chapter 8 Introduction
 
@@ -3740,8 +3741,8 @@ def _(mo):
 
     *Last stop in the **logic tier**. We turn the rules from chapter 7 into a running server.*
 
-    FastAPI turns validated models into executable API endpoints plus shared docs.
-    This reduces mismatch between implementation and documentation.
+    FastAPI turns validated models into running endpoints *and* the documentation for them, so
+    the two cannot drift apart.
 
     Lifecycle:
 
@@ -3755,155 +3756,143 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _chapter8_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
     ### FastAPI = Type Hints → OpenAPI
 
-    FastAPI uses the type hints from chapter 7 plus Pydantic to build validated endpoints.
-    Write the model once and the documentation comes out for free:
+    FastAPI reads the type hints and Pydantic models from chapter 7 and builds validated endpoints
+    from them. Write the model once; the documentation comes for free.
 
     Most restaurants write the menu by hand. Then the kitchen changes a recipe and the menu
     quietly starts lying, and every customer who orders from it is disappointed. FastAPI does not
-    let that happen, because **the menu is printed from the recipes**. You wrote
-    `customer_rating: int = Field(ge=1, le=5)` once, in the model. That one line becomes the
+    let that happen, because **the menu is printed from the recipes**. `sw03_demo_api.py` writes
+    the rating rule exactly once, `Rating = Annotated[int, Field(ge=1, le=5)]`, and uses it for new
+    sales, for edits and for the `min_rating`/`max_rating` filters. That one line becomes the
     machine-readable menu, the buttons a human clicks, and the rule the server enforces. Change
-    the 5 to a 10 and all three change together, because there is only one 5.
+    the 5 to a 10 and all of them change together, because there is only one 5.
 
-    *What the menu cannot tell you* is whether the food is good. It describes shapes, not
-    behaviour: nothing in it says that `total_price` is recomputed when you change `units_sold`.
+    *What the menu cannot enforce* is behaviour. The schema can say `units_sold` must be at least
+    1; it cannot say that changing it recomputes `total_price`. That rule reaches `/docs` only
+    because somebody wrote it into a docstring by hand, and nothing checks that the docstring is
+    still true.
 
     - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint
       an API has, in a way other programs can read. FastAPI writes it for you.
     - **Swagger UI** (`/docs`) is a web page that reads that file and turns it into buttons
-      you can click to try each endpoint. This is the page we use below.
+      you can click to try each endpoint. Open it and press *Try it out*.
     - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual instead.
 
     You start the server with **uvicorn**, the program that actually listens on a port and
     hands incoming requests to your FastAPI code:
 
     ```bash
-    uvicorn sw03_demo_api:app --reload
+    uvicorn sw03_demo_api:app
     ```
 
-    `sw03_demo_api` is the file, `app` is the variable inside it, and `--reload` restarts the
-    server whenever you save a change.
-
-    The type hints become a formal schema:
-
-    $$
-    \\text{Python Types} \\rightarrow \\text{JSON Schema} \\rightarrow \\text{Interactive Docs}
-    $$
+    `sw03_demo_api` is the file and `app` is the variable inside it. While you *edit* the API,
+    add `--reload` to restart the server on every save. Leave it out during the lecture: it also
+    restarts when marimo saves a notebook in the same folder, and every restart resets `data/`.
             """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
 @app.cell
 def _(mo):
-    fastapi_code = mo.md(
-        """
+    mo.md("""
     ```python
-    # file: sw03_demo_api.py
-    from fastapi import FastAPI
-    from pydantic import BaseModel, Field
+    # file: sw03_demo_api.py (abridged)
+    # Every rule is written once, here, and reused wherever the field appears.
+    Rating = Annotated[int, Field(ge=1, le=5)]
 
-    app = FastAPI(title="Sales Analysis API", version="3.0.0")
 
-    class ProductCreate(BaseModel):          # what the client is allowed to send
-        name: str = Field(min_length=1, max_length=120)
-        price: float = Field(gt=0)
-        description: str = Field(min_length=1, max_length=300)
-        category_id: int = Field(ge=1)
+    class Input(BaseModel):
+        "\""What a client may send: stray whitespace is trimmed, unknown fields are refused (422)."\""
 
-    class Product(ProductCreate):            # what the server sends back
-        product_id: int
-        category_name: str
+        model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    @app.get("/products/{product_id}", response_model=Product, tags=["Products"])
-    def get_product(product_id: int) -> Product:
-        'Fetch one product by id.'         # this line becomes the description in /docs
-        ...                                 # full implementation is in sw03_demo_api.py
 
-    @app.post("/products", response_model=Product, status_code=201, tags=["Products"])
-    def create_product(payload: ProductCreate) -> Product:
-        'Create a product.'
+    class SaleCreate(Input):
+        "\""A new sale. There is no total_price: the server computes it from units_sold and the product's price."\""
+
+        sale_date: SaleDate
+        product_id: Ref
+        country_id: Ref
+        units_sold: Units
+        customer_rating: Rating
+
+
+    @app.post("/sales", response_model=Sale, status_code=201, tags=["Sales"], responses=BAD_REQUEST)
+    def create_sale(payload: SaleCreate) -> dict[str, Any]:
+        "\""Record a sale. The server computes total_price as units_sold x the product's price."\""
         ...
 
-    @app.delete("/products/{product_id}", status_code=204, tags=["Products"])
-    def delete_product(product_id: int) -> None:
-        'Delete a product. Refused while sales still reference it.'
+
+    @app.put("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND | BAD_REQUEST)
+    def update_sale(sale_id: SaleId, payload: SaleUpdate) -> dict[str, Any]:
+        "\""Update a sale. Fields you leave out keep their current value (strict HTTP would call this PATCH).
+
+        total_price is recomputed only when units_sold or product_id actually change, so editing just
+        the rating keeps the stored total.
+        "\""
         ...
     ```
 
-    Read the three decorators as a sentence: *verb*, *path*, and the shape of the answer.
-    The `tags` group the endpoints in `/docs`, and the docstring under each function becomes
-    its description there. Nothing else had to be written to get documentation.
+    Read each decorator as a sentence: *verb*, *path*, the shape of the answer, and the errors it
+    can return. The docstring under each function becomes its description in `/docs`; the second
+    one is the hand-written recompute rule from above. `SaleCreate` has no `total_price`, and
+    `Input` refuses fields it does not know, so a client cannot set its own price.
 
-    This repo includes the full implementation in `sw03_demo_api.py`.
-
-    Run from the project root with:
-
-    ```
-    uvicorn sw03_demo_api:app --reload
-    ```
-
-    Then open `http://127.0.0.1:8000/docs`.
-            """
-    )
-    fastapi_code
+    Sales are the resource this chapter follows, so every verb is written out. The four lookup
+    tables (regions, countries, categories, products) share one generic set of five endpoints,
+    registered by `add_lookup_endpoints`. Nothing else had to be written to get documentation.
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _workflow = mo.md(
+    mo.md(
         """
     ### Live API Workflow
 
-    1. Start the API in a terminal:
-
-       ```bash
-       uvicorn sw03_demo_api:app --reload
-       ```
-
-    2. Click **1) Check API status** to verify the server is reachable.  
-    3. Edit the JSON payload and click **2) POST /products**.  
+    1. Start the API in a terminal: `uvicorn sw03_demo_api:app`
+    2. Click **1) Check API status** to verify the server is reachable.
+    3. Edit the JSON payload and click **2) POST /products**. Click it again: the name is taken
+       now, so the server answers `400`.
     4. Choose a product id and click **3) GET /products/{id}** to compare results.
             """
     ).callout(kind="info")
-    _workflow
     return
 
 
 @app.cell
 def _(mo):
-    fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
-    fastapi_check = mo.ui.button(label="1) Check API status", value=0, on_click=lambda clicks: clicks + 1, kind="neutral")
+    fastapi_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL", full_width=True)
+    fastapi_check = mo.ui.run_button(label="1) Check API status")
     fastapi_payload = mo.ui.text_area(
         value='{"name": "Lecture Demo Widget", "price": 99.9, "description": "Created live in Chapter 8", "category_id": 1}',
         label="POST /products payload (JSON)",
+        rows=3,
+        full_width=True,
     )
-    fastapi_post = mo.ui.button(label="2) POST /products", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    fastapi_item_id = mo.ui.text(value="1", label="Product id for GET /products/{id}")
-    fastapi_get = mo.ui.button(label="3) GET /products/{id}", value=0, on_click=lambda clicks: clicks + 1, kind="neutral")
+    fastapi_post = mo.ui.run_button(label="2) POST /products", kind="success")
+    fastapi_item_id = mo.ui.number(start=1, step=1, value=1, label="Product id")
+    fastapi_get = mo.ui.run_button(label="3) GET /products/{id}")
 
-    _controls = mo.vstack(
+    mo.vstack(
         [
-            mo.hstack([fastapi_base_url, fastapi_check], widths="equal"),
+            mo.hstack([fastapi_base_url, fastapi_check], widths=[5, 1], align="end"),
             fastapi_payload,
-            mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], widths="equal"),
+            mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
         ],
-        gap=0.6,
+        gap=0.8,
     ).callout(kind="neutral")
-
-    _controls
     return (
         fastapi_base_url,
         fastapi_check,
@@ -3915,427 +3904,238 @@ def _(mo):
 
 
 @app.cell
-def _(fastapi_base_url, fastapi_check, json, mo, url_request):
-    _output = mo.md("Waiting for API status check...").callout(kind="neutral")
-    if fastapi_check.value == 0:
-        _output = mo.md("Click **1) Check API status** after starting `uvicorn sw03_demo_api:app --reload`.").callout(kind="neutral")
-    else:
-        _url = fastapi_base_url.value.rstrip("/") + "/openapi.json"
-        _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
-
+def _(call_api, fastapi_base_url, mo, requests):
+    def ch8_api(method, path, body=None):
+        """call_api against the base URL above. If nothing answers, stop the cell with a start hint."""
+        base = fastapi_base_url.value.rstrip("/")
         try:
-            with url_request.urlopen(_request, timeout=3) as _response:
-                _status = _response.status
-                _body = _response.read().decode("utf-8", errors="replace")
-        except Exception as exc:
-            _output = mo.md(
-                f"""
-    API check failed for `{_url}`.
-
-    Error:
-
-    ```
-    {exc}
-    ```
-                    """
-            ).callout(kind="danger")
-        else:
-            try:
-                _schema = json.loads(_body)
-            except json.JSONDecodeError:
-                _schema = {}
-
-            _paths = sorted(_schema.get("paths", {}).keys())
-            _preview = json.dumps(_paths[:6], indent=2)
-            _title = _schema.get("info", {}).get("title", "unknown")
-
-            _output = mo.md(
-                f"""
-    API is running.
-
-    - Status: `{_status}`
-    - Title: `{_title}`
-    - Docs: `{fastapi_base_url.value.rstrip('/')}/docs`
-
-    Known routes (preview):
-
-    ```json
-    {_preview}
-    ```
-                    """
-            ).callout(kind="success")
-
-    _output
-    return
-
-
-@app.cell
-def _(
-    fastapi_base_url,
-    fastapi_payload,
-    fastapi_post,
-    json,
-    mo,
-    url_error,
-    url_request,
-):
-    _output = mo.md("Waiting for POST request...").callout(kind="neutral")
-    if fastapi_post.value == 0:
-        _output = mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral")
-    else:
-        _url = fastapi_base_url.value.rstrip("/") + "/products"
-        try:
-            _payload_obj = json.loads(fastapi_payload.value)
-        except json.JSONDecodeError as exc:
-            _output = mo.md(f"Invalid JSON payload: `{exc}`").callout(kind="danger")
-        else:
-            _data_bytes = json.dumps(_payload_obj).encode("utf-8")
-            _request = url_request.Request(
-                _url,
-                data=_data_bytes,
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
+            return call_api(method, base + path, body)
+        except requests.RequestException:
+            mo.stop(
+                True,
+                mo.md(f"Could not reach `{base}`. Start the API first: `uvicorn sw03_demo_api:app`.").callout(kind="danger"),
             )
 
-            _status = None
-            _body = ""
-            try:
-                with url_request.urlopen(_request, timeout=5) as _response:
-                    _status = _response.status
-                    _body = _response.read().decode("utf-8", errors="replace")
-            except url_error.HTTPError as exc:
-                _status = exc.code
-                _body = exc.read().decode("utf-8", errors="replace")
-            except Exception as exc:
-                _output = mo.md(
-                    f"""
-    POST request failed for `{_url}`.
+    return (ch8_api,)
 
-    Error:
 
-    ```
-    {exc}
-    ```
-                        """
-                ).callout(kind="danger")
-            if _status is not None:
-                try:
-                    _parsed = json.loads(_body)
-                    _preview = json.dumps(_parsed, indent=2)
-                except json.JSONDecodeError:
-                    _preview = _body
-
-                _output = mo.md(
-                    f"""
-    `POST /products` returned status `{_status}`.
-
-    ```json
-    {_preview}
-    ```
-                        """
-                ).callout(kind="success" if _status < 400 else "danger")
-
-    _output
+@app.cell
+def _(ch8_api, fastapi_base_url, fastapi_check, mo):
+    mo.stop(
+        not fastapi_check.value,
+        mo.md("Start `uvicorn sw03_demo_api:app` in a terminal, then click **1) Check API status**.").callout(kind="neutral"),
+    )
+    _base = fastapi_base_url.value.rstrip("/")
+    _status, _schema = ch8_api("GET", "/openapi.json")
+    mo.stop(
+        _status != 200,
+        mo.md(f"`{_base}/openapi.json` answered `{_status}`. Is that the sales API?").callout(kind="danger"),
+    )
+    _routes = [
+        f"- `{_path}`: {', '.join(_verb.upper() for _verb in _ops)}"
+        for _path, _ops in _schema["paths"].items()
+        if _path.startswith(("/products", "/sales"))
+    ]
+    mo.md(
+        "\n".join(
+            [
+                f"**{_schema['info']['title']} {_schema['info']['version']} is running.** "
+                f"Docs: [{_base}/docs]({_base}/docs)",
+                "",
+                f"The routes this chapter uses, read from `/openapi.json` ({len(_schema['paths'])} routes in all):",
+                "",
+                *_routes,
+            ]
+        )
+    ).callout(kind="success")
     return
 
 
 @app.cell
-def _(
-    fastapi_base_url,
-    fastapi_get,
-    fastapi_item_id,
-    json,
-    mo,
-    url_error,
-    url_request,
-):
-    _output = mo.md("Waiting for GET request...").callout(kind="neutral")
-    if fastapi_get.value == 0:
-        _output = mo.md("Click **3) GET /products/{id}** to fetch a product.").callout(kind="neutral")
-    else:
-        try:
-            _item_id = int(fastapi_item_id.value.strip())
-        except ValueError:
-            _output = mo.md("Product id must be an integer.").callout(kind="danger")
-        else:
-            _url = fastapi_base_url.value.rstrip("/") + f"/products/{_item_id}"
-            _request = url_request.Request(_url, headers={"Accept": "application/json"}, method="GET")
-            _status = None
-            _body = ""
-            try:
-                with url_request.urlopen(_request, timeout=5) as _response:
-                    _status = _response.status
-                    _body = _response.read().decode("utf-8", errors="replace")
-            except url_error.HTTPError as exc:
-                _status = exc.code
-                _body = exc.read().decode("utf-8", errors="replace")
-            except Exception as exc:
-                _output = mo.md(
-                    f"""
-    GET request failed for `{_url}`.
+def _(ch8_api, fastapi_payload, fastapi_post, json, mo):
+    mo.stop(not fastapi_post.value, mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral"))
+    try:
+        _payload = json.loads(fastapi_payload.value)
+    except json.JSONDecodeError as _exc:
+        mo.stop(True, mo.md(f"The payload is not valid JSON: `{_exc}`").callout(kind="danger"))
+    _status, _answer = ch8_api("POST", "/products", _payload)
+    mo.md(f"`POST /products` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
+        kind="success" if _status < 400 else "danger"
+    )
+    return
 
-    Error:
 
-    ```
-    {exc}
-    ```
-                        """
-                ).callout(kind="danger")
-            if _status is not None:
-                try:
-                    _parsed = json.loads(_body)
-                    _preview = json.dumps(_parsed, indent=2)
-                except json.JSONDecodeError:
-                    _preview = _body
-
-                _output = mo.md(
-                    f"""
-    `GET /products/{_item_id}` returned status `{_status}`.
-
-    ```json
-    {_preview}
-    ```
-                        """
-                ).callout(kind="success" if _status < 400 else "danger")
-
-    _output
+@app.cell
+def _(ch8_api, fastapi_get, fastapi_item_id, json, mo):
+    mo.stop(not fastapi_get.value, mo.md("Pick a product id, then click **3) GET /products/{id}**.").callout(kind="neutral"))
+    _path = f"/products/{fastapi_item_id.value}"
+    _status, _answer = ch8_api("GET", _path)
+    mo.md(f"`GET {_path}` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
+        kind="success" if _status < 400 else "danger"
+    )
     return
 
 
 @app.cell
 def _(mo):
-    run_gates = mo.ui.button(label="Send six slips through both gates", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_gates = mo.ui.run_button(label="Send seven slips through both gates", kind="success")
+    mo.vstack(
         [
-            mo.md("### Mini-lab: Six Sale Slips, One Model, Two Gates"),
+            mo.md("### Mini-lab: Seven Sale Slips, One Model, Two Gates"),
             mo.md(
                 """
     Chapter 7 validated a payload on your laptop with no network at all, because Pydantic is just
-    Python. Chapter 8 put the very same kind of model on a server. So what is the difference?
+    Python. This chapter put the very same kind of model on a server. So what is the difference?
 
-    Six slips go through **gate 1** here in the notebook, and then the identical six are sent to
-    the running API for **gate 2**. Read the table across.
+    **Gate 1** is the API's own `SaleCreate`, imported from `sw03_demo_api.py` and run right here
+    in the notebook. **Gate 2** is the running API. Seven slips go through both. Read the table
+    across.
                 """
             ).callout(kind="info"),
             run_gates,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_gates,)
 
 
 @app.cell
-def _(
-    fastapi_base_url,
-    json,
-    mo,
-    pydantic,
-    run_gates,
-    static_table,
-    url_error,
-    url_request,
-):
-    if run_gates.value == 0:
-        _output = mo.md("Click **Send six slips through both gates** to compare them.").callout(kind="neutral")
-    else:
-        from datetime import date as _date
+def _(ch8_api, mo, pydantic, run_gates):
+    mo.stop(not run_gates.value, mo.md("Click **Send seven slips through both gates** to compare them.").callout(kind="neutral"))
+    from sw03_demo_api import SaleCreate as _SaleCreate  # gate 1: the server's own model, no network
 
-        class _SaleCreate(pydantic.BaseModel):
-            # The same shape sw03_demo_api.py declares, running here on your laptop.
-            sale_date: _date
-            product_id: int = pydantic.Field(ge=1)
-            country_id: int = pydantic.Field(ge=1)
-            units_sold: int = pydantic.Field(ge=1, le=100000)
-            customer_rating: int = pydantic.Field(ge=1, le=5)
-
-        _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
-        _slips = {
-            "a good sale": _ok,
-            "rating of 9": {**_ok, "customer_rating": 9},
-            "zero units sold": {**_ok, "units_sold": 0},
-            "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
-            "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
-            "product 9999": {**_ok, "product_id": 9999},
-        }
-
-        _base = fastapi_base_url.value.rstrip("/")
-        _created, _rows = [], []
+    _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
+    _slips = {
+        "a good sale": _ok,
+        "rating of 9": {**_ok, "customer_rating": 9},
+        "zero units sold": {**_ok, "units_sold": 0},
+        "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
+        "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
+        "its own total_price of 0.01": {**_ok, "total_price": 0.01},
+        "product 9999": {**_ok, "product_id": 9999},
+    }
+    _rows = []
+    for _name, _slip in _slips.items():
         try:
-            for _name, _slip in _slips.items():
-                try:
-                    _SaleCreate.model_validate(_slip)
-                    _gate1 = "passes"
-                except Exception as _exc:
-                    _err = _exc.errors()[0]
-                    _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
-                try:
-                    _req = url_request.Request(
-                        f"{_base}/sales",
-                        data=json.dumps(_slip).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with url_request.urlopen(_req, timeout=10) as _r:
-                        _body = json.loads(_r.read())
-                        _created.append(_body["sale_id"])
-                        _gate2 = f"{_r.status} created — {len(_body)} fields back, total_price {_body['total_price']}"
-                except url_error.HTTPError as _http:
-                    _detail = json.loads(_http.read()).get("detail")
-                    _msg = _detail if isinstance(_detail, str) else _detail[0]["msg"]
-                    _gate2 = f"{_http.code} — {_msg}"
-                _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+            _SaleCreate.model_validate(_slip)
+            _gate1 = "passes"
+        except pydantic.ValidationError as _exc:
+            _err = _exc.errors()[0]
+            _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
+        _status, _answer = ch8_api("POST", "/sales", _slip)
+        if _status == 201:
+            _good = _answer
+            ch8_api("DELETE", f"/sales/{_good['sale_id']}")  # leave the file as we found it
+            _gate2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}"
+        else:
+            _detail = _answer["detail"]
+            _gate2 = f"{_status} — {_detail if isinstance(_detail, str) else _detail[0]['msg']}"
+        _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
 
-            for _sid in _created:
-                try:
-                    url_request.urlopen(
-                        url_request.Request(f"{_base}/sales/{_sid}", method="DELETE"), timeout=10
-                    )
-                except Exception:
-                    pass
-
-            _note = mo.md(
-                """
-    **Read the last column down.** Four slips die at gate 1 and would have died at gate 2 too,
-    with `422` and the *same message*, because it is the same model in both places. One slip,
-    `product 9999`, sails through gate 1 and dies at gate 2 with `400`. And one gets `201`.
+    _note = mo.md(
+        f"""
+    **Read the last column down.** Five slips die at gate 1 and die again at gate 2, with `422`
+    and the *same message*, because both gates run the same model. One slip, `product 9999`,
+    passes gate 1 and dies at gate 2 with `400`. And one gets `201`.
 
     That difference is the whole lesson. Gate 1 can check **shape**: is this a date, is the rating
     between 1 and 5. Only gate 2 can check **facts**, because only the server can open the filing
     cabinet and discover there is no product 9999. Your laptop had no way to know.
 
-    **Then look at the successful row.** We sent five fields and got thirteen back, and we never
-    sent `total_price` at all: the server computed 10 x 195.00 itself. A price the client is
-    allowed to invent is a price the client can lie about.
+    **Then look at the successful row.** We sent {len(_ok)} fields and got {len(_good)} back, and we never
+    sent `total_price`: the server computed {_good["units_sold"]} x
+    {_good["total_price"] / _good["units_sold"]:.2f} itself. The slip that brought its own
+    `total_price` was refused at both gates, because `SaleCreate` has no such field and refuses
+    fields it does not know. A price the client is allowed to invent is a price the client can
+    lie about, so this API does not allow one.
 
     Two fences. Validating on the laptop is a **courtesy** to the user, instant feedback with no
     round trip, and never a substitute for the server's check, because anyone can bypass this
     notebook and post directly with `curl`. And the split between 422 and 400 is this API's
     convention, not a law of HTTP: FastAPI produces the 422 automatically from the model, while
     the 400s are business rules somebody wrote by hand.
-                    """
-            ).callout(kind="info")
-            _output = mo.vstack(
-                [static_table(_rows, label="The same six slips, checked twice"), _note], gap=0.6
-            )
-        except url_error.URLError as _exc:
-            _output = mo.md(
-                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
-            ).callout(kind="danger")
-    _output
+            """
+    ).callout(kind="info")
+    _table = mo.ui.table(
+        _rows,
+        label="The same seven slips, checked twice",
+        selection=None,
+        pagination=False,
+        show_download=False,
+        show_search=False,
+        wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
+        column_widths={"gate 1: your laptop": 420, "gate 2: the server": 420},
+    )
+    mo.vstack([_table, _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    run_twice = mo.ui.button(label="Press every verb twice", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_twice = mo.ui.run_button(label="Press every verb twice", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Press It Twice"),
             mo.md(
                 "The lift button or the ticket dispenser? Let us stop asserting it. Each verb is "
                 "sent to the running API **twice in a row**, against one sale, and we look at what "
-                "changed. Needs the API from chapter 8."
+                "changed. Needs the running API."
             ).callout(kind="info"),
             run_twice,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_twice,)
 
 
 @app.cell
-def _(
-    fastapi_base_url,
-    json,
-    mo,
-    run_twice,
-    static_table,
-    url_error,
-    url_request,
-):
-    if run_twice.value == 0:
-        _output = mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral")
-    else:
-        _base = fastapi_base_url.value.rstrip("/")
+def _(ch8_api, mo, run_twice, static_table):
+    mo.stop(not run_twice.value, mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral"))
+    _sale = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
 
-        def _call(_method, _path, _body=None):
-            _data = json.dumps(_body).encode("utf-8") if _body is not None else None
-            _req = url_request.Request(
-                f"{_base}{_path}", data=_data, headers={"Content-Type": "application/json"}, method=_method
-            )
-            try:
-                with url_request.urlopen(_req, timeout=10) as _r:
-                    return _r.status, (json.loads(_r.read()) if _r.status != 204 else None)
-            except url_error.HTTPError as _err:
-                return _err.code, None
+    _post1, _first = ch8_api("POST", "/sales", _sale)
+    _post2, _second = ch8_api("POST", "/sales", _sale)
+    _one = f"/sales/{_first['sale_id']}"
+    _put1, _ = ch8_api("PUT", _one, {"units_sold": 25})
+    _put2, _ = ch8_api("PUT", _one, {"units_sold": 25})
+    _get1, _got = ch8_api("GET", _one)
+    _get2, _ = ch8_api("GET", _one)
+    _del1, _ = ch8_api("DELETE", _one)
+    _del2, _ = ch8_api("DELETE", _one)
+    ch8_api("DELETE", f"/sales/{_second['sale_id']}")  # tidy up the duplicate
 
-        _sale = {
-            "sale_date": "2026-03-01",
-            "product_id": 1,
-            "country_id": 3,
-            "units_sold": 10,
-            "customer_rating": 5,
-        }
-
-        try:
-            def _sales_count():
-                return len(_call("GET", "/sales?limit=20000")[1])
-
-            _before = _sales_count()
-            _post1, _first = _call("POST", "/sales", _sale)
-            _post2, _second = _call("POST", "/sales", _sale)
-            _after = _sales_count()
-            _sale_id = _first["sale_id"]
-
-            _put1, _ = _call("PUT", f"/sales/{_sale_id}", {"units_sold": 25})
-            _put2, _ = _call("PUT", f"/sales/{_sale_id}", {"units_sold": 25})
-            _units = _call("GET", f"/sales/{_sale_id}")[1]["units_sold"]
-
-            _get1, _ = _call("GET", f"/sales/{_sale_id}")
-            _get2, _ = _call("GET", f"/sales/{_sale_id}")
-
-            _del1, _ = _call("DELETE", f"/sales/{_sale_id}")
-            _del2, _ = _call("DELETE", f"/sales/{_sale_id}")
-
-            _call("DELETE", f"/sales/{_second['sale_id']}")  # tidy up the duplicate
-
-            _rows = [
-                {
-                    "verb": "GET",
-                    "first press": _get1,
-                    "second press": _get2,
-                    "what changed in the world": "nothing",
-                    "lift button?": "yes",
-                },
-                {
-                    "verb": "POST",
-                    "first press": _post1,
-                    "second press": _post2,
-                    "what changed in the world": f"sales went {_before} to {_after}: a SECOND sale was booked",
-                    "lift button?": "NO",
-                },
-                {
-                    "verb": "PUT",
-                    "first press": _put1,
-                    "second press": _put2,
-                    "what changed in the world": f"units_sold is {_units} either way",
-                    "lift button?": "yes",
-                },
-                {
-                    "verb": "DELETE",
-                    "first press": _del1,
-                    "second press": _del2,
-                    "what changed in the world": "the sale is gone, both times",
-                    "lift button?": "yes",
-                },
-            ]
-            _note = mo.md(
-                """
+    _rows = [
+        {
+            "verb": "GET",
+            "first press": _get1,
+            "second press": _get2,
+            "what changed in the world": "nothing",
+            "lift button?": "yes",
+        },
+        {
+            "verb": "POST",
+            "first press": _post1,
+            "second press": _post2,
+            "what changed in the world": f"two different sales booked: #{_first['sale_id']} and #{_second['sale_id']}",
+            "lift button?": "NO",
+        },
+        {
+            "verb": "PUT",
+            "first press": _put1,
+            "second press": _put2,
+            "what changed in the world": f"units_sold is {_got['units_sold']} either way",
+            "lift button?": "yes",
+        },
+        {
+            "verb": "DELETE",
+            "first press": _del1,
+            "second press": _del2,
+            "what changed in the world": "the sale is gone, both times",
+            "lift button?": "yes",
+        },
+    ]
+    _note = mo.md(
+        """
     **GET, PUT and DELETE are safe to press twice. The world ends up the same.** POST is not: the
     second press booked a second sale. That is exactly why a checkout page begs you not to hit
     refresh, and why a payment that times out is frightening in a way a profile edit is not.
@@ -4348,137 +4148,99 @@ def _(
     One more honest note: idempotence is a promise the API author makes, not something HTTP
     enforces. A carelessly written `PUT` can behave exactly like `POST`. It holds here because
     this server updates a row you named by id, not because the word PUT is magic.
-                """
-            ).callout(kind="info")
-            _output = mo.vstack(
-                [static_table(_rows, label="Each verb, sent twice"), _note], gap=0.6
-            )
-        except url_error.URLError as _exc:
-            _output = mo.md(
-                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
-            ).callout(kind="danger")
-    _output
+        """
+    ).callout(kind="info")
+    mo.vstack([static_table(_rows, label="Each verb, sent twice"), _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    run_follow = mo.ui.button(label="Follow the sale into the file", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_follow = mo.ui.run_button(label="Follow the sale into the file", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Where Does a POST Actually Go?"),
             mo.md(
                 "We count the rows in `data/sales.parquet`, POST one sale through the API, count "
                 "again, and then put the row that landed in the file next to the JSON that came "
-                "back. Needs the API running."
+                "back. Needs the running API, started from this folder."
             ).callout(kind="info"),
             run_follow,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_follow,)
 
 
 @app.cell
-def _(
-    Path,
-    duckdb,
-    fastapi_base_url,
-    json,
-    mo,
-    run_follow,
-    static_table,
-    url_error,
-    url_request,
-):
-    if run_follow.value == 0:
-        _output = mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral")
-    else:
-        _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
-        if not _sales_file.exists():
-            _output = mo.md("Needs a running API (which creates `data/sales.parquet`).").callout(kind="warn")
-        else:
-            _base = fastapi_base_url.value.rstrip("/")
+def _(Path, ch8_api, duckdb, mo, run_follow, static_table):
+    mo.stop(not run_follow.value, mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral"))
+    _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
+    mo.stop(
+        not _sales_file.exists(),
+        mo.md("Needs a running API (which creates `data/sales.parquet`).").callout(kind="warn"),
+    )
+    _con = duckdb.connect()
+    _count = f"SELECT count(*) FROM '{_sales_file.as_posix()}'"
+    _before = _con.sql(_count).fetchone()[0]
+    _status, _created = ch8_api(
+        "POST",
+        "/sales",
+        {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5},
+    )
+    mo.stop(_status != 201, mo.md(f"`POST /sales` answered `{_status}`: `{_created}`").callout(kind="danger"))
+    try:
+        _after = _con.sql(_count).fetchone()[0]
+        _stored = _con.execute(
+            f"SELECT * FROM '{_sales_file.as_posix()}' WHERE sale_id = ?", [_created["sale_id"]]
+        ).df()
+    finally:
+        ch8_api("DELETE", f"/sales/{_created['sale_id']}")  # leave the file as we found it
+    mo.stop(
+        _stored.empty,
+        mo.md(
+            f"Sale {_created['sale_id']} never reached `{_sales_file}`: the API at the base URL writes "
+            "to another `data/` folder. Start it from this notebook's folder."
+        ).callout(kind="warn"),
+    )
 
-            def _call(_method, _path, _body=None):
-                _data = json.dumps(_body).encode("utf-8") if _body is not None else None
-                _req = url_request.Request(
-                    f"{_base}{_path}", data=_data, headers={"Content-Type": "application/json"}, method=_method
-                )
-                with url_request.urlopen(_req, timeout=10) as _r:
-                    return json.loads(_r.read()) if _r.status != 204 else None
-
-            try:
-                _con = duckdb.connect()
-                _url = _sales_file.as_posix()
-                _before = _con.execute(f"SELECT count(*) FROM '{_url}'").fetchone()[0]
-                _created = _call(
-                    "POST",
-                    "/sales",
-                    {
-                        "sale_date": "2026-03-01",
-                        "product_id": 1,
-                        "country_id": 3,
-                        "units_sold": 10,
-                        "customer_rating": 5,
-                    },
-                )
-                _after = _con.execute(f"SELECT count(*) FROM '{_url}'").fetchone()[0]
-                _stored = _con.execute(
-                    f"SELECT * FROM '{_url}' WHERE sale_id = {int(_created['sale_id'])}"
-                ).df()
-                _file_cols = list(_stored.columns)
-                _call("DELETE", f"/sales/{int(_created['sale_id'])}")  # leave the file as we found it
-
-                _rows = [
-                    {
-                        "": "what the FILE keeps",
-                        "fields": len(_file_cols),
-                        "names of things": "none, only ids",
-                        "shape": ", ".join(_file_cols),
-                    },
-                    {
-                        "": "what the API RETURNS",
-                        "fields": len(_created),
-                        "names of things": "product, category, country, region",
-                        "shape": ", ".join(list(_created)),
-                    },
-                ]
-                _note = mo.md(
-                    f"""
+    _file_row = _stored.iloc[0].to_dict()
+    _rows = [
+        {"field": _k, "in the file": str(_file_row.get(_k, "—")), "in the API answer": str(_v)}
+        for _k, _v in _created.items()
+    ]
+    _note = mo.md(
+        f"""
     **The file grew by one: {_before:,} rows to {_after:,}.**
 
-    The logic tier did not invent a database. It wrote to the same Parquet file you compressed in
-    chapter 4 and queried in chapter 5. Your POST travelled all the way down.
+    The logic tier did not invent a database. It wrote to `data/sales.parquet`, a working copy of
+    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/`
+    into `data/` on every start). Your POST travelled all the way down.
 
-    Now compare the two shapes, because this is what a tier is *for*. The **file** keeps
-    {len(_file_cols)} columns and stores `product_id 1`, `country_id 3`: ids, no names, every fact
-    written exactly once. That is the normalisation the data tier cares about. The **response**
-    has {len(_created)} fields, with "Edge Sensor X1", "Germany" and "Europe" spelled out. The
-    logic tier did the joining, so the chart in chapter 10 does not have to.
+    Now read the table across, because this is what a tier is *for*. The **file** keeps
+    {len(_stored.columns)} columns and stores `product_id {_created["product_id"]}`,
+    `country_id {_created["country_id"]}`: ids, no names, every fact written exactly once. That is
+    the normalisation the data tier cares about. The **response** has {len(_created)} fields, with
+    "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}"
+    spelled out. The logic tier did the joining, so the chart in chapter 10 does not have to. Even
+    the date changes shape: the file keeps a timestamp, the API sends a plain date.
 
-    **One honest callback.** We just read that file while a server might have been writing it.
-    Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant could
-    catch it half-written. That is precisely the isolation problem from chapter 1, and it is the
-    reason a real system puts a database at the bottom of the data tier rather than a file.
-                    """
-                ).callout(kind="info")
-                _output = mo.vstack(
-                    [static_table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6
-                )
-            except url_error.URLError as _exc:
-                _output = mo.md(
-                    f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
-                ).callout(kind="danger")
-    _output
+    **One honest callback.** We just read that file behind the API's back. The API takes a lock
+    around every write, but like the key on the hook in chapter 1, a lock only protects those who
+    ask for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong
+    instant could catch it half-written. That is precisely the isolation problem from chapter 1,
+    and it is the reason a real system puts a database at the bottom of the data tier rather than
+    a file.
+        """
+    ).callout(kind="info")
+    mo.vstack([static_table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    run_two_analysts = mo.ui.button(label="Run the two-analyst test", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_two_analysts = mo.ui.run_button(label="Run the two-analyst test", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Two People, One Product, Both Click Save"),
             mo.md(
@@ -4496,63 +4258,47 @@ def _(mo):
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_two_analysts,)
 
 
 @app.cell
-def _(
-    fastapi_base_url,
-    json,
-    mo,
-    run_two_analysts,
-    static_table,
-    url_error,
-    url_request,
-):
-    if run_two_analysts.value == 0:
-        _output = mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral")
-    else:
-        _base = fastapi_base_url.value.rstrip("/")
+def _(ch8_api, mo, run_two_analysts, static_table):
+    mo.stop(
+        not run_two_analysts.value,
+        mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral"),
+    )
 
-        def _read_price():
-            with url_request.urlopen(f"{_base}/products/1", timeout=10) as _r:
-                return float(json.loads(_r.read())["price"])
+    def _price(method, body=None):
+        """GET or PUT product 1 and return its price. Anything but 200 OK stops the cell."""
+        status, answer = ch8_api(method, "/products/1", body)
+        mo.stop(status != 200, mo.md(f"`{method} /products/1` answered `{status}`: `{answer}`").callout(kind="danger"))
+        return answer["price"]
 
-        def _save_price(_new_price):
-            _req = url_request.Request(
-                f"{_base}/products/1",
-                data=json.dumps({"price": _new_price}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="PUT",
-            )
-            with url_request.urlopen(_req, timeout=10) as _r:
-                return _r.status, float(json.loads(_r.read())["price"])
+    _start = _price("GET")
+    try:
+        # Both analysts open the page. Two ordinary GETs, nothing concurrent.
+        _anna_sees = _price("GET")
+        _ben_sees = _price("GET")
+        # Both save, strictly one after the other.
+        _after_anna = _price("PUT", {"price": round(_anna_sees * 1.10, 2)})
+        _after_ben = _price("PUT", {"price": round(_ben_sees + 20, 2)})
+        _final = _price("GET")
+    finally:
+        ch8_api("PUT", "/products/1", {"price": _start})  # put the price back, like the other labs tidy up
+    _correct = round(round(_start * 1.10, 2) + 20, 2)
 
-        try:
-            _start = _read_price()
-            # Both analysts open the page. Two ordinary GETs, nothing concurrent.
-            _anna_sees = _read_price()
-            _ben_sees = _read_price()
-            # Both save, strictly one after the other.
-            _anna_status, _after_anna = _save_price(round(_anna_sees * 1.10, 2))
-            _ben_status, _after_ben = _save_price(round(_ben_sees + 20, 2))
-            _final = _read_price()
-            _correct = round(round(_start * 1.10, 2) + 20, 2)
-
-            _steps = [
-                {"step": "1. price before anyone touches it", "value": _start, "server said": "-"},
-                {"step": "2. Anna opens the product", "value": _anna_sees, "server said": "200 OK"},
-                {"step": "3. Ben opens the same product", "value": _ben_sees, "server said": "200 OK"},
-                {"step": "4. Anna saves a 10% raise", "value": _after_anna, "server said": f"{_anna_status} OK"},
-                {"step": "5. Ben saves a 20 surcharge", "value": _after_ben, "server said": f"{_ben_status} OK"},
-                {"step": "6. price afterwards", "value": _final, "server said": "-"},
-                {"step": "what it should have been", "value": _correct, "server said": "-"},
-            ]
-            _lost = round(_correct - _final, 2)
-            _note = mo.md(
-                f"""
-    **Anna's raise is gone. {_lost:.2f} of it, and nobody was told.**
+    _steps = [
+        {"step": "1. price before anyone touches it", "price": _start, "server said": "-"},
+        {"step": "2. Anna opens the product", "price": _anna_sees, "server said": "200 OK"},
+        {"step": "3. Ben opens the same product", "price": _ben_sees, "server said": "200 OK"},
+        {"step": "4. Anna saves a 10% raise", "price": _after_anna, "server said": "200 OK"},
+        {"step": "5. Ben saves a 20 surcharge", "price": _after_ben, "server said": "200 OK"},
+        {"step": "6. price afterwards", "price": _final, "server said": "-"},
+        {"step": "what it should have been", "price": _correct, "server said": "-"},
+    ]
+    _note = mo.md(
+        f"""
+    **Anna's raise is gone. {_correct - _final:.2f} of it, and nobody was told.**
 
     Look at what did *not* happen. No error. No warning. No conflict. Two `200 OK` responses, two
     users who saw "saved", and a price that is simply wrong.
@@ -4562,44 +4308,41 @@ def _(
     a threading accident either: these six requests ran strictly one after another, so this fails
     identically every single time you click the button. The bug is structural, not a timing fluke.
 
-    Why did the database not save us? Because *there is no transaction around what actually
-    happened here*. The read and the write were two separate HTTP requests, minutes apart in real
-    life, and the API has no idea they were meant to belong together. Ben's `PUT` carried a price
-    computed from a page he opened before Anna saved. Chapter 1's lesson holds exactly as stated:
-    a transaction protects the steps you put inside it, and nothing else.
+    Why did the lock not save us? Every write in `sw03_demo_api.py` runs inside one `lock`,
+    chapter 1's own fix, so each single request is safe. But *there is no lock around what
+    actually happened here*. The read and the write were two separate HTTP requests, minutes apart
+    in real life, and the API has no idea they were meant to belong together. Ben's `PUT` carried
+    a price computed from a page he opened before Anna saved. Chapter 1's lesson holds exactly as
+    stated: a lock, like a transaction, protects the steps you put inside it, and nothing else.
 
     **The fix is not more locking.** It is to stop sending *the answer* and start sending *the
     change* (`{{"raise_percent": 10}}`), or to make the client say which version it read and let
-    the server refuse if that version is stale. This is the one thing the whole day has been
-    circling: correctness is a property of the design, not of the tools.
-                """
-            ).callout(kind="danger")
-            _output = mo.vstack(
-                [static_table(_steps, label="Six requests, strictly in order"), _note], gap=0.6
-            )
-        except url_error.URLError as _exc:
-            _output = mo.md(
-                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
-            ).callout(kind="danger")
-    _output
+    the server refuse if that version is stale. HTTP has that second option built in: `If-Match`
+    with an ETag, answered by `412 Precondition Failed`. This is the one thing the whole day has
+    been circling: correctness is a property of the design, not of the tools.
+        """
+    ).callout(kind="danger")
+    mo.vstack(
+        [static_table(_steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"), _note],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
     Backend answers are useful, but users still need a clear interface.
-    Now we compare frontend options and their trade-offs (explicit compromises between speed, control, and complexity).
+    Next we compare frontend options and what each one trades away: speed, control or simplicity.
 
     $$
     \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
     $$
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
