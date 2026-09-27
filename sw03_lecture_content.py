@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.24.0"
+__generated_with = "0.25.0"
 app = marimo.App(width="medium")
 
 
@@ -23,21 +23,42 @@ def _():
     import urllib.request as url_request
     from pathlib import Path
 
-    import importlib.util
+    import altair as alt
+    import duckdb
+    import fastavro
     import marimo as mo
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import pydantic
+    import requests
+    from PIL import Image, ImageDraw
+    from pyarrow import feather
 
     return (
+        Image,
+        ImageDraw,
         Path,
+        alt,
         csv,
+        duckdb,
+        fastavro,
+        feather,
         gzip,
-        importlib,
         io,
         json,
         math,
         mo,
+        np,
         os,
+        pa,
+        pd,
         pickle,
+        pq,
+        pydantic,
         random,
+        requests,
         sqlite3,
         statistics,
         tempfile,
@@ -50,36 +71,19 @@ def _():
 
 @app.cell
 def _(Path, mo):
-    # The repo ships 3360 real sales rows. Until now every chapter invented random
-    # floats instead; several labs below read this file.
+    # Real sales rows (data/seed/) that several labs below read.
     SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
     SALES_SEED = SEED_DIR / "sales.parquet"
-    return (SALES_SEED,)
+    return SALES_SEED, SEED_DIR
 
 
 @app.cell
-def _(importlib):
-    def optional_import(module_name):
-        """Import a module if available; return None otherwise."""
-        try:
-            module_spec = importlib.util.find_spec(module_name)
-        except (ModuleNotFoundError, ImportError, ValueError):
-            return None
-
-        if module_spec is None:
-            return None
-
-        try:
-            return importlib.import_module(module_name)
-        except (ModuleNotFoundError, ImportError):
-            return None
-
+def _(requests):
     def format_bytes(num_bytes):
         """Human-friendly byte counts."""
-        units = ["B", "KB", "MB", "GB", "TB"]
         value = float(num_bytes)
-        for unit in units:
-            if value < 1024 or unit == units[-1]:
+        for unit in ("B", "KB", "MB", "GB"):
+            if value < 1024:
                 return f"{value:,.2f} {unit}"
             value /= 1024
         return f"{value:,.2f} TB"
@@ -87,7 +91,18 @@ def _(importlib):
     def format_ms(seconds):
         return f"{seconds * 1000:,.2f} ms"
 
-    return format_bytes, format_ms, optional_import
+    def call_api(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
+        """One HTTP request -> (status code, parsed JSON or raw text).
+
+        Network failures raise requests.RequestException, so a caller can say "start the API".
+        """
+        response = requests.request(method, url, json=body, timeout=5)
+        try:
+            return response.status_code, response.json()
+        except requests.JSONDecodeError:
+            return response.status_code, response.text
+
+    return call_api, format_bytes, format_ms
 
 
 @app.cell
@@ -605,7 +620,7 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    title = mo.md(
+    _title = mo.md(
         """
     <div class="hero">
       <div class="hero-content">
@@ -630,13 +645,13 @@ def _(mo):
     </div>
             """
     )
-    title
+    _title
     return
 
 
 @app.cell
 def _(mo):
-    agenda = mo.md(
+    _agenda = mo.md(
         """
     <div class="section-card">
       <h2>Discussed Topics  </h2>
@@ -665,13 +680,13 @@ def _(mo):
     </div>
             """
     )
-    agenda
+    _agenda
     return
 
 
 @app.cell
 def _(mo):
-    tier_map = mo.md(
+    _tier_map = mo.md(
         """
     <div class="section-card flow-card">
       <h3>The Map: One Product, Three Tiers</h3>
@@ -711,7 +726,7 @@ def _(mo):
     </div>
             """
     )
-    tier_map
+    _tier_map
     return
 
 
@@ -1783,7 +1798,7 @@ def _(mo):
     serial_cols = mo.ui.slider(2, 8, value=5, label="Numeric columns")
     serial_seed = mo.ui.slider(1, 999, value=42, label="Seed")
     run_serial = mo.ui.button(label="Run serialization benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _note = mo.md("Includes Arrow, Parquet, and Avro by default (requires `pyarrow` + `fastavro`).")
+    _note = mo.md("Includes Arrow, Parquet, and Avro.")
 
     _controls = mo.vstack(
         [
@@ -1803,12 +1818,15 @@ def _(mo):
 def _(
     Path,
     csv,
+    fastavro,
+    feather,
     format_bytes,
     format_ms,
     json,
     mo,
-    optional_import,
+    pa,
     pickle,
+    pq,
     random,
     run_serial,
     serial_cols,
@@ -1893,81 +1911,64 @@ def _(
 
             _results.append(bench("CSV", csv_write, csv_read, _tmpdir / "data.csv"))
 
-            _pyarrow = optional_import("pyarrow")
-            _feather = optional_import("pyarrow.feather")
-            _parquet = optional_import("pyarrow.parquet")
-            fastavro = optional_import("fastavro")
+            # Pay pyarrow's one-time initialisation before the clock starts,
+            # otherwise the first measurement is ~70x too slow.
+            feather.write_feather(
+                pa.Table.from_pylist([{"warmup": 1}]), (_tmpdir / "_warmup.feather").as_posix()
+            )
 
-            _missing = []
-            if not (_pyarrow and _feather):
-                _missing.append("pyarrow.feather")
-            if not _parquet:
-                _missing.append("pyarrow.parquet")
-            if not fastavro:
-                _missing.append("fastavro")
+            def arrow_write(path):
+                table = pa.Table.from_pylist(_records)
+                feather.write_feather(table, path)
 
-            if _pyarrow and _feather:
-                # Pay pyarrow's one-time initialisation before the clock starts,
-                # otherwise the first measurement is ~70x too slow.
-                _feather.write_feather(
-                    _pyarrow.Table.from_pylist([{"warmup": 1}]), (_tmpdir / "_warmup.feather").as_posix()
+            def arrow_read(path):
+                feather.read_table(path)
+
+            _results.append(
+                bench(
+                    "Arrow/Feather",
+                    arrow_write,
+                    arrow_read,
+                    _tmpdir / "data.feather",
                 )
+            )
 
-                def arrow_write(path):
-                    table = _pyarrow.Table.from_pylist(_records)
-                    _feather.write_feather(table, path)
+            def parquet_write(path):
+                table = pa.Table.from_pylist(_records)
+                pq.write_table(table, path)
 
-                def arrow_read(path):
-                    _feather.read_table(path)
+            def parquet_read(path):
+                pq.read_table(path)
 
-                _results.append(
-                    bench(
-                        "Arrow/Feather",
-                        arrow_write,
-                        arrow_read,
-                        _tmpdir / "data.feather",
-                    )
+            _results.append(
+                bench(
+                    "Parquet",
+                    parquet_write,
+                    parquet_read,
+                    _tmpdir / "data.parquet",
                 )
+            )
 
-            if _pyarrow and _parquet:
+            schema = {
+                "type": "record",
+                "name": "Record",
+                "fields": [
+                    {"name": "id", "type": "int"},
+                    {"name": "city", "type": "string"},
+                    {"name": "score", "type": "double"},
+                ]
+                + [{"name": f"metric_{c}", "type": "double"} for c in range(serial_cols.value)],
+            }
 
-                def parquet_write(path):
-                    table = _pyarrow.Table.from_pylist(_records)
-                    _parquet.write_table(table, path)
+            def avro_write(path):
+                with path.open("wb") as f:
+                    fastavro.writer(f, schema, _records)
 
-                def parquet_read(path):
-                    _parquet.read_table(path)
+            def avro_read(path):
+                with path.open("rb") as f:
+                    list(fastavro.reader(f))
 
-                _results.append(
-                    bench(
-                        "Parquet",
-                        parquet_write,
-                        parquet_read,
-                        _tmpdir / "data.parquet",
-                    )
-                )
-
-            if fastavro:
-                schema = {
-                    "type": "record",
-                    "name": "Record",
-                    "fields": [
-                        {"name": "id", "type": "int"},
-                        {"name": "city", "type": "string"},
-                        {"name": "score", "type": "double"},
-                    ]
-                    + [{"name": f"metric_{c}", "type": "double"} for c in range(serial_cols.value)],
-                }
-
-                def avro_write(path):
-                    with path.open("wb") as f:
-                        fastavro.writer(f, schema, _records)
-
-                def avro_read(path):
-                    with path.open("rb") as f:
-                        list(fastavro.reader(f))
-
-                _results.append(bench("Avro", avro_write, avro_read, _tmpdir / "data.avro"))
+            _results.append(bench("Avro", avro_write, avro_read, _tmpdir / "data.avro"))
 
         _display_rows = []
         for row in _results:
@@ -2027,12 +2028,6 @@ def _(
         )
         _charts = mo.vstack([_size_chart, _latency_chart], gap=0.6)
 
-        _missing_note = None
-        if _missing:
-            _missing_note = mo.md(
-                "Missing libraries required for Arrow/Parquet/Avro: " + ", ".join(f"`{name}`" for name in _missing) + ". Install them to include these formats."
-            ).callout(kind="warn")
-
         results_table = mo.ui.table(_display_rows, label="Serialization benchmark")
         benchmark_note = mo.md("Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark.").callout(kind="info")
         warning = mo.md(
@@ -2042,8 +2037,6 @@ def _(
         ).callout(kind="warn")
 
         _items = [sample, results_table, _charts, benchmark_note, warning]
-        if _missing_note:
-            _items.insert(1, _missing_note)
         _output = mo.vstack(_items, gap=0.6)
 
     _output
@@ -2051,55 +2044,51 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, optional_import, tempfile):
-    _pd = optional_import("pandas")
-    if _pd is None or not SALES_SEED.exists():
-        _panel = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
-    else:
-        _src = _pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500).copy()
-        _src["sale_date"] = _pd.to_datetime(_src["sale_date"])
-        # Store codes are the classic case: they look like numbers and are not.
-        _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
+def _(Path, SALES_SEED, mo, pd, tempfile):
+    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500).copy()
+    _src["sale_date"] = pd.to_datetime(_src["sale_date"])
+    # Store codes are the classic case: they look like numbers and are not.
+    _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
 
-        with tempfile.TemporaryDirectory() as _td:
-            _csv_p = Path(_td) / "sales.csv"
-            _pq_p = Path(_td) / "sales.parquet"
-            _src.to_csv(_csv_p, index=False)
-            _src.to_parquet(_pq_p, index=False)
-            _from_csv = _pd.read_csv(_csv_p)
-            _from_pq = _pd.read_parquet(_pq_p)
+    with tempfile.TemporaryDirectory() as _td:
+        _csv_p = Path(_td) / "sales.csv"
+        _pq_p = Path(_td) / "sales.parquet"
+        _src.to_csv(_csv_p, index=False)
+        _src.to_parquet(_pq_p, index=False)
+        _from_csv = pd.read_csv(_csv_p)
+        _from_pq = pd.read_parquet(_pq_p)
 
-        _dtypes = [
-            {
-                "column": _c,
-                "wrote": str(_src[_c].dtype),
-                "back from CSV": str(_from_csv[_c].dtype),
-                "back from Parquet": str(_from_pq[_c].dtype),
-            }
-            for _c in _src.columns
-        ]
+    _dtypes = [
+        {
+            "column": _c,
+            "wrote": str(_src[_c].dtype),
+            "back from CSV": str(_from_csv[_c].dtype),
+            "back from Parquet": str(_from_pq[_c].dtype),
+        }
+        for _c in _src.columns
+    ]
 
-        def _span(_df):
-            try:
-                return str(_df["sale_date"].max() - _df["sale_date"].min())
-            except Exception as _exc:
-                return f"{type(_exc).__name__}: {_exc}"
+    def _span(_df):
+        try:
+            return str(_df["sale_date"].max() - _df["sale_date"].min())
+        except Exception as _exc:
+            return f"{type(_exc).__name__}: {_exc}"
 
-        _answers = [
-            {
-                "question": "How long did sales run?",
-                "via Parquet": _span(_from_pq),
-                "via CSV": _span(_from_csv),
-            },
-            {
-                "question": "First three store codes",
-                "via Parquet": str(list(_from_pq["store_code"].head(3))),
-                "via CSV": str(list(_from_csv["store_code"].head(3))),
-            },
-        ]
+    _answers = [
+        {
+            "question": "How long did sales run?",
+            "via Parquet": _span(_from_pq),
+            "via CSV": _span(_from_csv),
+        },
+        {
+            "question": "First three store codes",
+            "via Parquet": str(list(_from_pq["store_code"].head(3))),
+            "via CSV": str(list(_from_csv["store_code"].head(3))),
+        },
+    ]
 
-        _note = mo.md(
-            """
+    _note = mo.md(
+        """
     Open both files in a text editor and the date looks identical in each: `2024-03-07`.
     The bytes did not lose the date. The file lost **the note saying it was a date**, and that
     note is what your analysis was standing on.
@@ -2107,96 +2096,92 @@ def _(Path, SALES_SEED, mo, optional_import, tempfile):
     The first failure shouted. The second did not: the store codes came back as `7, 10, 42`
     with no error, no warning and nothing in the log. That is the one that ends up in a report.
             """
-        ).callout(kind="warn")
+    ).callout(kind="warn")
 
-        _panel = mo.vstack(
-            [
-                mo.ui.table(_dtypes, label="Same 500 rows, written two ways and read back"),
-                mo.ui.table(_answers, label="Now ask the data a question"),
-                _note,
-            ],
-            gap=0.6,
-        )
+    _panel = mo.vstack(
+        [
+            mo.ui.table(_dtypes, label="Same 500 rows, written two ways and read back"),
+            mo.ui.table(_answers, label="Now ask the data a question"),
+            _note,
+        ],
+        gap=0.6,
+    )
     _panel
     return
 
 
 @app.cell
-def _(csv, io, mo, optional_import):
-    _fastavro = optional_import("fastavro")
-    if _fastavro is None:
-        _panel = mo.md("Needs `fastavro`.").callout(kind="warn")
-    else:
-        # It is next March. Your team adds a `channel` field to the sales event.
-        # Two years of old files sit on disk, and one old program nobody redeployed
-        # is still running in production. What happens?
-        _v1 = {
-            "type": "record",
-            "name": "Sale",
-            "fields": [{"name": "sale_id", "type": "int"}, {"name": "total_price", "type": "double"}],
-        }
-        _v2 = {
-            "type": "record",
-            "name": "Sale",
-            "fields": [
-                {"name": "sale_id", "type": "int"},
-                {"name": "total_price", "type": "double"},
-                {"name": "channel", "type": "string", "default": "in-store"},
-            ],
-        }
+def _(csv, fastavro, io, mo):
+    # It is next March. Your team adds a `channel` field to the sales event.
+    # Two years of old files sit on disk, and one old program nobody redeployed
+    # is still running in production. What happens?
+    _v1 = {
+        "type": "record",
+        "name": "Sale",
+        "fields": [{"name": "sale_id", "type": "int"}, {"name": "total_price", "type": "double"}],
+    }
+    _v2 = {
+        "type": "record",
+        "name": "Sale",
+        "fields": [
+            {"name": "sale_id", "type": "int"},
+            {"name": "total_price", "type": "double"},
+            {"name": "channel", "type": "string", "default": "in-store"},
+        ],
+    }
 
-        def _avro_bytes(_schema, _rows):
-            _buf = io.BytesIO()
-            _fastavro.writer(_buf, _schema, _rows)
-            return _buf.getvalue()
+    def _avro_bytes(_schema, _rows):
+        _buf = io.BytesIO()
+        fastavro.writer(_buf, _schema, _rows)
+        return _buf.getvalue()
 
-        _old_file = _avro_bytes(_v1, [{"sale_id": 1, "total_price": 4034.91}])
-        _new_file = _avro_bytes(_v2, [{"sale_id": 3, "total_price": 99.0, "channel": "online"}])
+    _old_file = _avro_bytes(_v1, [{"sale_id": 1, "total_price": 4034.91}])
+    _new_file = _avro_bytes(_v2, [{"sale_id": 3, "total_price": 99.0, "channel": "online"}])
 
-        _old_by_new = list(_fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
-        _new_by_old = list(_fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
+    _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
+    _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
 
-        _csv_buf = io.StringIO()
-        _writer = csv.DictWriter(_csv_buf, fieldnames=["sale_id", "total_price"])
-        _writer.writeheader()
-        _writer.writerow({"sale_id": 1, "total_price": 4034.91})
-        _csv_row = next(csv.DictReader(io.StringIO(_csv_buf.getvalue())))
-        try:
-            _csv_row["channel"]
-            _csv_result = "no error"
-        except KeyError as _exc:
-            _csv_result = f"KeyError: {_exc}"
+    _csv_buf = io.StringIO()
+    _writer = csv.DictWriter(_csv_buf, fieldnames=["sale_id", "total_price"])
+    _writer.writeheader()
+    _writer.writerow({"sale_id": 1, "total_price": 4034.91})
+    _csv_row = next(csv.DictReader(io.StringIO(_csv_buf.getvalue())))
+    try:
+        _csv_row["channel"]
+        _csv_result = "no error"
+    except KeyError as _exc:
+        _csv_result = f"KeyError: {_exc}"
 
-        _rows = [
-            {
-                "situation": "Last year's Avro file, read by this year's code",
-                "result": str(_old_by_new[0]),
-                "verdict": "works: the reader supplied the default the writer never wrote",
-            },
-            {
-                "situation": "This year's Avro file, read by the old program",
-                "result": str(_new_by_old[0]),
-                "verdict": "works: the extra field is skipped, nothing crashes",
-            },
-            {
-                "situation": "Last year's CSV file, read by this year's code",
-                "result": _csv_result,
-                "verdict": "breaks: the only fix is changing every program that reads it",
-            },
-        ]
-        _note = mo.md(
-            "The packing list on the box is not decoration. It is what lets a file written last "
-            "year and a program written this morning still agree. CSV has no packing list, so "
-            "the agreement lives only in someone's memory."
-        ).callout(kind="info")
-        _panel = mo.vstack(
-            [
-                mo.md("### Schema Evolution: the office adds a box to the form"),
-                mo.ui.table(_rows, label="Same change, three situations"),
-                _note,
-            ],
-            gap=0.6,
-        )
+    _rows = [
+        {
+            "situation": "Last year's Avro file, read by this year's code",
+            "result": str(_old_by_new[0]),
+            "verdict": "works: the reader supplied the default the writer never wrote",
+        },
+        {
+            "situation": "This year's Avro file, read by the old program",
+            "result": str(_new_by_old[0]),
+            "verdict": "works: the extra field is skipped, nothing crashes",
+        },
+        {
+            "situation": "Last year's CSV file, read by this year's code",
+            "result": _csv_result,
+            "verdict": "breaks: the only fix is changing every program that reads it",
+        },
+    ]
+    _note = mo.md(
+        "The packing list on the box is not decoration. It is what lets a file written last "
+        "year and a program written this morning still agree. CSV has no packing list, so "
+        "the agreement lives only in someone's memory."
+    ).callout(kind="info")
+    _panel = mo.vstack(
+        [
+            mo.md("### Schema Evolution: the office adds a box to the form"),
+            mo.ui.table(_rows, label="Same change, three situations"),
+            _note,
+        ],
+        gap=0.6,
+    )
     _panel
     return
 
@@ -2529,58 +2514,53 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, optional_import, run_rowgroup, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, tempfile):
     if run_rowgroup.value == 0:
         _output = mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral")
     else:
-        _pd = optional_import("pandas")
-        _duckdb = optional_import("duckdb")
-        if _pd is None or _duckdb is None or not SALES_SEED.exists():
-            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
-        else:
-            _df = _pd.read_parquet(SALES_SEED)
-            _df["sale_date"] = _pd.to_datetime(_df["sale_date"])
-            _cut = "2026-01-01"
-            _wanted = ["sale_date", "total_price"]
+        _df = pd.read_parquet(SALES_SEED)
+        _df["sale_date"] = pd.to_datetime(_df["sale_date"])
+        _cut = "2026-01-01"
+        _wanted = ["sale_date", "total_price"]
 
-            with tempfile.TemporaryDirectory() as _td:
-                _ordered = Path(_td) / "date_ordered.parquet"
-                _shuffled = Path(_td) / "shuffled.parquet"
-                _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
-                _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
+        with tempfile.TemporaryDirectory() as _td:
+            _ordered = Path(_td) / "date_ordered.parquet"
+            _shuffled = Path(_td) / "shuffled.parquet"
+            _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
+            _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
 
-                _con = _duckdb.connect()
-                _rows = []
-                for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
-                    _md = _con.execute(
-                        "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
-                        f"FROM parquet_metadata('{_path.as_posix()}')"
-                    ).df()
-                    _groups = _md["row_group_id"].nunique()
-                    _all_cols = int(_md["total_compressed_size"].sum())
-                    _two_cols_all = _md[_md["path_in_schema"].isin(_wanted)]
-                    _b_bytes = int(_two_cols_all["total_compressed_size"].sum())
-                    # The index card: a section survives only if its LATEST date reaches the cut-off.
-                    _dates = _md[_md["path_in_schema"] == "sale_date"]
-                    _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"].tolist()
-                    _c_bytes = int(_two_cols_all[_two_cols_all["row_group_id"].isin(_live)]["total_compressed_size"].sum())
-                    _answer = _con.execute(
-                        f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
-                    ).fetchone()[0]
-                    _rows.append(
-                        {
-                            "file": _label,
-                            "file size (B)": _path.stat().st_size,
-                            "A: every column, every section": _all_cols,
-                            "B: 2 columns, every section": _b_bytes,
-                            "C: 2 columns, surviving sections": _c_bytes,
-                            "sections opened": f"{len(_live)} of {_groups}",
-                            "answer": _answer,
-                        }
-                    )
+            _con = duckdb.connect()
+            _rows = []
+            for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
+                _md = _con.execute(
+                    "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
+                    f"FROM parquet_metadata('{_path.as_posix()}')"
+                ).df()
+                _groups = _md["row_group_id"].nunique()
+                _all_cols = int(_md["total_compressed_size"].sum())
+                _two_cols_all = _md[_md["path_in_schema"].isin(_wanted)]
+                _b_bytes = int(_two_cols_all["total_compressed_size"].sum())
+                # The index card: a section survives only if its LATEST date reaches the cut-off.
+                _dates = _md[_md["path_in_schema"] == "sale_date"]
+                _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"].tolist()
+                _c_bytes = int(_two_cols_all[_two_cols_all["row_group_id"].isin(_live)]["total_compressed_size"].sum())
+                _answer = _con.execute(
+                    f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
+                ).fetchone()[0]
+                _rows.append(
+                    {
+                        "file": _label,
+                        "file size (B)": _path.stat().st_size,
+                        "A: every column, every section": _all_cols,
+                        "B: 2 columns, every section": _b_bytes,
+                        "C: 2 columns, surviving sections": _c_bytes,
+                        "sections opened": f"{len(_live)} of {_groups}",
+                        "answer": _answer,
+                    }
+                )
 
-            _note = mo.md(
-                """
+        _note = mo.md(
+            """
     Read the top row left to right. Choosing columns took the read from **62,705** bytes to
     **33,029**. That is what chapter 3 has taught so far. The index card then took it from
     33,029 to **4,131**, and nobody wrote that in the query.
@@ -2594,10 +2574,10 @@ def _(Path, SALES_SEED, mo, optional_import, run_rowgroup, tempfile):
     from the very same rows, which is a preview of chapter 4: order is itself a form of
     compression. Both files return the same answer, which is the point.
                 """
-            ).callout(kind="info")
-            _output = mo.vstack(
-                [mo.ui.table(_rows, label="Bytes the query must read"), _note], gap=0.6
-            )
+        ).callout(kind="info")
+        _output = mo.vstack(
+            [mo.ui.table(_rows, label="Bytes the query must read"), _note], gap=0.6
+        )
     _output
     return
 
@@ -2806,265 +2786,268 @@ def _(mo):
 
 
 @app.cell
-def _(gzip, image_demo_rank, image_demo_width, io, math, mo, optional_import):
-    _pil_image = optional_import("PIL.Image")
-    _pil_draw = optional_import("PIL.ImageDraw")
-    _np = optional_import("numpy")
+def _(
+    Image,
+    ImageDraw,
+    gzip,
+    image_demo_rank,
+    image_demo_width,
+    io,
+    math,
+    mo,
+    np,
+):
+    _width = image_demo_width.value
+    _height = int(_width * 0.74)
+    _img = Image.new("RGB", (_width, _height), color=(238, 242, 248))
+    _draw = ImageDraw.Draw(_img)
 
-    if not (_pil_image and _pil_draw and _np):
-        _output = mo.md("Install `Pillow` and `numpy` to run the PCA image compression lab (`pip install pillow numpy`).").callout(kind="warn")
-    else:
-        _width = image_demo_width.value
-        _height = int(_width * 0.74)
-        _img = _pil_image.new("RGB", (_width, _height), color=(238, 242, 248))
-        _draw = _pil_draw.Draw(_img)
+    # Soft gradient background.
+    for _y in range(_height):
+        _r = int(218 + 18 * (_y / max(1, _height - 1)))
+        _g = int(229 + 14 * (_y / max(1, _height - 1)))
+        _b = int(242 + 10 * (_y / max(1, _height - 1)))
+        _draw.line([(0, _y), (_width, _y)], fill=(_r, _g, _b))
 
-        # Soft gradient background.
-        for _y in range(_height):
-            _r = int(218 + 18 * (_y / max(1, _height - 1)))
-            _g = int(229 + 14 * (_y / max(1, _height - 1)))
-            _b = int(242 + 10 * (_y / max(1, _height - 1)))
-            _draw.line([(0, _y), (_width, _y)], fill=(_r, _g, _b))
+    # Add a deterministic checker texture to reveal compression artifacts.
+    _step = max(6, _width // 45)
+    for _x in range(0, _width, _step):
+        for _y in range(0, _height, _step):
+            if ((_x // _step) + (_y // _step)) % 2 == 0:
+                _draw.rectangle(
+                    [_x, _y, min(_width - 1, _x + _step), min(_height - 1, _y + _step)],
+                    outline=None,
+                    fill=(225, 232, 245),
+                )
 
-        # Add a deterministic checker texture to reveal compression artifacts.
-        _step = max(6, _width // 45)
-        for _x in range(0, _width, _step):
-            for _y in range(0, _height, _step):
-                if ((_x // _step) + (_y // _step)) % 2 == 0:
-                    _draw.rectangle(
-                        [_x, _y, min(_width - 1, _x + _step), min(_height - 1, _y + _step)],
-                        outline=None,
-                        fill=(225, 232, 245),
-                    )
+    # Draw a cute cat face as the source image.
+    _cx = _width // 2
+    _cy = int(_height * 0.56)
+    _r = int(min(_width, _height) * 0.24)
+    _fur = (220, 192, 158)
+    _fur_dark = (96, 74, 56)
+    _ear_inner = (246, 186, 198)
 
-        # Draw a cute cat face as the source image.
-        _cx = _width // 2
-        _cy = int(_height * 0.56)
-        _r = int(min(_width, _height) * 0.24)
-        _fur = (220, 192, 158)
-        _fur_dark = (96, 74, 56)
-        _ear_inner = (246, 186, 198)
+    _draw.polygon(
+        [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)), (_cx - int(0.40 * _r), _cy - int(1.35 * _r)), (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
+        fill=_fur,
+        outline=_fur_dark,
+        width=3,
+    )
+    _draw.polygon(
+        [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)), (_cx + int(0.40 * _r), _cy - int(1.35 * _r)), (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
+        fill=_fur,
+        outline=_fur_dark,
+        width=3,
+    )
+    _draw.polygon(
+        [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)), (_cx - int(0.40 * _r), _cy - int(1.16 * _r)), (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
+        fill=_ear_inner,
+        outline=None,
+    )
+    _draw.polygon(
+        [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)), (_cx + int(0.40 * _r), _cy - int(1.16 * _r)), (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
+        fill=_ear_inner,
+        outline=None,
+    )
 
-        _draw.polygon(
-            [(_cx - int(0.82 * _r), _cy - int(0.52 * _r)), (_cx - int(0.40 * _r), _cy - int(1.35 * _r)), (_cx - int(0.03 * _r), _cy - int(0.58 * _r))],
-            fill=_fur,
-            outline=_fur_dark,
-            width=3,
-        )
-        _draw.polygon(
-            [(_cx + int(0.82 * _r), _cy - int(0.52 * _r)), (_cx + int(0.40 * _r), _cy - int(1.35 * _r)), (_cx + int(0.03 * _r), _cy - int(0.58 * _r))],
-            fill=_fur,
-            outline=_fur_dark,
-            width=3,
-        )
-        _draw.polygon(
-            [(_cx - int(0.70 * _r), _cy - int(0.56 * _r)), (_cx - int(0.40 * _r), _cy - int(1.16 * _r)), (_cx - int(0.12 * _r), _cy - int(0.62 * _r))],
-            fill=_ear_inner,
-            outline=None,
-        )
-        _draw.polygon(
-            [(_cx + int(0.70 * _r), _cy - int(0.56 * _r)), (_cx + int(0.40 * _r), _cy - int(1.16 * _r)), (_cx + int(0.12 * _r), _cy - int(0.62 * _r))],
-            fill=_ear_inner,
-            outline=None,
-        )
+    _draw.ellipse(
+        [(_cx - _r), (_cy - _r), (_cx + _r), (_cy + _r)],
+        fill=_fur,
+        outline=_fur_dark,
+        width=3,
+    )
+    _draw.ellipse(
+        [(_cx - int(0.45 * _r)), (_cy + int(0.05 * _r)), (_cx + int(0.45 * _r)), (_cy + int(0.62 * _r))],
+        fill=(236, 214, 190),
+        outline=None,
+    )
 
-        _draw.ellipse(
-            [(_cx - _r), (_cy - _r), (_cx + _r), (_cy + _r)],
-            fill=_fur,
-            outline=_fur_dark,
-            width=3,
-        )
-        _draw.ellipse(
-            [(_cx - int(0.45 * _r)), (_cy + int(0.05 * _r)), (_cx + int(0.45 * _r)), (_cy + int(0.62 * _r))],
-            fill=(236, 214, 190),
-            outline=None,
-        )
+    _eye_w = int(0.25 * _r)
+    _eye_h = int(0.18 * _r)
+    _eye_y = _cy - int(0.14 * _r)
+    _left_eye_x = _cx - int(0.50 * _r)
+    _right_eye_x = _cx + int(0.50 * _r)
+    _draw.ellipse(
+        [(_left_eye_x - _eye_w, _eye_y - _eye_h), (_left_eye_x + _eye_w, _eye_y + _eye_h)],
+        fill=(143, 198, 128),
+        outline=(40, 40, 40),
+        width=2,
+    )
+    _draw.ellipse(
+        [(_right_eye_x - _eye_w, _eye_y - _eye_h), (_right_eye_x + _eye_w, _eye_y + _eye_h)],
+        fill=(143, 198, 128),
+        outline=(40, 40, 40),
+        width=2,
+    )
+    _pupil_w = max(4, int(0.08 * _r))
+    _pupil_h = max(7, int(0.20 * _r))
+    _draw.ellipse(
+        [(_left_eye_x - _pupil_w, _eye_y - _pupil_h), (_left_eye_x + _pupil_w, _eye_y + _pupil_h)],
+        fill=(18, 22, 20),
+    )
+    _draw.ellipse(
+        [(_right_eye_x - _pupil_w, _eye_y - _pupil_h), (_right_eye_x + _pupil_w, _eye_y + _pupil_h)],
+        fill=(18, 22, 20),
+    )
+    _spark = max(3, int(0.05 * _r))
+    _draw.ellipse(
+        [(_left_eye_x - _spark, _eye_y - _spark), (_left_eye_x + _spark, _eye_y + _spark)],
+        fill=(255, 255, 255),
+    )
+    _draw.ellipse(
+        [(_right_eye_x - _spark, _eye_y - _spark), (_right_eye_x + _spark, _eye_y + _spark)],
+        fill=(255, 255, 255),
+    )
 
-        _eye_w = int(0.25 * _r)
-        _eye_h = int(0.18 * _r)
-        _eye_y = _cy - int(0.14 * _r)
-        _left_eye_x = _cx - int(0.50 * _r)
-        _right_eye_x = _cx + int(0.50 * _r)
-        _draw.ellipse(
-            [(_left_eye_x - _eye_w, _eye_y - _eye_h), (_left_eye_x + _eye_w, _eye_y + _eye_h)],
-            fill=(143, 198, 128),
-            outline=(40, 40, 40),
-            width=2,
-        )
-        _draw.ellipse(
-            [(_right_eye_x - _eye_w, _eye_y - _eye_h), (_right_eye_x + _eye_w, _eye_y + _eye_h)],
-            fill=(143, 198, 128),
-            outline=(40, 40, 40),
-            width=2,
-        )
-        _pupil_w = max(4, int(0.08 * _r))
-        _pupil_h = max(7, int(0.20 * _r))
-        _draw.ellipse(
-            [(_left_eye_x - _pupil_w, _eye_y - _pupil_h), (_left_eye_x + _pupil_w, _eye_y + _pupil_h)],
-            fill=(18, 22, 20),
-        )
-        _draw.ellipse(
-            [(_right_eye_x - _pupil_w, _eye_y - _pupil_h), (_right_eye_x + _pupil_w, _eye_y + _pupil_h)],
-            fill=(18, 22, 20),
-        )
-        _spark = max(3, int(0.05 * _r))
-        _draw.ellipse(
-            [(_left_eye_x - _spark, _eye_y - _spark), (_left_eye_x + _spark, _eye_y + _spark)],
-            fill=(255, 255, 255),
-        )
-        _draw.ellipse(
-            [(_right_eye_x - _spark, _eye_y - _spark), (_right_eye_x + _spark, _eye_y + _spark)],
-            fill=(255, 255, 255),
-        )
+    _nose_y = _cy + int(0.13 * _r)
+    _draw.polygon(
+        [(_cx, _nose_y), (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)), (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
+        fill=(234, 150, 165),
+        outline=(120, 74, 86),
+    )
+    _draw.line(
+        [(_cx, _nose_y + int(0.15 * _r)), (_cx, _cy + int(0.48 * _r))],
+        fill=(88, 67, 54),
+        width=2,
+    )
+    _draw.arc(
+        [(_cx - int(0.24 * _r), _cy + int(0.38 * _r)), (_cx, _cy + int(0.62 * _r))],
+        start=200,
+        end=340,
+        fill=(88, 67, 54),
+        width=2,
+    )
+    _draw.arc(
+        [(_cx, _cy + int(0.38 * _r)), (_cx + int(0.24 * _r), _cy + int(0.62 * _r))],
+        start=200,
+        end=340,
+        fill=(88, 67, 54),
+        width=2,
+    )
+    _draw.ellipse(
+        [(_cx - int(0.70 * _r), _cy + int(0.16 * _r)), (_cx - int(0.44 * _r), _cy + int(0.36 * _r))],
+        fill=(247, 178, 186),
+        outline=None,
+    )
+    _draw.ellipse(
+        [(_cx + int(0.44 * _r), _cy + int(0.16 * _r)), (_cx + int(0.70 * _r), _cy + int(0.36 * _r))],
+        fill=(247, 178, 186),
+        outline=None,
+    )
+    _draw.line(
+        [(_cx, _cy - int(0.34 * _r)), (_cx - int(0.11 * _r), _cy - int(0.48 * _r))],
+        fill=(187, 151, 118),
+        width=2,
+    )
+    _draw.line(
+        [(_cx, _cy - int(0.34 * _r)), (_cx + int(0.11 * _r), _cy - int(0.48 * _r))],
+        fill=(187, 151, 118),
+        width=2,
+    )
 
-        _nose_y = _cy + int(0.13 * _r)
-        _draw.polygon(
-            [(_cx, _nose_y), (_cx - int(0.13 * _r), _nose_y + int(0.15 * _r)), (_cx + int(0.13 * _r), _nose_y + int(0.15 * _r))],
-            fill=(234, 150, 165),
-            outline=(120, 74, 86),
-        )
+    for _offset in [-1, 0, 1]:
+        _dy = _offset * int(0.13 * _r)
         _draw.line(
-            [(_cx, _nose_y + int(0.15 * _r)), (_cx, _cy + int(0.48 * _r))],
+            [(_cx - int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx - int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
             fill=(88, 67, 54),
             width=2,
         )
-        _draw.arc(
-            [(_cx - int(0.24 * _r), _cy + int(0.38 * _r)), (_cx, _cy + int(0.62 * _r))],
-            start=200,
-            end=340,
+        _draw.line(
+            [(_cx + int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
             fill=(88, 67, 54),
             width=2,
         )
-        _draw.arc(
-            [(_cx, _cy + int(0.38 * _r)), (_cx + int(0.24 * _r), _cy + int(0.62 * _r))],
-            start=200,
-            end=340,
-            fill=(88, 67, 54),
-            width=2,
-        )
-        _draw.ellipse(
-            [(_cx - int(0.70 * _r), _cy + int(0.16 * _r)), (_cx - int(0.44 * _r), _cy + int(0.36 * _r))],
-            fill=(247, 178, 186),
-            outline=None,
-        )
-        _draw.ellipse(
-            [(_cx + int(0.44 * _r), _cy + int(0.16 * _r)), (_cx + int(0.70 * _r), _cy + int(0.36 * _r))],
-            fill=(247, 178, 186),
-            outline=None,
-        )
-        _draw.line(
-            [(_cx, _cy - int(0.34 * _r)), (_cx - int(0.11 * _r), _cy - int(0.48 * _r))],
-            fill=(187, 151, 118),
-            width=2,
-        )
-        _draw.line(
-            [(_cx, _cy - int(0.34 * _r)), (_cx + int(0.11 * _r), _cy - int(0.48 * _r))],
-            fill=(187, 151, 118),
-            width=2,
-        )
 
-        for _offset in [-1, 0, 1]:
-            _dy = _offset * int(0.13 * _r)
-            _draw.line(
-                [(_cx - int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx - int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
-                fill=(88, 67, 54),
-                width=2,
-            )
-            _draw.line(
-                [(_cx + int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + int(0.95 * _r), _cy + int(0.13 * _r) + _dy)],
-                fill=(88, 67, 54),
-                width=2,
-            )
+    _arr = np.asarray(_img, dtype=np.float32) / 255.0
+    _rank = int(min(image_demo_rank.value, _arr.shape[0], _arr.shape[1]))
+    _reconstructed = np.zeros_like(_arr)
+    _factors = []
 
-        _arr = _np.asarray(_img, dtype=_np.float32) / 255.0
-        _rank = int(min(image_demo_rank.value, _arr.shape[0], _arr.shape[1]))
-        _reconstructed = _np.zeros_like(_arr)
-        _factors = []
+    for _channel_idx in range(3):
+        _channel = _arr[:, :, _channel_idx]
+        _u, _s, _vt = np.linalg.svd(_channel, full_matrices=False)
+        _ur = _u[:, :_rank]
+        _sr = _s[:_rank]
+        _vtr = _vt[:_rank, :]
+        _reconstructed[:, :, _channel_idx] = (_ur * _sr) @ _vtr
+        _factors.append((_ur.astype(np.float32), _sr.astype(np.float32), _vtr.astype(np.float32)))
 
-        for _channel_idx in range(3):
-            _channel = _arr[:, :, _channel_idx]
-            _u, _s, _vt = _np.linalg.svd(_channel, full_matrices=False)
-            _ur = _u[:, :_rank]
-            _sr = _s[:_rank]
-            _vtr = _vt[:_rank, :]
-            _reconstructed[:, :, _channel_idx] = (_ur * _sr) @ _vtr
-            _factors.append((_ur.astype(_np.float32), _sr.astype(_np.float32), _vtr.astype(_np.float32)))
+    _reconstructed = np.clip(_reconstructed, 0.0, 1.0)
+    _mse = float(np.mean((_arr - _reconstructed) ** 2))
+    _psnr = float("inf") if _mse <= 1e-12 else 10.0 * math.log10(1.0 / _mse)
 
-        _reconstructed = _np.clip(_reconstructed, 0.0, 1.0)
-        _mse = float(_np.mean((_arr - _reconstructed) ** 2))
-        _psnr = float("inf") if _mse <= 1e-12 else 10.0 * math.log10(1.0 / _mse)
+    _ref_uint8 = (_arr * 255.0).astype(np.uint8)
+    _rec_uint8 = (_reconstructed * 255.0).astype(np.uint8)
+    _ref_img = Image.fromarray(_ref_uint8)
+    _rec_img = Image.fromarray(_rec_uint8)
 
-        _ref_uint8 = (_arr * 255.0).astype(_np.uint8)
-        _rec_uint8 = (_reconstructed * 255.0).astype(_np.uint8)
-        _ref_img = _pil_image.fromarray(_ref_uint8)
-        _rec_img = _pil_image.fromarray(_rec_uint8)
+    _ref_buf = io.BytesIO()
+    _ref_img.save(_ref_buf, format="PNG", optimize=True)
+    _ref_bytes = _ref_buf.getvalue()
 
-        _ref_buf = io.BytesIO()
-        _ref_img.save(_ref_buf, format="PNG", optimize=True)
-        _ref_bytes = _ref_buf.getvalue()
+    _rec_buf = io.BytesIO()
+    _rec_img.save(_rec_buf, format="PNG", optimize=True)
+    _rec_bytes = _rec_buf.getvalue()
 
-        _rec_buf = io.BytesIO()
-        _rec_img.save(_rec_buf, format="PNG", optimize=True)
-        _rec_bytes = _rec_buf.getvalue()
+    _raw_rgb_bytes = _arr.shape[0] * _arr.shape[1] * 3
 
-        _raw_rgb_bytes = _arr.shape[0] * _arr.shape[1] * 3
+    _comparison_images = mo.hstack(
+        [
+            mo.image(
+                src=_ref_bytes,
+                width="100%",
+                caption="Reference cat image (display preview)",
+            ),
+            mo.image(
+                src=_rec_bytes,
+                width="100%",
+                caption=(f"PCA reconstruction (k={_rank}, display preview)"),
+            ),
+        ],
+        widths="equal",
+        gap=0.8,
+    )
+    _payload16 = {}
+    for _channel_idx, (_ur, _sr, _vtr) in enumerate(_factors):
+        _payload16[f"u{_channel_idx}"] = _ur.astype(np.float16)
+        _payload16[f"s{_channel_idx}"] = _sr.astype(np.float16)
+        _payload16[f"vt{_channel_idx}"] = _vtr.astype(np.float16)
 
-        _comparison_images = mo.hstack(
-            [
-                mo.image(
-                    src=_ref_bytes,
-                    width="100%",
-                    caption="Reference cat image (display preview)",
-                ),
-                mo.image(
-                    src=_rec_bytes,
-                    width="100%",
-                    caption=(f"PCA reconstruction (k={_rank}, display preview)"),
-                ),
-            ],
-            widths="equal",
-            gap=0.8,
-        )
-        _payload16 = {}
-        for _channel_idx, (_ur, _sr, _vtr) in enumerate(_factors):
-            _payload16[f"u{_channel_idx}"] = _ur.astype(_np.float16)
-            _payload16[f"s{_channel_idx}"] = _sr.astype(_np.float16)
-            _payload16[f"vt{_channel_idx}"] = _vtr.astype(_np.float16)
+    _npz16_buf = io.BytesIO()
+    np.savez_compressed(_npz16_buf, **_payload16)
+    _pca_npz16_bytes = len(_npz16_buf.getvalue())
+    _pca_ratio = _pca_npz16_bytes / max(1, _raw_rgb_bytes)
+    _psnr_display = "infinite" if _psnr == float("inf") else round(_psnr, 2)
 
-        _npz16_buf = io.BytesIO()
-        _np.savez_compressed(_npz16_buf, **_payload16)
-        _pca_npz16_bytes = len(_npz16_buf.getvalue())
-        _pca_ratio = _pca_npz16_bytes / max(1, _raw_rgb_bytes)
-        _psnr_display = "infinite" if _psnr == float("inf") else round(_psnr, 2)
+    # The same image, squeezed losslessly, so the two kinds sit in one table.
+    _orig_u8 = (_arr * 255.0).astype(np.uint8)
+    _gz_bytes = gzip.compress(_orig_u8.tobytes(), 6)
+    _gz_back = np.frombuffer(gzip.decompress(_gz_bytes), dtype=np.uint8).reshape(_orig_u8.shape)
+    _gz_identical = bool(np.array_equal(_gz_back, _orig_u8))
+    _pca_worst = int(np.max(np.abs(_rec_uint8.astype(int) - _orig_u8.astype(int))))
 
-        # The same image, squeezed losslessly, so the two kinds sit in one table.
-        _orig_u8 = (_arr * 255.0).astype(_np.uint8)
-        _gz_bytes = gzip.compress(_orig_u8.tobytes(), 6)
-        _gz_back = _np.frombuffer(gzip.decompress(_gz_bytes), dtype=_np.uint8).reshape(_orig_u8.shape)
-        _gz_identical = bool(_np.array_equal(_gz_back, _orig_u8))
-        _pca_worst = int(_np.max(_np.abs(_rec_uint8.astype(int) - _orig_u8.astype(int))))
-
-        _comparison_table = mo.ui.table(
-            [
-                {
-                    "method": "gzip (lossless)",
-                    "bytes": len(_gz_bytes),
-                    "ratio (compressed/raw)": round(len(_gz_bytes) / max(1, _raw_rgb_bytes), 4),
-                    "identical to the original?": "yes" if _gz_identical else "no",
-                    "worst pixel off by (of 255)": 0,
-                },
-                {
-                    "method": f"PCA k={_rank} (lossy)",
-                    "bytes": _pca_npz16_bytes,
-                    "ratio (compressed/raw)": round(_pca_ratio, 4),
-                    "identical to the original?": "no",
-                    "worst pixel off by (of 255)": _pca_worst,
-                },
-            ],
-            label=f"Same {_raw_rgb_bytes:,}-byte image, two kinds of compression",
-        )
-        _comparison_note = mo.md(
-            """
+    _comparison_table = mo.ui.table(
+        [
+            {
+                "method": "gzip (lossless)",
+                "bytes": len(_gz_bytes),
+                "ratio (compressed/raw)": round(len(_gz_bytes) / max(1, _raw_rgb_bytes), 4),
+                "identical to the original?": "yes" if _gz_identical else "no",
+                "worst pixel off by (of 255)": 0,
+            },
+            {
+                "method": f"PCA k={_rank} (lossy)",
+                "bytes": _pca_npz16_bytes,
+                "ratio (compressed/raw)": round(_pca_ratio, 4),
+                "identical to the original?": "no",
+                "worst pixel off by (of 255)": _pca_worst,
+            },
+        ],
+        label=f"Same {_raw_rgb_bytes:,}-byte image, two kinds of compression",
+    )
+    _comparison_note = mo.md(
+        """
     **Two different promises, and confusing them is expensive.**
 
     **Lossless** is a photocopy shrunk to fit A5. Every word is still there; enlarge it and you
@@ -3079,9 +3062,9 @@ def _(gzip, image_demo_rank, image_demo_width, io, math, mo, optional_import):
     lossless method wins, because a smooth drawing repeats itself enormously and repetition is
     exactly what lossless compression removes.
             """
-        ).callout(kind="info")
-        _pipeline = mo.md(
-            """
+    ).callout(kind="info")
+    _pipeline = mo.md(
+        """
     <div class="section-card flow-card">
       <div class="flow-diagram">
         <div class="flow-box">Reference image matrix</div>
@@ -3092,9 +3075,9 @@ def _(gzip, image_demo_rank, image_demo_width, io, math, mo, optional_import):
       </div>
     </div>
                 """
-        )
+    )
 
-        _output = mo.vstack([_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6)
+    _output = mo.vstack([_pipeline, _comparison_images, _comparison_table, _comparison_note], gap=0.6)
 
     _output
     return
@@ -3123,55 +3106,51 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, optional_import, run_lossy_money, tempfile):
+def _(Path, SALES_SEED, mo, pd, run_lossy_money, tempfile):
     if run_lossy_money.value == 0:
         _output = mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral")
     else:
-        _pd = optional_import("pandas")
-        if _pd is None or not SALES_SEED.exists():
-            _output = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
-        else:
-            _src = _pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
-            _truth = round(float(_src["total_price"].sum()), 2)
+        _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
+        _truth = round(float(_src["total_price"].sum()), 2)
 
-            with tempfile.TemporaryDirectory() as _td:
-                _dir = Path(_td)
+        with tempfile.TemporaryDirectory() as _td:
+            _dir = Path(_td)
 
-                def _store(_frame, _name, **_kw):
-                    _path = _dir / _name
-                    _frame.to_parquet(_path, index=False, **_kw)
-                    _back = _pd.read_parquet(_path)
-                    return _path.stat().st_size, round(float(_back["total_price"].sum()), 2)
+            def _store(_frame, _name, **_kw):
+                _path = _dir / _name
+                _frame.to_parquet(_path, index=False, **_kw)
+                _back = pd.read_parquet(_path)
+                return _path.stat().st_size, round(float(_back["total_price"].sum()), 2)
 
-                _rows = []
-                for _label, _frame, _kw in (
-                    ("exact", _src, {}),
-                    ("exact + gzip", _src, {"compression": "gzip"}),
-                ):
-                    _bytes, _total = _store(_frame, f"{_label}.parquet", **_kw)
-                    _rows.append(
-                        {
-                            "how the prices are stored": f"{_label} (lossless)",
-                            "bytes": _bytes,
-                            "total revenue it reports": _total,
-                            "off by": round(_total - _truth, 2),
-                        }
-                    )
-                for _digits, _label in ((0, "rounded to the franc"), (-1, "rounded to 10 francs"), (-2, "rounded to 100 francs")):
-                    _lossy = _src.copy()
-                    _lossy["total_price"] = _lossy["total_price"].round(_digits)
-                    _bytes, _total = _store(_lossy, f"lossy{_digits}.parquet", compression="gzip")
-                    _rows.append(
-                        {
-                            "how the prices are stored": f"{_label} (lossy)",
-                            "bytes": _bytes,
-                            "total revenue it reports": _total,
-                            "off by": round(_total - _truth, 2),
-                        }
-                    )
+            _rows = []
+            for _label, _frame, _kw in (
+                ("exact", _src, {}),
+                ("exact + gzip", _src, {"compression": "gzip"}),
+            ):
+                _bytes, _total = _store(_frame, f"{_label}.parquet", **_kw)
+                _rows.append(
+                    {
+                        "how the prices are stored": f"{_label} (lossless)",
+                        "bytes": _bytes,
+                        "total revenue it reports": _total,
+                        "off by": round(_total - _truth, 2),
+                    }
+                )
+            for _digits, _label in ((0, "rounded to the franc"), (-1, "rounded to 10 francs"), (-2, "rounded to 100 francs")):
+                _lossy = _src.copy()
+                _lossy["total_price"] = _lossy["total_price"].round(_digits)
+                _bytes, _total = _store(_lossy, f"lossy{_digits}.parquet", compression="gzip")
+                _rows.append(
+                    {
+                        "how the prices are stored": f"{_label} (lossy)",
+                        "bytes": _bytes,
+                        "total revenue it reports": _total,
+                        "off by": round(_total - _truth, 2),
+                    }
+                )
 
-            _note = mo.md(
-                f"""
+        _note = mo.md(
+            f"""
     **The lossy files really are smaller.** Rounding to the nearest 100 francs saves roughly 40%
     of the bytes, which is a bigger win than gzip managed on the exact data.
 
@@ -3188,10 +3167,10 @@ def _(Path, SALES_SEED, mo, optional_import, run_lossy_money, tempfile):
     whether an approximation of this particular value is still the truth you need.** For a photo,
     usually yes. For money, an identifier or a date, never.
                 """
-            ).callout(kind="danger")
-            _output = mo.vstack(
-                [mo.ui.table(_rows, label="Same 3,360 prices, stored five ways"), _note], gap=0.6
-            )
+        ).callout(kind="danger")
+        _output = mo.vstack(
+            [mo.ui.table(_rows, label="Same 3,360 prices, stored five ways"), _note], gap=0.6
+        )
     _output
     return
 
@@ -3221,7 +3200,8 @@ def _(
     gzip,
     json,
     mo,
-    optional_import,
+    pa,
+    pq,
     random,
     run_compress,
     tempfile,
@@ -3288,23 +3268,20 @@ def _(
                         }
                     )
 
-            _pyarrow = optional_import("pyarrow")
-            _parquet = optional_import("pyarrow.parquet")
-            if _pyarrow and _parquet:
-                table = _pyarrow.Table.from_pylist(_records)
-                for codec in ["snappy", "gzip", "zstd", "brotli"]:
-                    parquet_path = _tmpdir / f"data_{codec}.parquet"
-                    try:
-                        _parquet.write_table(table, parquet_path, compression=codec)
-                    except Exception:
-                        continue
-                    _results.append(
-                        {
-                            "format": f"Parquet ({codec})",
-                            "size (bytes)": parquet_path.stat().st_size,
-                            "ratio vs JSON": round(parquet_path.stat().st_size / baseline, 4),
-                        }
-                    )
+            table = pa.Table.from_pylist(_records)
+            for codec in ["snappy", "gzip", "zstd", "brotli"]:
+                parquet_path = _tmpdir / f"data_{codec}.parquet"
+                try:
+                    pq.write_table(table, parquet_path, compression=codec)
+                except Exception:
+                    continue
+                _results.append(
+                    {
+                        "format": f"Parquet ({codec})",
+                        "size (bytes)": parquet_path.stat().st_size,
+                        "ratio vs JSON": round(parquet_path.stat().st_size / baseline, 4),
+                    }
+                )
 
         _table = mo.ui.table(_results, label="Compression ratios (baseline: JSON size)")
         _note = mo.md(
@@ -3360,58 +3337,54 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, gzip, io, mo, optional_import, run_ctime, time):
+def _(SALES_SEED, gzip, io, mo, pd, run_ctime, time):
     if run_ctime.value == 0:
         _output = mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral")
     else:
-        _pd = optional_import("pandas")
-        if _pd is None or not SALES_SEED.exists():
-            _output = mo.md("Needs `pandas` and `data/seed/sales.parquet`.").callout(kind="warn")
-        else:
-            _raw = _pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
+        _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
-            def _best(_fn, _n=7):
-                _times = []
-                for _ in range(_n):
-                    _t0 = time.perf_counter()
-                    _fn()
-                    _times.append(time.perf_counter() - _t0)
-                return min(_times)
-
-            def _answer(_blob, _gzipped):
-                _data = gzip.decompress(_blob) if _gzipped else _blob
-                return _pd.read_csv(io.BytesIO(_data))["total_price"].sum()
-
-            _plain_time = _best(lambda: _answer(_raw, False))
-            _rows = [
-                {
-                    "variant": "plain CSV",
-                    "bytes": len(_raw),
-                    "read + parse + sum (ms)": round(_plain_time * 1000, 2),
-                    "vs plain": "1.00x",
-                    "compress (ms)": "-",
-                    "decompress (ms)": "-",
-                }
-            ]
-            for _level in (1, 6, 9):
+        def _best(_fn, _n=7):
+            _times = []
+            for _ in range(_n):
                 _t0 = time.perf_counter()
-                _blob = gzip.compress(_raw, _level)
-                _ctime = time.perf_counter() - _t0
-                _rtime = _best(lambda _b=_blob: _answer(_b, True))
-                _dtime = _best(lambda _b=_blob: gzip.decompress(_b))
-                _rows.append(
-                    {
-                        "variant": f"gzip level {_level}",
-                        "bytes": len(_blob),
-                        "read + parse + sum (ms)": round(_rtime * 1000, 2),
-                        "vs plain": f"{_rtime / _plain_time:.2f}x",
-                        "compress (ms)": round(_ctime * 1000, 2),
-                        "decompress (ms)": round(_dtime * 1000, 2),
-                    }
-                )
+                _fn()
+                _times.append(time.perf_counter() - _t0)
+            return min(_times)
 
-            _note = mo.md(
-                """
+        def _answer(_blob, _gzipped):
+            _data = gzip.decompress(_blob) if _gzipped else _blob
+            return pd.read_csv(io.BytesIO(_data))["total_price"].sum()
+
+        _plain_time = _best(lambda: _answer(_raw, False))
+        _rows = [
+            {
+                "variant": "plain CSV",
+                "bytes": len(_raw),
+                "read + parse + sum (ms)": round(_plain_time * 1000, 2),
+                "vs plain": "1.00x",
+                "compress (ms)": "-",
+                "decompress (ms)": "-",
+            }
+        ]
+        for _level in (1, 6, 9):
+            _t0 = time.perf_counter()
+            _blob = gzip.compress(_raw, _level)
+            _ctime = time.perf_counter() - _t0
+            _rtime = _best(lambda _b=_blob: _answer(_b, True))
+            _dtime = _best(lambda _b=_blob: gzip.decompress(_b))
+            _rows.append(
+                {
+                    "variant": f"gzip level {_level}",
+                    "bytes": len(_blob),
+                    "read + parse + sum (ms)": round(_rtime * 1000, 2),
+                    "vs plain": f"{_rtime / _plain_time:.2f}x",
+                    "compress (ms)": round(_ctime * 1000, 2),
+                    "decompress (ms)": round(_dtime * 1000, 2),
+                }
+            )
+
+        _note = mo.md(
+            """
     **The answer is no, not here.** The gzipped file is roughly a third of the size and takes
     *longer* to answer the same question.
 
@@ -3425,11 +3398,11 @@ def _(SALES_SEED, gzip, io, mo, optional_import, run_ctime, time):
     twice the CPU to find them. Decompression costs about the same at every level, so **the
     level you pick is a decision about writing, not reading.**
                 """
-            ).callout(kind="warn")
-            _output = mo.vstack(
-                [mo.ui.table(_rows, label="Same question, four ways to store the file"), _note],
-                gap=0.6,
-            )
+        ).callout(kind="warn")
+        _output = mo.vstack(
+            [mo.ui.table(_rows, label="Same question, four ways to store the file"), _note],
+            gap=0.6,
+        )
     _output
     return
 
@@ -3723,9 +3696,11 @@ def _(
     duck_rows,
     duck_storage,
     duck_threshold,
+    duckdb,
     format_ms,
     mo,
-    optional_import,
+    pa,
+    pq,
     random,
     run_duck,
     tempfile,
@@ -3734,121 +3709,110 @@ def _(
     if run_duck.value == 0:
         _output = mo.md("Click **Run DuckDB demo** to execute.").callout(kind="neutral")
     else:
-        _duckdb = optional_import("duckdb")
-        if not _duckdb:
-            _output = mo.md("DuckDB is not installed. Install with `pip install duckdb` to run this demo.").callout(kind="warn")
-        else:
-            _rng = random.Random(33 + run_duck.value)
-            _records = []
-            for _idx in range(duck_rows.value):
-                _records.append(
-                    {
-                        "order_id": _idx,
-                        "region": _rng.choice(["EU", "US", "APAC"]),
-                        "segment": _rng.choice(["consumer", "enterprise", "startup"]),
-                        "amount": round(_rng.random() * 1000, 2),
-                        "day": _rng.randint(1, 30),
-                    }
-                )
+        _rng = random.Random(33 + run_duck.value)
+        _records = []
+        for _idx in range(duck_rows.value):
+            _records.append(
+                {
+                    "order_id": _idx,
+                    "region": _rng.choice(["EU", "US", "APAC"]),
+                    "segment": _rng.choice(["consumer", "enterprise", "startup"]),
+                    "amount": round(_rng.random() * 1000, 2),
+                    "day": _rng.randint(1, 30),
+                }
+            )
 
-            _pyarrow = optional_import("pyarrow")
-            _parquet = optional_import("pyarrow.parquet")
+        with tempfile.TemporaryDirectory() as _tmpdir:
+            _tmpdir = Path(_tmpdir)
+            _csv_path = _tmpdir / "orders.csv"
+            with _csv_path.open("w", newline="", encoding="utf-8") as _f:
+                _writer = csv.DictWriter(_f, fieldnames=["order_id", "region", "segment", "amount", "day"])
+                _writer.writeheader()
+                _writer.writerows(_records)
 
-            with tempfile.TemporaryDirectory() as _tmpdir:
-                _tmpdir = Path(_tmpdir)
-                _csv_path = _tmpdir / "orders.csv"
-                with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                    _writer = csv.DictWriter(_f, fieldnames=["order_id", "region", "segment", "amount", "day"])
-                    _writer.writeheader()
-                    _writer.writerows(_records)
+            _parquet_path = _tmpdir / "orders.parquet"
+            _table = pa.Table.from_pylist(_records)
+            pq.write_table(_table, _parquet_path)
 
-                _parquet_path = None
-                if _pyarrow and _parquet:
-                    _parquet_path = _tmpdir / "orders.parquet"
-                    _table = _pyarrow.Table.from_pylist(_records)
-                    _parquet.write_table(_table, _parquet_path)
+            _db_path = _tmpdir / "analytics.duckdb"
+            _con = duckdb.connect(str(_db_path))
 
-                _db_path = _tmpdir / "analytics.duckdb"
-                _con = _duckdb.connect(str(_db_path))
+            _ingest_time = None
+            if duck_storage.value != "CSV scan":
+                _ingest_start = time.perf_counter()
+                if duck_storage.value.startswith("Parquet"):
+                    _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')")
+                else:
+                    _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')")
+                _ingest_time = time.perf_counter() - _ingest_start
 
-                _ingest_time = None
-                if duck_storage.value != "CSV scan":
-                    _ingest_start = time.perf_counter()
-                    if duck_storage.value.startswith("Parquet") and _parquet_path:
-                        _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')")
-                    else:
-                        _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')")
-                    _ingest_time = time.perf_counter() - _ingest_start
+            _threshold = duck_threshold.value
+            _query = "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount " f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
 
-                _threshold = duck_threshold.value
-                _query = "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount " f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
+            _timings = []
+            _result_rows = None
 
-                _timings = []
-                _result_rows = None
+            # 1) CSV scan
+            _start = time.perf_counter()
+            _csv_result = _con.execute(_query.format(source=f"read_csv_auto('{_csv_path}')")).fetchall()
+            _timings.append(
+                {
+                    "source": "CSV scan",
+                    "query_ms": round((time.perf_counter() - _start) * 1000, 2),
+                }
+            )
 
-                # 1) CSV scan
+            # 2) Parquet scan
+            _start = time.perf_counter()
+            _pq_result = _con.execute(_query.format(source=f"read_parquet('{_parquet_path}')")).fetchall()
+            _timings.append(
+                {
+                    "source": "Parquet scan",
+                    "query_ms": round((time.perf_counter() - _start) * 1000, 2),
+                }
+            )
+
+            # 3) DuckDB table query
+            if duck_storage.value != "CSV scan":
                 _start = time.perf_counter()
-                _csv_result = _con.execute(_query.format(source=f"read_csv_auto('{_csv_path}')")).fetchall()
+                _tbl_result = _con.execute(_query.format(source="orders")).fetchall()
                 _timings.append(
                     {
-                        "source": "CSV scan",
+                        "source": "DuckDB table",
                         "query_ms": round((time.perf_counter() - _start) * 1000, 2),
                     }
                 )
+                _result_rows = _tbl_result
+            else:
+                _result_rows = _csv_result
 
-                # 2) Parquet scan (optional)
-                if _parquet_path:
-                    _start = time.perf_counter()
-                    _pq_result = _con.execute(_query.format(source=f"read_parquet('{_parquet_path}')")).fetchall()
-                    _timings.append(
-                        {
-                            "source": "Parquet scan",
-                            "query_ms": round((time.perf_counter() - _start) * 1000, 2),
-                        }
-                    )
+            _con.close()
 
-                # 3) DuckDB table query
-                if duck_storage.value != "CSV scan":
-                    _start = time.perf_counter()
-                    _tbl_result = _con.execute(_query.format(source="orders")).fetchall()
-                    _timings.append(
-                        {
-                            "source": "DuckDB table",
-                            "query_ms": round((time.perf_counter() - _start) * 1000, 2),
-                        }
-                    )
-                    _result_rows = _tbl_result
-                else:
-                    _result_rows = _csv_result
-
-                _con.close()
-
-                _sizes = [
-                    {"file": "orders.csv", "size (bytes)": _csv_path.stat().st_size},
-                    {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
-                ]
-                if _parquet_path:
-                    _sizes.append({"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size})
-
-            _results_table = [
-                {
-                    "region": row[0],
-                    "orders": row[1],
-                    "avg_amount": round(row[2], 2),
-                }
-                for row in (_result_rows or [])
+            _sizes = [
+                {"file": "orders.csv", "size (bytes)": _csv_path.stat().st_size},
+                {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
             ]
+            _sizes.append({"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size})
 
-            _sizes_table = mo.ui.table(_sizes, label="File sizes")
-            _timing_table = mo.ui.table(_timings, label="Query timing (ms)")
-            _results_panel = mo.ui.table(_results_table, label="Query results")
+        _results_table = [
+            {
+                "region": row[0],
+                "orders": row[1],
+                "avg_amount": round(row[2], 2),
+            }
+            for row in (_result_rows or [])
+        ]
 
-            _notes = []
-            if _ingest_time is not None:
-                _notes.append(mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**"))
-            _notes.append(mo.md("DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans.").callout(kind="info"))
+        _sizes_table = mo.ui.table(_sizes, label="File sizes")
+        _timing_table = mo.ui.table(_timings, label="Query timing (ms)")
+        _results_panel = mo.ui.table(_results_table, label="Query results")
 
-            _output = mo.vstack([_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6)
+        _notes = []
+        if _ingest_time is not None:
+            _notes.append(mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**"))
+        _notes.append(mo.md("DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans.").callout(kind="info"))
+
+        _output = mo.vstack([_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6)
 
     _output
     return
@@ -4073,45 +4037,40 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, optional_import, random, run_schema, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
     if run_schema.value == 0:
         _output = mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral")
     else:
-        _pd = optional_import("pandas")
-        _duckdb = optional_import("duckdb")
-        if _pd is None or _duckdb is None or not SALES_SEED.exists():
-            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
-        else:
-            _src = _pd.read_parquet(SALES_SEED).head(400).copy()
-            _src["sale_date"] = _pd.to_datetime(_src["sale_date"]).dt.date
-            _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype(
-                {"total_price": str}
-            )
-            _rng = random.Random(5)
-            _dirty_values = ["", "1 234,50", "EUR 900", "n/a"]
-            _prices = _export["total_price"].tolist()
-            for _k, _row in enumerate(_rng.sample(range(len(_prices)), 20)):
-                _prices[_row] = _dirty_values[_k % 4]
-            _export["total_price"] = _prices
+        _src = pd.read_parquet(SALES_SEED).head(400).copy()
+        _src["sale_date"] = pd.to_datetime(_src["sale_date"]).dt.date
+        _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype(
+            {"total_price": str}
+        )
+        _rng = random.Random(5)
+        _dirty_values = ["", "1 234,50", "EUR 900", "n/a"]
+        _prices = _export["total_price"].tolist()
+        for _k, _row in enumerate(_rng.sample(range(len(_prices)), 20)):
+            _prices[_row] = _dirty_values[_k % 4]
+        _export["total_price"] = _prices
 
-            with tempfile.TemporaryDirectory() as _td:
-                _csv = Path(_td) / "sales_export.csv"
-                _export.to_csv(_csv, index=False)
-                _url = _csv.as_posix()
-                _con = _duckdb.connect()
+        with tempfile.TemporaryDirectory() as _td:
+            _csv = Path(_td) / "sales_export.csv"
+            _export.to_csv(_csv, index=False)
+            _url = _csv.as_posix()
+            _con = duckdb.connect()
 
-                # Lane 1: let DuckDB guess the types, then do what a student would do next.
-                _described = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_url}')").df()
-                _inferred = _described.set_index("column_name").loc["total_price", "column_type"]
-                _counts = _con.execute(
-                    "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
-                    "round(sum(TRY_CAST(total_price AS DOUBLE)), 2) "
-                    f"FROM read_csv_auto('{_url}')"
-                ).fetchone()
+            # Lane 1: let DuckDB guess the types, then do what a student would do next.
+            _described = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_url}')").df()
+            _inferred = _described.set_index("column_name").loc["total_price", "column_type"]
+            _counts = _con.execute(
+                "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
+                "round(sum(TRY_CAST(total_price AS DOUBLE)), 2) "
+                f"FROM read_csv_auto('{_url}')"
+            ).fetchone()
 
-                # Lane 2: declare the form first, with its rules, then try to load into it.
-                _con.execute(
-                    """
+            # Lane 2: declare the form first, with its rules, then try to load into it.
+            _con.execute(
+                """
                     CREATE TABLE sales_clean (
                         sale_id     INTEGER PRIMARY KEY,
                         sale_date   DATE    NOT NULL,
@@ -4120,34 +4079,34 @@ def _(Path, SALES_SEED, mo, optional_import, random, run_schema, tempfile):
                         total_price DOUBLE  NOT NULL CHECK (total_price > 0)
                     )
                     """
-                )
-                try:
-                    _con.execute(f"INSERT INTO sales_clean SELECT * FROM read_csv_auto('{_url}')")
-                    _write_result = "loaded without complaint"
-                except Exception as _exc:
-                    _write_result = f"{type(_exc).__name__}: {str(_exc).splitlines()[0]}"
-                _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
+            )
+            try:
+                _con.execute(f"INSERT INTO sales_clean SELECT * FROM read_csv_auto('{_url}')")
+                _write_result = "loaded without complaint"
+            except Exception as _exc:
+                _write_result = f"{type(_exc).__name__}: {str(_exc).splitlines()[0]}"
+            _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
 
-            _rows = [
-                {
-                    "lane": "schema-on-read (guess the types)",
-                    "type of total_price": str(_inferred),
-                    "rows in the file": _counts[0],
-                    "rows that reached the answer": _counts[1],
-                    "what you are told": "nothing at all",
-                    "revenue reported": _counts[2],
-                },
-                {
-                    "lane": "schema-on-write (declare, then load)",
-                    "type of total_price": "DOUBLE NOT NULL CHECK (> 0)",
-                    "rows in the file": _counts[0],
-                    "rows that reached the answer": _loaded,
-                    "what you are told": _write_result[:90],
-                    "revenue reported": "none, the load stopped",
-                },
-            ]
-            _note = mo.md(
-                f"""
+        _rows = [
+            {
+                "lane": "schema-on-read (guess the types)",
+                "type of total_price": str(_inferred),
+                "rows in the file": _counts[0],
+                "rows that reached the answer": _counts[1],
+                "what you are told": "nothing at all",
+                "revenue reported": _counts[2],
+            },
+            {
+                "lane": "schema-on-write (declare, then load)",
+                "type of total_price": "DOUBLE NOT NULL CHECK (> 0)",
+                "rows in the file": _counts[0],
+                "rows that reached the answer": _loaded,
+                "what you are told": _write_result[:90],
+                "revenue reported": "none, the load stopped",
+            },
+        ]
+        _note = mo.md(
+            f"""
     **Same file. Same 20 bad values. Two completely different days at work.**
 
     Schema-on-read gave you a number, and it is wrong. {_counts[0] - _counts[1]} of {_counts[0]}
@@ -4162,10 +4121,10 @@ def _(Path, SALES_SEED, mo, optional_import, random, run_schema, tempfile):
     Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you
     have just been handed. Schema-on-write is right for anything a decision rests on.
                 """
-            ).callout(kind="warn")
-            _output = mo.vstack(
-                [mo.ui.table(_rows, label="One messy export, two lanes"), _note], gap=0.6
-            )
+        ).callout(kind="warn")
+        _output = mo.vstack(
+            [mo.ui.table(_rows, label="One messy export, two lanes"), _note], gap=0.6
+        )
     _output
     return
 
@@ -4191,60 +4150,55 @@ def _(mo):
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, optional_import, run_evolution, tempfile):
+def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
     if run_evolution.value == 0:
         _output = mo.md("Click **Run schema evolution demo** to ask the same question three ways.").callout(kind="neutral")
     else:
-        _pd = optional_import("pandas")
-        _duckdb = optional_import("duckdb")
-        if _pd is None or _duckdb is None or not SALES_SEED.exists():
-            _output = mo.md("Needs `pandas`, `duckdb` and `data/seed/sales.parquet`.").callout(kind="warn")
-        else:
-            _all = _pd.read_parquet(SALES_SEED)
-            _all["sale_date"] = _pd.to_datetime(_all["sale_date"])
-            _old = _all[_all["sale_date"] < "2025-01-01"].drop(columns=["customer_rating"])
-            _new = _all[_all["sale_date"] >= "2025-01-01"]
+        _all = pd.read_parquet(SALES_SEED)
+        _all["sale_date"] = pd.to_datetime(_all["sale_date"])
+        _old = _all[_all["sale_date"] < "2025-01-01"].drop(columns=["customer_rating"])
+        _new = _all[_all["sale_date"] >= "2025-01-01"]
 
-            with tempfile.TemporaryDirectory() as _td:
-                _dir = Path(_td)
-                _f2024 = _dir / "sales_2024.parquet"
-                _f2025 = _dir / "sales_2025.parquet"
-                _old.to_parquet(_f2024, index=False)
-                _new.to_parquet(_f2025, index=False)
-                _con = _duckdb.connect()
-                _question = "SELECT count(*) AS rows, round(avg(customer_rating), 3) AS avg_rating FROM "
+        with tempfile.TemporaryDirectory() as _td:
+            _dir = Path(_td)
+            _f2024 = _dir / "sales_2024.parquet"
+            _f2025 = _dir / "sales_2025.parquet"
+            _old.to_parquet(_f2024, index=False)
+            _new.to_parquet(_f2025, index=False)
+            _con = duckdb.connect()
+            _question = "SELECT count(*) AS rows, round(avg(customer_rating), 3) AS avg_rating FROM "
 
-                def _try(_from_clause):
-                    try:
-                        _r = _con.execute(_question + _from_clause).fetchone()
-                        return f"rows {_r[0]}, average rating {_r[1]}"
-                    except Exception as _exc:
-                        return f"{type(_exc).__name__}: {str(_exc).splitlines()[0][:95]}"
+            def _try(_from_clause):
+                try:
+                    _r = _con.execute(_question + _from_clause).fetchone()
+                    return f"rows {_r[0]}, average rating {_r[1]}"
+                except Exception as _exc:
+                    return f"{type(_exc).__name__}: {str(_exc).splitlines()[0][:95]}"
 
-                _list_old_first = f"read_parquet(['{_f2024.as_posix()}', '{_f2025.as_posix()}'])"
-                _list_new_first = f"read_parquet(['{_f2025.as_posix()}', '{_f2024.as_posix()}'])"
-                _by_name = f"read_parquet('{(_dir / 'sales_*.parquet').as_posix()}', union_by_name=true)"
+            _list_old_first = f"read_parquet(['{_f2024.as_posix()}', '{_f2025.as_posix()}'])"
+            _list_new_first = f"read_parquet(['{_f2025.as_posix()}', '{_f2024.as_posix()}'])"
+            _by_name = f"read_parquet('{(_dir / 'sales_*.parquet').as_posix()}', union_by_name=true)"
 
-                _rows = [
-                    {
-                        "how you read the folder": "old file first",
-                        "what happens": _try(_list_old_first),
-                        "why": "the first file sets the shape, so the newer column is simply not there",
-                    },
-                    {
-                        "how you read the folder": "new file first",
-                        "what happens": _try(_list_new_first),
-                        "why": "now the shapes disagree and the read is refused outright",
-                    },
-                    {
-                        "how you read the folder": "union_by_name=true",
-                        "what happens": _try(_by_name),
-                        "why": "match columns by name, fill the missing ones with NULL",
-                    },
-                ]
+            _rows = [
+                {
+                    "how you read the folder": "old file first",
+                    "what happens": _try(_list_old_first),
+                    "why": "the first file sets the shape, so the newer column is simply not there",
+                },
+                {
+                    "how you read the folder": "new file first",
+                    "what happens": _try(_list_new_first),
+                    "why": "now the shapes disagree and the read is refused outright",
+                },
+                {
+                    "how you read the folder": "union_by_name=true",
+                    "what happens": _try(_by_name),
+                    "why": "match columns by name, fill the missing ones with NULL",
+                },
+            ]
 
-            _note = mo.md(
-                """
+        _note = mo.md(
+            """
     **Same data, same question, three different answers, and only one is right.**
 
     The first is the dangerous one. Nothing failed: you asked for the average rating and the
@@ -4256,11 +4210,11 @@ def _(Path, SALES_SEED, mo, optional_import, run_evolution, tempfile):
     take away: **when a folder of files has grown new columns over time, say so when you read
     it.** The default is not to guess kindly.
                 """
-            ).callout(kind="warn")
-            _output = mo.vstack(
-                [mo.ui.table(_rows, label="One folder, two file shapes, three readings"), _note],
-                gap=0.6,
-            )
+        ).callout(kind="warn")
+        _output = mo.vstack(
+            [mo.ui.table(_rows, label="One folder, two file shapes, three readings"), _note],
+            gap=0.6,
+        )
     _output
     return
 
@@ -4885,49 +4839,45 @@ def _(mo, selected_payload_text):
 
 
 @app.cell
-def _(input_data, json, mo, optional_import, validate):
+def _(input_data, json, mo, pydantic, validate):
     if validate.value == 0:
         _output = mo.md("Click **Validate with Pydantic** to parse.").callout(kind="neutral")
     else:
-        pydantic = optional_import("pydantic")
-        if not pydantic:
-            _output = mo.md("Pydantic is not installed. Install with `pip install pydantic`.").callout(kind="warn")
-        else:
-            _BaseModel = pydantic.BaseModel
-            _Field = pydantic.Field
-            _ValidationError = pydantic.ValidationError
+        _BaseModel = pydantic.BaseModel
+        _Field = pydantic.Field
+        _ValidationError = pydantic.ValidationError
 
-            class Student(_BaseModel):
-                id: int
-                name: str
-                gpa: float = _Field(ge=0.0, le=4.0)
-                email: str
+        class Student(_BaseModel):
+            id: int
+            name: str
+            gpa: float = _Field(ge=0.0, le=4.0)
+            email: str
 
-            try:
-                raw = json.loads(input_data.value)
-                obj = Student.model_validate(raw)   # raises if the data breaks a rule
-                data = obj.model_dump()             # back to a plain dictionary
-                _output = mo.md(
-                    f"""
+        try:
+            raw = json.loads(input_data.value)
+            obj = Student.model_validate(raw)   # raises if the data breaks a rule
+            data = obj.model_dump()             # back to a plain dictionary
+            _output = mo.md(
+                f"""
     **Validated object:**
 
     ```json
     {json.dumps(data, indent=2)}
     ```
                         """
-                ).callout(kind="success")
-            except _ValidationError as exc:
-                _output = mo.md(
-                    f"""
+            ).callout(kind="success")
+        except _ValidationError as exc:
+            _output = mo.md(
+                f"""
     Validation error:
 
     ```
     {exc}
     ```
                         """
-                ).callout(kind="danger")
-            except json.JSONDecodeError as exc:
-                _output = mo.md(f"Invalid JSON: `{exc}`").callout(kind="danger")
+            ).callout(kind="danger")
+        except json.JSONDecodeError as exc:
+            _output = mo.md(f"Invalid JSON: `{exc}`").callout(kind="danger")
 
     _output
     return
@@ -5359,71 +5309,67 @@ def _(mo):
 
 
 @app.cell
-def _(fastapi_base_url, json, mo, optional_import, run_gates, url_error, url_request):
+def _(fastapi_base_url, json, mo, pydantic, run_gates, url_error, url_request):
     if run_gates.value == 0:
         _output = mo.md("Click **Send six slips through both gates** to compare them.").callout(kind="neutral")
     else:
-        _pydantic = optional_import("pydantic")
-        if _pydantic is None:
-            _output = mo.md("Needs `pydantic`.").callout(kind="warn")
-        else:
-            from datetime import date as _date
+        from datetime import date as _date
 
-            class _SaleCreate(_pydantic.BaseModel):
-                # The same shape sw03_demo_api.py declares, running here on your laptop.
-                sale_date: _date
-                product_id: int = _pydantic.Field(ge=1)
-                country_id: int = _pydantic.Field(ge=1)
-                units_sold: int = _pydantic.Field(ge=1, le=100000)
-                customer_rating: int = _pydantic.Field(ge=1, le=5)
+        class _SaleCreate(pydantic.BaseModel):
+            # The same shape sw03_demo_api.py declares, running here on your laptop.
+            sale_date: _date
+            product_id: int = pydantic.Field(ge=1)
+            country_id: int = pydantic.Field(ge=1)
+            units_sold: int = pydantic.Field(ge=1, le=100000)
+            customer_rating: int = pydantic.Field(ge=1, le=5)
 
-            _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
-            _slips = {
-                "a good sale": _ok,
-                "rating of 9": {**_ok, "customer_rating": 9},
-                "zero units sold": {**_ok, "units_sold": 0},
-                "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
-                "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
-                "product 9999": {**_ok, "product_id": 9999},
-            }
+        _ok = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
+        _slips = {
+            "a good sale": _ok,
+            "rating of 9": {**_ok, "customer_rating": 9},
+            "zero units sold": {**_ok, "units_sold": 0},
+            "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
+            "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
+            "product 9999": {**_ok, "product_id": 9999},
+        }
 
-            _base = fastapi_base_url.value.rstrip("/")
-            _created, _rows = [], []
-            try:
-                for _name, _slip in _slips.items():
-                    try:
-                        _SaleCreate.model_validate(_slip)
-                        _gate1 = "passes"
-                    except Exception as _exc:
-                        _err = _exc.errors()[0]
-                        _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
-                    try:
-                        _req = url_request.Request(
-                            f"{_base}/sales",
-                            data=json.dumps(_slip).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
-                            method="POST",
-                        )
-                        with url_request.urlopen(_req, timeout=10) as _r:
-                            _body = json.loads(_r.read())
-                            _created.append(_body["sale_id"])
-                            _gate2 = f"{_r.status} created — {len(_body)} fields back, total_price {_body['total_price']}"
-                    except url_error.HTTPError as _http:
-                        _detail = json.loads(_http.read()).get("detail")
-                        _msg = _detail if isinstance(_detail, str) else _detail[0]["msg"]
-                        _gate2 = f"{_http.code} — {_msg}"
-                    _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+        _base = fastapi_base_url.value.rstrip("/")
+        _created, _rows = [], []
+        try:
+            for _name, _slip in _slips.items():
+                try:
+                    _SaleCreate.model_validate(_slip)
+                    _gate1 = "passes"
+                except Exception as _exc:
+                    _err = _exc.errors()[0]
+                    _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
+                try:
+                    _req = url_request.Request(
+                        f"{_base}/sales",
+                        data=json.dumps(_slip).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with url_request.urlopen(_req, timeout=10) as _r:
+                        _body = json.loads(_r.read())
+                        _created.append(_body["sale_id"])
+                        _gate2 = f"{_r.status} created — {len(_body)} fields back, total_price {_body['total_price']}"
+                except url_error.HTTPError as _http:
+                    _detail = json.loads(_http.read()).get("detail")
+                    _msg = _detail if isinstance(_detail, str) else _detail[0]["msg"]
+                    _gate2 = f"{_http.code} — {_msg}"
+                _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
 
-                for _sid in _created:
-                    try:
-                        url_request.urlopen(
-                            url_request.Request(f"{_base}/sales/{_sid}", method="DELETE"), timeout=10
-                        )
-                    except Exception:
-                        pass
+            for _sid in _created:
+                try:
+                    url_request.urlopen(
+                        url_request.Request(f"{_base}/sales/{_sid}", method="DELETE"), timeout=10
+                    )
+                except Exception:
+                    pass
 
-                _note = mo.md(
-                    """
+            _note = mo.md(
+                """
     **Read the last column down.** Four slips die at gate 1 and would have died at gate 2 too,
     with `422` and the *same message*, because it is the same model in both places. One slip,
     `product 9999`, sails through gate 1 and dies at gate 2 with `400`. And one gets `201`.
@@ -5442,14 +5388,14 @@ def _(fastapi_base_url, json, mo, optional_import, run_gates, url_error, url_req
     convention, not a law of HTTP: FastAPI produces the 422 automatically from the model, while
     the 400s are business rules somebody wrote by hand.
                     """
-                ).callout(kind="info")
-                _output = mo.vstack(
-                    [mo.ui.table(_rows, label="The same six slips, checked twice"), _note], gap=0.6
-                )
-            except url_error.URLError as _exc:
-                _output = mo.md(
-                    f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
-                ).callout(kind="danger")
+            ).callout(kind="info")
+            _output = mo.vstack(
+                [mo.ui.table(_rows, label="The same six slips, checked twice"), _note], gap=0.6
+            )
+        except url_error.URLError as _exc:
+            _output = mo.md(
+                f"Could not reach `{_base}`. Start the API first: `uvicorn sw03_demo_api:app --reload`. ({_exc})"
+            ).callout(kind="danger")
     _output
     return
 
@@ -5598,14 +5544,22 @@ def _(mo):
 
 
 @app.cell
-def _(Path, fastapi_base_url, json, mo, optional_import, run_follow, url_error, url_request):
+def _(
+    Path,
+    duckdb,
+    fastapi_base_url,
+    json,
+    mo,
+    run_follow,
+    url_error,
+    url_request,
+):
     if run_follow.value == 0:
         _output = mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral")
     else:
-        _duckdb = optional_import("duckdb")
         _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
-        if _duckdb is None or not _sales_file.exists():
-            _output = mo.md("Needs `duckdb` and a running API (which creates `data/sales.parquet`).").callout(kind="warn")
+        if not _sales_file.exists():
+            _output = mo.md("Needs a running API (which creates `data/sales.parquet`).").callout(kind="warn")
         else:
             _base = fastapi_base_url.value.rstrip("/")
 
@@ -5618,7 +5572,7 @@ def _(Path, fastapi_base_url, json, mo, optional_import, run_follow, url_error, 
                     return json.loads(_r.read()) if _r.status != 204 else None
 
             try:
-                _con = _duckdb.connect()
+                _con = duckdb.connect()
                 _url = _sales_file.as_posix()
                 _before = _con.execute(f"SELECT count(*) FROM '{_url}'").fetchone()[0]
                 _created = _call(
@@ -6092,12 +6046,13 @@ def _(mo):
 
 @app.cell
 def _(
+    alt,
     chart_noise,
     chart_rows,
     chart_seed,
     chart_slope,
     mo,
-    optional_import,
+    pd,
     random,
     statistics,
 ):
@@ -6140,98 +6095,86 @@ def _(
         label="Summary statistics (x, y)",
     )
 
-    _pd = optional_import("pandas")
-    _alt = optional_import("altair")
-    if _pd and _alt:
-        _df = _pd.DataFrame(_rows)
+    _df = pd.DataFrame(_rows)
 
-        def _linear_regression(xs, ys):
-            if len(xs) < 2:
-                return None
-            _mean_x = statistics.mean(xs)
-            _mean_y = statistics.mean(ys)
-            _var_x = sum((x - _mean_x) ** 2 for x in xs)
-            if _var_x == 0:
-                return None
-            _cov = sum((x - _mean_x) * (y - _mean_y) for x, y in zip(xs, ys))
-            _slope = _cov / _var_x
-            _intercept = _mean_y - _slope * _mean_x
-            # R^2: the share of the up-and-down in y that the line actually explains.
-            _var_y = sum((y - _mean_y) ** 2 for y in ys)
-            _r_squared = (_cov * _cov) / (_var_x * _var_y) if _var_y else 0.0
-            return _slope, _intercept, _r_squared
+    def _linear_regression(xs, ys):
+        if len(xs) < 2:
+            return None
+        _mean_x = statistics.mean(xs)
+        _mean_y = statistics.mean(ys)
+        _var_x = sum((x - _mean_x) ** 2 for x in xs)
+        if _var_x == 0:
+            return None
+        _cov = sum((x - _mean_x) * (y - _mean_y) for x, y in zip(xs, ys))
+        _slope = _cov / _var_x
+        _intercept = _mean_y - _slope * _mean_x
+        # R^2: the share of the up-and-down in y that the line actually explains.
+        _var_y = sum((y - _mean_y) ** 2 for y in ys)
+        _r_squared = (_cov * _cov) / (_var_x * _var_y) if _var_y else 0.0
+        return _slope, _intercept, _r_squared
 
-        _scatter = (
-            _alt.Chart(_df)
-            .mark_circle(size=60, opacity=0.6, color="#2f6fed")
-            .encode(
-                x=_alt.X("x:Q"),
-                y=_alt.Y("y:Q"),
-                tooltip=[
-                    _alt.Tooltip("x:Q"),
-                    _alt.Tooltip("y:Q"),
-                ],
-            )
-        )
-        _scatter_layers = _scatter
-        _formula = None
-        _lr = _linear_regression(_x_vals, _y_vals)
-        if _lr:
-            _beta, _alpha, _r2 = _lr
-            _x_min = min(_x_vals)
-            _x_max = max(_x_vals)
-            _reg_df = _pd.DataFrame(
-                {
-                    "x": [_x_min, _x_max],
-                    "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
-                }
-            )
-            _reg_line = _alt.Chart(_reg_df).mark_line(color="#1f2937").encode(x=_alt.X("x:Q"), y=_alt.Y("y:Q"))
-            _scatter_layers = _scatter + _reg_line
-            # A line can always be drawn. R^2 says whether it means anything.
-            if _r2 >= 0.5:
-                _verdict = f"R&sup2; = {_r2:.2f} - the line explains most of the spread. This looks like **signal**."
-                _verdict_kind = "success"
-            elif _r2 >= 0.15:
-                _verdict = f"R&sup2; = {_r2:.2f} - the line explains only part of the spread. **Weak** evidence."
-                _verdict_kind = "info"
-            else:
-                _verdict = f"R&sup2; = {_r2:.2f} - the line explains almost nothing. This is **noise**, even though the equation looks confident."
-                _verdict_kind = "warn"
-            _formula = mo.vstack(
-                [
-                    mo.md(
-                        f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
-                        f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$, "
-                        f"$R^2$ = ${_r2:.3f}$"
-                    ).callout(kind="info"),
-                    mo.md(_verdict).callout(kind=_verdict_kind),
-                ],
-                gap=0.4,
-            )
-        else:
-            _formula = mo.md("Regression could not be computed for this sample.").callout(kind="warn")
-
-        _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
-
-        _panel = mo.vstack(
-            [
-                _formula,
-                mo.md("#### XY scatter + regression"),
-                _scatter_chart,
-                _stats_table,
+    _scatter = (
+        alt.Chart(_df)
+        .mark_circle(size=60, opacity=0.6, color="#2f6fed")
+        .encode(
+            x=alt.X("x:Q"),
+            y=alt.Y("y:Q"),
+            tooltip=[
+                alt.Tooltip("x:Q"),
+                alt.Tooltip("y:Q"),
             ],
-            gap=0.8,
+        )
+    )
+    _scatter_layers = _scatter
+    _formula = None
+    _lr = _linear_regression(_x_vals, _y_vals)
+    if _lr:
+        _beta, _alpha, _r2 = _lr
+        _x_min = min(_x_vals)
+        _x_max = max(_x_vals)
+        _reg_df = pd.DataFrame(
+            {
+                "x": [_x_min, _x_max],
+                "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
+            }
+        )
+        _reg_line = alt.Chart(_reg_df).mark_line(color="#1f2937").encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
+        _scatter_layers = _scatter + _reg_line
+        # A line can always be drawn. R^2 says whether it means anything.
+        if _r2 >= 0.5:
+            _verdict = f"R&sup2; = {_r2:.2f} - the line explains most of the spread. This looks like **signal**."
+            _verdict_kind = "success"
+        elif _r2 >= 0.15:
+            _verdict = f"R&sup2; = {_r2:.2f} - the line explains only part of the spread. **Weak** evidence."
+            _verdict_kind = "info"
+        else:
+            _verdict = f"R&sup2; = {_r2:.2f} - the line explains almost nothing. This is **noise**, even though the equation looks confident."
+            _verdict_kind = "warn"
+        _formula = mo.vstack(
+            [
+                mo.md(
+                    f"Regression: **y = {_alpha:.3f} + {_beta:.3f} x**  \n"
+                    f"$\\alpha$ (intercept) = ${_alpha:.3f}$, $\\beta$ (slope) = ${_beta:.3f}$, "
+                    f"$R^2$ = ${_r2:.3f}$"
+                ).callout(kind="info"),
+                mo.md(_verdict).callout(kind=_verdict_kind),
+            ],
+            gap=0.4,
         )
     else:
-        _panel = mo.vstack(
-            [
-                mo.md("Install `pandas` + `altair` to unlock charts.").callout(kind="info"),
-                _stats_table,
-                mo.ui.table(_rows[:10], label="Sample rows"),
-            ],
-            gap=0.6,
-        )
+        _formula = mo.md("Regression could not be computed for this sample.").callout(kind="warn")
+
+    _scatter_chart = mo.ui.altair_chart(_scatter_layers.properties(height=280))
+
+    _panel = mo.vstack(
+        [
+            _formula,
+            mo.md("#### XY scatter + regression"),
+            _scatter_chart,
+            _stats_table,
+        ],
+        gap=0.8,
+    )
 
     _panel
     return
@@ -6266,57 +6209,52 @@ def _(mo):
 
 
 @app.cell
-def _(SEED_DIR, honest_view, mo, optional_import, statistics):
-    _duckdb = optional_import("duckdb")
-    if _duckdb is None or not (SEED_DIR / "sales.parquet").exists():
-        _output = mo.md("Needs `duckdb` and the files in `data/seed/`.").callout(kind="warn")
-    else:
+def _(SEED_DIR, duckdb, honest_view, mo, statistics):
+    def _fit(_xs, _ys):
+        _mx, _my = statistics.mean(_xs), statistics.mean(_ys)
+        _vx = sum((_x - _mx) ** 2 for _x in _xs)
+        _vy = sum((_y - _my) ** 2 for _y in _ys)
+        if not _vx or not _vy:
+            return None, None
+        _cov = sum((_x - _mx) * (_y - _my) for _x, _y in zip(_xs, _ys))
+        return _cov / _vx, (_cov * _cov) / (_vx * _vy)
 
-        def _fit(_xs, _ys):
-            _mx, _my = statistics.mean(_xs), statistics.mean(_ys)
-            _vx = sum((_x - _mx) ** 2 for _x in _xs)
-            _vy = sum((_y - _my) ** 2 for _y in _ys)
-            if not _vx or not _vy:
-                return None, None
-            _cov = sum((_x - _mx) * (_y - _my) for _x, _y in zip(_xs, _ys))
-            return _cov / _vx, (_cov * _cov) / (_vx * _vy)
+    _con = duckdb.connect()
+    _join = (
+        f"FROM '{(SEED_DIR / 'sales.parquet').as_posix()}' s "
+        f"JOIN '{(SEED_DIR / 'products.parquet').as_posix()}' p USING (product_id) "
+        f"JOIN '{(SEED_DIR / 'categories.parquet').as_posix()}' c USING (category_id)"
+    )
 
-        _con = _duckdb.connect()
-        _join = (
-            f"FROM '{(SEED_DIR / 'sales.parquet').as_posix()}' s "
-            f"JOIN '{(SEED_DIR / 'products.parquet').as_posix()}' p USING (product_id) "
-            f"JOIN '{(SEED_DIR / 'categories.parquet').as_posix()}' c USING (category_id)"
-        )
+    def _measure(_label, _sql):
+        _df = _con.execute(_sql).df()
+        _slope, _r2 = _fit(_df["x"].tolist(), _df["y"].tolist())
+        return {
+            "what we plotted": _label,
+            "dots (n)": len(_df),
+            "slope (rating per CHF 10k)": None if _slope is None else round(_slope * 10000, 3),
+            "R²": None if _r2 is None else round(_r2, 3),
+        }
 
-        def _measure(_label, _sql):
-            _df = _con.execute(_sql).df()
-            _slope, _r2 = _fit(_df["x"].tolist(), _df["y"].tolist())
-            return {
-                "what we plotted": _label,
-                "dots (n)": len(_df),
-                "slope (rating per CHF 10k)": None if _slope is None else round(_slope * 10000, 3),
-                "R²": None if _r2 is None else round(_r2, 3),
-            }
-
-        if honest_view.value.startswith("A"):
-            _rows = [
-                _measure("one dot per sale", f"SELECT total_price x, customer_rating y {_join}"),
-                _measure(
-                    "one dot per product per month",
-                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
-                    "GROUP BY p.name, date_trunc('month', s.sale_date)",
-                ),
-                _measure(
-                    "one dot per category per month",
-                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
-                    "GROUP BY c.name, date_trunc('month', s.sale_date)",
-                ),
-                _measure(
-                    "one dot per category",
-                    f"SELECT avg(total_price) x, avg(customer_rating) y {_join} GROUP BY c.name",
-                ),
-            ]
-            _lesson = """
+    if honest_view.value.startswith("A"):
+        _rows = [
+            _measure("one dot per sale", f"SELECT total_price x, customer_rating y {_join}"),
+            _measure(
+                "one dot per product per month",
+                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
+                "GROUP BY p.name, date_trunc('month', s.sale_date)",
+            ),
+            _measure(
+                "one dot per category per month",
+                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} "
+                "GROUP BY c.name, date_trunc('month', s.sale_date)",
+            ),
+            _measure(
+                "one dot per category",
+                f"SELECT avg(total_price) x, avg(customer_rating) y {_join} GROUP BY c.name",
+            ),
+        ]
+        _lesson = """
     **$R^2$ went from "weak" to "publishable" and no new information entered the room.**
 
     Every row above is the same 3,360 sales. Averaging dots together does not strengthen a
@@ -6326,14 +6264,14 @@ def _(SEED_DIR, honest_view, mo, optional_import, statistics):
     This is why a goodness-of-fit number is meaningless without its sample size. Always read
     $R^2$ and $n$ together, which is why the table prints both.
             """
-        elif honest_view.value.startswith("B"):
-            _cats = [_r[0] for _r in _con.execute(f"SELECT DISTINCT c.name {_join} ORDER BY 1").fetchall()]
-            _rows = [_measure("all sales pooled together", f"SELECT total_price x, customer_rating y {_join}")]
-            _rows += [
-                _measure(f"only {_c}", f"SELECT total_price x, customer_rating y {_join} WHERE c.name = '{_c}'")
-                for _c in _cats
-            ]
-            _lesson = """
+    elif honest_view.value.startswith("B"):
+        _cats = [_r[0] for _r in _con.execute(f"SELECT DISTINCT c.name {_join} ORDER BY 1").fetchall()]
+        _rows = [_measure("all sales pooled together", f"SELECT total_price x, customer_rating y {_join}")]
+        _rows += [
+            _measure(f"only {_c}", f"SELECT total_price x, customer_rating y {_join} WHERE c.name = '{_c}'")
+            for _c in _cats
+        ]
+        _lesson = """
     **The pooled line does not describe any of the groups.**
 
     Pooled, the slope is positive: spend more, be happier. Look inside Hardware and the slope is
@@ -6344,15 +6282,15 @@ def _(SEED_DIR, honest_view, mo, optional_import, statistics):
     Three groups' worth of difference, wearing three thousand dots' worth of authority. When a
     relationship reverses inside every subgroup, that has a name: Simpson's paradox.
             """
-        else:
-            _rows = [
-                _measure("all sales", f"SELECT total_price x, customer_rating y {_join}"),
-                _measure(
-                    "every sale except Services",
-                    f"SELECT total_price x, customer_rating y {_join} WHERE c.name <> 'Services'",
-                ),
-            ]
-            _lesson = """
+    else:
+        _rows = [
+            _measure("all sales", f"SELECT total_price x, customer_rating y {_join}"),
+            _measure(
+                "every sale except Services",
+                f"SELECT total_price x, customer_rating y {_join} WHERE c.name <> 'Services'",
+            ),
+        ]
+        _lesson = """
     **One group out of three decided the direction of the answer.**
 
     Remove Services and the slope flips sign: the finding reverses completely. Now look at the
@@ -6363,13 +6301,13 @@ def _(SEED_DIR, honest_view, mo, optional_import, statistics):
     warn you when one group is carrying the entire result.
             """
 
-        _output = mo.vstack(
-            [
-                mo.ui.table(_rows, label="Same 3,360 sales, same question"),
-                mo.md(_lesson).callout(kind="warn"),
-            ],
-            gap=0.6,
-        )
+    _output = mo.vstack(
+        [
+            mo.ui.table(_rows, label="Same 3,360 sales, same question"),
+            mo.md(_lesson).callout(kind="warn"),
+        ],
+        gap=0.6,
+    )
     _output
     return
 
