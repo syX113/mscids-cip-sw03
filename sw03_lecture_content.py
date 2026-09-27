@@ -3339,10 +3339,11 @@ def _(mo):
 
     The distinction between 400 and 422 is the one students trip on. 422 means the request broke
     a rule written in the Pydantic model (missing field, wrong type, rating outside 1 to 5), so it
-    was turned away at the door before the endpoint's code ran: chapter 7. Our models are strict
-    on purpose, so a name of only spaces, or a field the model does not know (like `total_price`,
-    which the server computes itself), is a 422 too. 400 means the request passed the door, then
-    broke a rule only the data can check, like pointing at a region that does not exist.
+    was turned away at the door before the endpoint's code ran: chapter 7. Our models also trim
+    whitespace and refuse unknown fields, so a name of only spaces, or a field the model does not
+    know (like `total_price`, which the server computes itself), is a 422 too. 400 means the
+    request passed the door, then broke a rule only the data can check, like pointing at a region
+    that does not exist.
         """
     ).callout(kind="neutral")
     return
@@ -3392,7 +3393,7 @@ def _(ch6_preset, json, mo):
     ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Method")
     ch6_path = mo.ui.text(value=_path, label="Path")
     ch6_body = mo.ui.text_area(
-        value=json.dumps(_body, indent=2) if _body else "", rows=7, label="JSON body (sent with POST and PUT)", full_width=True
+        value=json.dumps(_body, indent=2) if _body else "", rows=8, label="JSON body (sent with POST and PUT)", full_width=True
     )
     ch6_send = mo.ui.run_button(label="Send request", kind="success")
     mo.vstack([mo.hstack([ch6_method, ch6_path], justify="start", gap=2), ch6_body, ch6_send], gap=0.6).callout(kind="neutral")
@@ -3411,7 +3412,7 @@ def _(
     mo,
     requests,
 ):
-    import http as _http
+    from http.client import responses as _phrases
 
     mo.stop(not ch6_send.value, mo.md("Pick a request, guess the status code, then click **Send request**.").callout(kind="neutral"))
 
@@ -3425,14 +3426,17 @@ def _(
     except requests.RequestException:
         mo.stop(True, mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger"))
 
-    if isinstance(_answer, (dict, list)):
-        _shown = mo.json(_answer)
+    # JSON as a code block, not mo.json: its tree view squeezes a name of three spaces to one
+    if isinstance(_answer, list):  # GET /sales is thousands of rows: show a taste, not a wall
+        _shown = mo.md(f"*{len(_answer):,} items, the first 3 shown*\n\n```json\n{json.dumps(_answer[:3], indent=2)}\n```")
+    elif isinstance(_answer, dict):
+        _shown = mo.md(f"```json\n{json.dumps(_answer, indent=2)}\n```")
     elif _answer:
         _shown = mo.plain_text(str(_answer))  # not JSON, e.g. a 500 "Internal Server Error"
     else:
         _shown = mo.md("*No body: 204 means done, nothing to send back.*")
     mo.vstack(
-        [mo.md(f"`{ch6_method.value} {_url}` → **{_status} {_http.HTTPStatus(_status).phrase}**"), _shown],
+        [mo.md(f"`{ch6_method.value} {_url}` → **{_status} {_phrases.get(_status, '(no standard name)')}**"), _shown],
         gap=0.5,
     ).callout(kind={2: "success", 4: "warn"}.get(_status // 100, "danger"))
     return
@@ -3555,21 +3559,19 @@ def _(mo):
     `silently_coerced` sends `"42"` and `"3.5"` as text. Pydantic does not reject them; it
     converts them and hands you numbers.
 
-    So validation checks **shape**, not **truth**. It is a bouncer with a list of rules, not a
-    person who knows whether the answer makes sense. A negative id and a blank name are shaped
-    correctly and are still garbage, and the only way to stop them is to write the rule down.
-    `StrictStudent` in the lab does:
+    So validation checks **shape**, not **truth**: a bouncer with a list of rules, not a person who
+    knows whether the answer makes sense. A negative id and a blank name are shaped correctly and
+    still garbage; only a written rule stops them, as in `StrictStudent` in the lab. Two of its
+    rules are subtle:
 
-    - `id: int = Field(gt=0)` turns away the negative id.
-    - `name: str = Field(min_length=1)` alone does **not** stop `"   "`, because three spaces are
-      three characters. `str_strip_whitespace=True` trims first, then counts. Every request model
-      of our API inherits exactly this setting (plus `extra="forbid"`, which refuses unknown fields).
-    - `strict=True` refuses `"42"` where an int belongs instead of converting it. Our API leaves
-      this off, so a client that sends `"2"` for `units_sold` gets 2.
-    - `pattern=".+@.+"` is the cheap email check; `EmailStr` is the real one (it needs
-      `pip install "pydantic[email]"`).
+    - `min_length=1` alone lets three spaces through (three characters).
+      `str_strip_whitespace=True` trims first, then counts. Every request model of our API
+      inherits this from its `Input` base, plus `extra="forbid"` against unknown fields.
+    - `strict=True` refuses `"42"` for an int instead of converting it. Our API leaves it off:
+      `"2"` for `units_sold` becomes 2.
 
-    Validation is exactly as good as the rules you thought to write.
+    Validation is exactly as good as the rules you thought to write. (The email `pattern` is a
+    cheap check; `EmailStr` is the real one, after `pip install "pydantic[email]"`.)
             """
     ).callout(kind="neutral")
     return
@@ -3653,11 +3655,13 @@ def _(ch7_json, ch7_validate, mo, pydantic):
         except pydantic.ValidationError as exc:
             lines = [
                 f"- `{'.'.join(map(str, e['loc'])) or 'JSON'}`: {e['msg']}"
-                + ("" if e["type"] in {"missing", "json_invalid"} else f" (you sent `{e['input']!r}`)")
+                # no-break spaces, so three spaces do not collapse to one in the rendered code span
+                + ("" if e["type"] in {"missing", "json_invalid"} else f" (you sent `{repr(e['input']).replace(' ', '\u00a0')}`)")
                 for e in exc.errors()
             ]
             return mo.md(f"**{title}: rejected**\n\n" + "\n".join(lines)).callout(kind="danger")
-        return mo.vstack([mo.md(f"**{title}: accepted**"), mo.json(student.model_dump())]).callout(kind="success")
+        # a code block, not mo.json: its tree view would squeeze a name of three spaces to one
+        return mo.md(f"**{title}: accepted**\n\n```json\n{student.model_dump_json(indent=2)}\n```").callout(kind="success")
 
     mo.hstack([_verdict("Student", _Student), _verdict("StrictStudent", _StrictStudent)], widths="equal")
     return
@@ -3691,7 +3695,7 @@ def _(mo):
       <h3>Chapter 7 Conclusion</h3>
       <ul>
         <li>A model checks shape (fields, types, ranges), not truth: it is only as good as the rules you wrote.</li>
-        <li>Pydantic converts <code>"42"</code> to 42 and keeps <code>"   "</code> as a name unless you say otherwise (<code>strict</code>, <code>str_strip_whitespace</code>).</li>
+        <li>Pydantic converts <code>"42"</code> to 42 and accepts a name of three spaces unless you say otherwise (<code>strict</code>; <code>str_strip_whitespace</code> plus <code>min_length=1</code>).</li>
         <li>A rejection is a precise list of errors, and FastAPI sends that list back as a 422.</li>
       </ul>
     </div>
