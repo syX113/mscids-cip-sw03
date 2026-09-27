@@ -332,6 +332,8 @@ def exercise5(gzip, sample_text):
     result_ex5 = gzip_report(sample_text, 6)
     check_passed_ex5 = (
         result_ex5["raw_bytes"] == len(sample_text.encode("utf-8"))
+        # bytes, not characters: "Zürich" is 6 characters but 7 UTF-8 bytes
+        and gzip_report("Zürich", 6)["raw_bytes"] == 7
         # really compressed / raw, not just some number below 1
         and round(result_ex5["compression_ratio"], 4)
         == round(result_ex5["compressed_bytes"] / result_ex5["raw_bytes"], 4)
@@ -441,7 +443,8 @@ def exercise8_prompt(mo):
 
     Implement `call_json_endpoint(base_url, path, opener)`. `opener` works like
     `urllib.request.urlopen`: call it with a URL and it returns a response with `.read()`
-    and `.status`.
+    and `.status`. `urlopen` is the standard library's version of the `requests` calls from
+    Chapter 6: `.status` instead of `.status_code`, `.read()` plus `json.loads` instead of `.json()`.
 
     Expected behavior:
     - call `base_url` + `path` (the code already strips stray slashes)
@@ -521,6 +524,9 @@ def final_note(mo):
     call_json_endpoint("http://127.0.0.1:8000", "/health", urllib.request.urlopen)
     # {'ok': True, 'url': 'http://127.0.0.1:8000/health', 'status': 200, 'payload': {'status': 'ok'}}
     ```
+
+    Unlike the fake, the real `urlopen` raises for a 4xx or 5xx answer, so `/sales/999999`
+    lands in the `except` branch: `ok` is `False` and `status` is `None`.
     """)
     return
 

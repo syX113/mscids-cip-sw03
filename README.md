@@ -204,7 +204,7 @@ routes give identical versions.
 | ⚡ `marimo: command not found` | Activate the environment first: `source .venv/bin/activate` (Windows: `.\.venv\Scripts\Activate.ps1`) |
 | 🚫 PowerShell blocks `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then activate again |
 | 🌐 API not reachable | Start it again: `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
-| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update the base URL in the notebook and the Streamlit sidebar. |
+| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update both API base URL fields in the lecture (chapters 6 and 8) and the Streamlit sidebar. |
 | 🔄 Your API changes are gone | Expected: the API reseeds `data/` from `data/seed/` on every start, and with `--reload` on every saved `.py` file. Start it without `--reload` to keep your changes while you work. |
 | 📁 Wrong folder | `ls` (works in PowerShell too) should show `sw03_lecture_content.py`. If not, `cd` into `mscids-cip-sw03`. |
 
