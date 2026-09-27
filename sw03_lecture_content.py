@@ -107,230 +107,91 @@ def _(requests):
 
 @app.cell
 def _(mo):
-    css = mo.Html(
+    mo.Html(
         """
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
-
+          /* One palette for both marimo themes: marimo sets color-scheme: dark on its dark
+             theme, and light-dark() picks the matching value. Names avoid marimo's own
+             variables (--accent, --border, --muted, ...), which its UI depends on. */
           :root {
-            --ink: #0b1220;
-            --ink-2: #22304d;
-            --muted: #52627a;
-            --border: rgba(11, 18, 32, 0.14);
-            --surface: rgba(255, 255, 255, 0.9);
-            --surface-strong: rgba(255, 255, 255, 0.98);
-            --accent: #2f6fed;
-            --accent-2: #14b8a6;
-            --accent-3: #f59e0b;
-            --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            /* marimo's layout width, widened for the projector */
             --content-width: min(80vw, 1150px);
             --content-width-medium: min(80vw, 1150px);
+
+            --ink: light-dark(#0b1220, #e8edf4);
+            --ink-soft: light-dark(#2b3a55, #c5cfdc);
+            --ink-muted: light-dark(#56657c, #98a4b5);
+            --line: light-dark(rgb(11 18 32 / 0.12), rgb(255 255 255 / 0.12));
+            --surface: light-dark(#ffffff, #1f2423);
+            --surface-2: light-dark(#f4f7fb, #282d2c);
+            --brand: light-dark(#2f6fed, #86abff);
+            --teal: light-dark(#0f9488, #3fd0bd);
+            --amber: light-dark(#d97706, #f5b43c);
+            --red: light-dark(#b42318, #ff9b8f);
+            /* short on purpose: each marimo cell paints over the one above it */
+            --shadow: 0 1px 2px light-dark(rgb(15 23 42 / 0.06), rgb(0 0 0 / 0.3)),
+              0 4px 10px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.2));
           }
 
-          body {
-            background:
-              radial-gradient(circle at 12% 6%, rgba(47, 111, 237, 0.12), transparent 45%),
-              radial-gradient(circle at 90% 12%, rgba(20, 184, 166, 0.1), transparent 40%),
-              linear-gradient(180deg, #f8fafc 0%, #eef2f7 55%, #f8fafc 100%);
-            color: var(--ink);
-            font-family: "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
-            background-attachment: fixed;
-          }
-
-          main, .marimo-main, .mo-main {
-            max-width: 100% !important;
-            width: min(100vw, 2400px) !important;
-            margin: 0 auto !important;
-            padding: 0 28px 80px;
-            box-sizing: border-box;
-          }
-
-          h1, h2, h3 {
-            color: var(--ink);
-          }
-
-          p {
-            line-height: 1.6;
-          }
-
-          h2 {
+          .markdown h2 {
             margin-top: 2.2rem;
-            position: relative;
-            padding-bottom: 0.3rem;
-          }
-
-          h2::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            bottom: 0;
-            width: 100%;
-            height: 3px;
-            border-radius: 999px;
-            background: linear-gradient(90deg, rgba(47, 111, 237, 0.7), rgba(20, 184, 166, 0.6));
-            opacity: 0.6;
-          }
-
-          h1, .hero-title {
-            font-family: "Fraunces", "Space Grotesk", serif;
-            letter-spacing: 0.01em;
-          }
-
-          pre, code {
-            background: rgba(47, 111, 237, 0.08);
-            border: 1px solid rgba(47, 111, 237, 0.18);
-            border-radius: 10px;
-            font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-            color: var(--ink);
-          }
-
-          pre {
-            padding: 12px 14px;
-          }
-
-          .mo-md strong {
-            background: linear-gradient(180deg, rgba(245, 158, 11, 0.16), rgba(245, 158, 11, 0.22));
-            border-radius: 6px;
-            padding: 0 4px;
-          }
-
-          .mo-md blockquote {
-            margin: 0.8rem 0;
-            padding: 10px 14px;
-            border-left: 4px solid rgba(47, 111, 237, 0.6);
-            background: rgba(47, 111, 237, 0.08);
-            border-radius: 10px;
-            color: var(--ink-2);
-          }
-
-          .mo-md mjx-container[display="true"] {
-            display: block;
-            margin: 0.85rem 0;
-            padding: 10px 14px;
-            background: linear-gradient(
-              90deg,
-              rgba(47, 111, 237, 0.09),
-              rgba(20, 184, 166, 0.07)
-            );
-            border: 1px solid rgba(47, 111, 237, 0.24);
-            border-radius: 12px;
-            overflow-x: auto;
-          }
-
-          .key-chip {
-            display: inline-flex;
-            align-items: center;
-            padding: 3px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(47, 111, 237, 0.28);
-            background: rgba(47, 111, 237, 0.14);
-            color: var(--accent);
-            font-weight: 700;
-            font-size: 11px;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-          }
-
-          .focus-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-          }
-
-          .focus-item {
-            border: 1px solid rgba(11, 18, 32, 0.12);
-            background: rgba(255, 255, 255, 0.75);
-            border-radius: 12px;
-            padding: 10px 12px;
-          }
-
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--surface-strong);
-            border-radius: 14px;
-            overflow: hidden;
-            box-shadow: var(--shadow);
-          }
-
-          th, td {
-            padding: 10px 12px;
-            border-bottom: 1px solid rgba(11, 18, 32, 0.08);
-          }
-
-          tbody tr:nth-child(even) td {
-            background: rgba(248, 250, 252, 0.7);
-          }
-
-          thead th {
-            text-align: left;
-            font-weight: 700;
-            color: var(--ink);
-            background: rgba(47, 111, 237, 0.12);
+            padding-bottom: 0.35rem;
+            background: linear-gradient(90deg, var(--brand), var(--teal)) left bottom / 100% 3px no-repeat;
           }
 
           .section-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 18px;
             padding: 18px 20px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--surface);
             box-shadow: var(--shadow);
-            backdrop-filter: blur(8px);
           }
 
-          .section-card h3 {
+          .section-card :is(h2, h3) {
             margin-top: 0;
           }
 
           .hero {
-            position: relative;
+            padding: 28px;
+            border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent);
             border-radius: 22px;
-            padding: 28px 28px 24px 28px;
-            background: linear-gradient(120deg, rgba(47, 111, 237, 0.12), rgba(20, 184, 166, 0.1), rgba(245, 158, 11, 0.1));
-            border: 1px solid rgba(47, 111, 237, 0.22);
-            box-shadow: 0 26px 60px rgba(15, 23, 42, 0.14);
-            overflow: hidden;
-          }
-
-          .hero::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at 20% 20%, rgba(47, 111, 237, 0.28), transparent 45%);
-            opacity: 0.8;
-            pointer-events: none;
-          }
-
-          .hero-content {
-            position: relative;
-            z-index: 2;
+            background:
+              radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--brand) 24%, transparent), transparent 48%),
+              linear-gradient(
+                120deg,
+                color-mix(in srgb, var(--brand) 12%, var(--surface)),
+                color-mix(in srgb, var(--teal) 10%, var(--surface)),
+                color-mix(in srgb, var(--amber) 10%, var(--surface))
+              );
+            box-shadow: var(--shadow);
           }
 
           .eyebrow {
             display: inline-flex;
-            gap: 8px;
-            align-items: center;
             padding: 6px 12px;
             border-radius: 999px;
-            background: rgba(47, 111, 237, 0.18);
-            color: var(--accent);
-            font-weight: 600;
-            letter-spacing: 0.08em;
+            background: color-mix(in srgb, var(--brand) 16%, transparent);
+            color: var(--brand);
             font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
           }
 
           .hero-title {
+            margin: 14px 0 10px;
+            color: var(--ink);
+            font-family: var(--heading-font);
             font-size: 2.6rem;
-            margin: 14px 0 10px 0;
-            line-height: 1.05;
+            font-weight: 700;
+            line-height: 1.1;
           }
 
           .hero-subtitle {
             max-width: 860px;
-            color: var(--muted);
+            color: var(--ink-soft);
             font-size: 1.05rem;
+            line-height: 1.6;
           }
 
           .hero-pills {
@@ -342,11 +203,11 @@ def _(mo):
 
           .pill {
             padding: 6px 12px;
+            border: 1px solid var(--line);
             border-radius: 999px;
-            border: 1px solid rgba(11, 18, 32, 0.12);
-            background: rgba(255, 255, 255, 0.7);
-            color: var(--ink-2);
-            font-size: 12px;
+            background: color-mix(in srgb, var(--surface) 75%, transparent);
+            color: var(--ink-soft);
+            font-size: 13px;
           }
 
           .grid-2 {
@@ -355,61 +216,18 @@ def _(mo):
             gap: 16px;
           }
 
-          .stat {
-            background: rgba(255, 255, 255, 0.7);
-            border: 1px solid rgba(11, 18, 32, 0.12);
-            border-radius: 16px;
-            padding: 14px 16px;
-          }
-
-          .stat-title {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-          }
-
-          .stat-value {
-            font-size: 1.4rem;
-            font-weight: 600;
-            margin-top: 6px;
-          }
-
-          details {
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 10px 14px;
-            background: rgba(255, 255, 255, 0.82);
-          }
-
-          details + details {
+          .focus-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
             margin-top: 10px;
           }
 
-          summary {
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--ink-2);
-          }
-
-          summary::-webkit-details-marker {
-            display: none;
-          }
-
-          summary::before {
-            content: "";
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-right: 2px solid var(--muted);
-            border-bottom: 2px solid var(--muted);
-            margin-right: 10px;
-            transform: translateY(-1px) rotate(-45deg);
-            transition: transform 0.15s ease;
-          }
-
-          details[open] summary::before {
-            transform: translateY(0px) rotate(45deg);
+          .focus-item {
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--surface-2);
           }
 
           .flow-card {
@@ -425,28 +243,26 @@ def _(mo):
           }
 
           .flow-box {
+            min-width: 150px;
             padding: 10px 14px;
+            border: 1px solid var(--line);
             border-radius: 14px;
-            border: 1px solid rgba(11, 18, 32, 0.14);
-            background: rgba(255, 255, 255, 0.8);
+            background: var(--surface-2);
+            color: var(--ink);
             font-weight: 600;
             text-align: center;
-            min-width: 150px;
           }
 
           .flow-arrow {
+            color: var(--ink-muted);
             font-size: 1.4rem;
-            color: var(--muted);
             line-height: 1;
           }
 
-          .flow-note {
-            color: var(--muted);
+          .flow-note,
+          .chart-note {
+            color: var(--ink-muted);
             font-size: 0.9rem;
-          }
-
-          .lost-update-card {
-            gap: 14px;
           }
 
           .lost-update-wrap {
@@ -457,75 +273,59 @@ def _(mo):
             display: grid;
             grid-template-columns: 90px repeat(3, minmax(180px, 1fr));
             min-width: 760px;
-            border: 1px solid rgba(11, 18, 32, 0.14);
+            border: 1px solid var(--line);
             border-radius: 14px;
             overflow: hidden;
-            background: rgba(255, 255, 255, 0.86);
+            background: var(--surface);
           }
 
           .lu-header,
           .lu-step,
           .lu-event,
           .lu-state {
-            padding: 10px 12px;
-            border-right: 1px solid rgba(11, 18, 32, 0.1);
-            border-bottom: 1px solid rgba(11, 18, 32, 0.1);
             display: flex;
             align-items: center;
+            padding: 10px 12px;
+            border-right: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            color: var(--ink);
+            font-weight: 600;
           }
 
           .lu-header {
             font-weight: 700;
-            color: var(--ink);
-            background: rgba(47, 111, 237, 0.14);
+            background: color-mix(in srgb, var(--brand) 14%, transparent);
           }
 
           .lu-step {
             justify-content: center;
             font-weight: 700;
-            color: var(--ink-2);
-            background: rgba(11, 18, 32, 0.05);
-          }
-
-          .lu-event {
-            font-weight: 600;
-            color: var(--ink);
-            background: rgba(255, 255, 255, 0.84);
-          }
-
-          .lu-read {
-            background: rgba(20, 184, 166, 0.14);
-          }
-
-          .lu-write {
-            background: rgba(245, 158, 11, 0.18);
-          }
-
-          .lu-idle {
-            color: var(--muted);
-            background: rgba(11, 18, 32, 0.04);
-            font-weight: 500;
-          }
-
-          .lu-stale {
-            color: #991b1b;
-            background: rgba(254, 226, 226, 0.9);
-            font-weight: 700;
+            background: var(--surface-2);
           }
 
           .lu-state {
             font-weight: 700;
-            color: var(--ink-2);
           }
 
+          .lu-read {
+            background: color-mix(in srgb, var(--teal) 15%, transparent);
+          }
+
+          .lu-write {
+            background: color-mix(in srgb, var(--amber) 18%, transparent);
+          }
+
+          .lu-idle {
+            color: var(--ink-muted);
+            background: var(--surface-2);
+            font-weight: 500;
+          }
+
+          .lu-stale,
           .lu-problem {
-            color: #991b1b;
-            background: rgba(254, 226, 226, 0.85);
-          }
-
-          .chart-grid {
-            display: grid;
-            gap: 14px;
+            color: var(--red);
+            background: color-mix(in srgb, var(--red) 13%, transparent);
+            font-weight: 700;
           }
 
           .bar-chart {
@@ -542,79 +342,48 @@ def _(mo):
           }
 
           .bar-label {
-            font-weight: 600;
             color: var(--ink);
+            font-weight: 600;
           }
 
           .bar-track {
-            position: relative;
             height: 10px;
-            background: rgba(11, 18, 32, 0.12);
             border-radius: 999px;
             overflow: hidden;
+            background: color-mix(in srgb, var(--ink) 12%, transparent);
           }
 
           .bar-fill {
             height: 100%;
             border-radius: 999px;
-            background: linear-gradient(90deg, rgba(47, 111, 237, 0.9), rgba(20, 184, 166, 0.9));
+            background: linear-gradient(90deg, var(--brand), var(--teal));
           }
 
           .bar-fill.good {
-            background: linear-gradient(90deg, rgba(20, 184, 166, 0.9), rgba(47, 111, 237, 0.9));
+            background: linear-gradient(90deg, var(--teal), var(--brand));
           }
 
           .bar-fill.bad {
-            background: linear-gradient(90deg, rgba(249, 115, 22, 0.92), rgba(239, 68, 68, 0.92));
-          }
-
-          .bar-marker {
-            position: absolute;
-            top: -4px;
-            bottom: -4px;
-            width: 2px;
-            background: rgba(245, 158, 11, 0.9);
-            transform: translateX(-50%);
-            border-radius: 2px;
+            background: linear-gradient(90deg, #f97316, #ef4444);
           }
 
           .bar-value {
-            text-align: right;
+            color: var(--ink-soft);
             font-variant-numeric: tabular-nums;
-            color: var(--ink-2);
-          }
-
-          .chart-note {
-            color: var(--muted);
-            font-size: 0.9rem;
-          }
-
-          .dirty-row td {
-            background: rgba(249, 115, 22, 0.12);
-          }
-
-          .dirty-row td.dirty-cell {
-            background: rgba(249, 115, 22, 0.22);
-            font-weight: 600;
-          }
-
-          .mo-callout {
-            border-radius: 16px;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+            text-align: right;
           }
 
           .disclaimer-red {
-            background: rgba(239, 68, 68, 0.16);
-            border: 1px solid rgba(185, 28, 28, 0.55);
-            color: #7f1d1d;
-            border-radius: 14px;
             padding: 12px 14px;
+            border: 1px solid color-mix(in srgb, var(--red) 55%, transparent);
+            border-radius: 14px;
+            background: color-mix(in srgb, var(--red) 13%, transparent);
+            color: var(--red);
             font-weight: 600;
           }
         </style>
         """
     )
-    css
     return
 
 
@@ -736,7 +505,6 @@ def _(mo):
         """
     <div class="section-card">
       <h3>How to Read This Notebook</h3>
-      <p><span class="key-chip">Key idea</span> appears where a core concept is introduced.</p>
       <div class="focus-grid">
         <div class="focus-item"><strong>Formulas</strong>: quick quantitative model of the concept.</div>
         <div class="focus-item"><strong>Mini-labs</strong>: interactive controls to test the model.</div>
@@ -829,7 +597,7 @@ def _(mo):
 def _(mo):
     _lost_update_diagram = mo.md(
         """
-    <div class="section-card flow-card lost-update-card">
+    <div class="section-card flow-card">
       <h3>Visual: Lost Update Timeline (Who Does What, When)</h3>
       <div class="lost-update-wrap">
         <div class="lost-update-grid">
@@ -1489,7 +1257,6 @@ def _(
       <div class="bar-label">{label}</div>
       <div class="bar-track">
         <div class="bar-fill {bar_class}" style="width: {pct:.1f}%"></div>
-        <div class="bar-marker" style="left: 100%"></div>
       </div>
       <div class="bar-value">{total:,} / {expected:,}</div>
     </div>
@@ -1499,7 +1266,6 @@ def _(
             f"""
     <div class="section-card">
       <h3>Total Balance Snapshot</h3>
-      <div class="chart-note">Gold marker = expected total ({_expected_total:,}).</div>
       <div class="bar-chart">
         {_total_bar("File total", _file_total, _expected_total, "good" if _file_ok else "bad")}
         {_total_bar("SQLite total", _db_total, _expected_total, "good" if _db_ok else "bad")}
@@ -6138,7 +5904,7 @@ def _(
                 "y": [_beta * _x_min + _alpha, _beta * _x_max + _alpha],
             }
         )
-        _reg_line = alt.Chart(_reg_df).mark_line(color="#1f2937").encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
+        _reg_line = alt.Chart(_reg_df).mark_line(color="#f59e0b", strokeWidth=2.5).encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
         _scatter_layers = _scatter + _reg_line
         # A line can always be drawn. R^2 says whether it means anything.
         if _r2 >= 0.5:
