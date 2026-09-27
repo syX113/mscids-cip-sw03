@@ -7,6 +7,7 @@ The four small lookup tables (regions, countries, categories, products) share on
 endpoints. Sales, the resource the lecture follows, have every verb written out at the bottom.
 """
 
+import math
 import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -16,7 +17,10 @@ from threading import Lock
 from typing import Annotated, Any, NamedTuple
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Path as PathParam, Query
+from fastapi import FastAPI, HTTPException, Path as PathParam, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -51,7 +55,7 @@ PARTIAL_PUT = "Fields you leave out keep their current value (strict HTTP would 
 # Every rule is written once, here, and reused wherever the field appears.
 Name = Annotated[str, Field(min_length=1, max_length=120)]
 Text = Annotated[str, Field(min_length=1, max_length=300)]
-Price = Annotated[float, Field(gt=0)]
+Price = Annotated[float, Field(gt=0, allow_inf_nan=False)]  # JSON 1e999 arrives as inf; ints refuse it anyway
 Ref = Annotated[int, Field(ge=1)]  # an id that points at a row in another table
 Units = Annotated[int, Field(ge=1, le=100_000)]
 Rating = Annotated[int, Field(ge=1, le=5)]
@@ -259,6 +263,13 @@ app = FastAPI(
     ],
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def unprocessable(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """FastAPI's own 422, except that a NaN or Infinity it echoes back goes out as text: JSON has no such number."""
+    finite = {float: lambda f: f if math.isfinite(f) else str(f)}
+    return JSONResponse({"detail": jsonable_encoder(exc.errors(), custom_encoder=finite)}, status_code=422)
 
 
 @app.get("/", tags=["Service"])

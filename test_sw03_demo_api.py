@@ -75,6 +75,9 @@ with TestClient(api.app) as client:
     check("date out of range", client.put("/sales/2", json={"sale_date": "0001-01-01"}).status_code, 422)
     check("whitespace-only name", client.post("/regions", json={"name": "   ", "description": "d"}).status_code, 422)
     check("unknown field", client.put("/sales/9", json={"units_sol": 25}).status_code, 422)
+    raw = {"headers": {"content-type": "application/json"}}  # Python's JSON reads 1e999 as inf and accepts NaN
+    check("infinite price", client.post("/products", content='{"name": "X", "price": 1e999, "description": "d", "category_id": 1}', **raw).status_code, 422)
+    check("NaN units", client.put("/sales/9", content='{"units_sold": NaN}', **raw).status_code, 422)
 
     # --- the lecture reads data/sales.parquet directly: same 7 columns, same order -
     check("sales file columns", list(pd.read_parquet(api.DATA_DIR / "sales.parquet").columns), list(pd.read_parquet(api.SEED_DIR / "sales.parquet").columns))
