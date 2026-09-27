@@ -781,17 +781,17 @@ def _(
                 """
     **How to read the table**
 
-    - **No lock**: fast, and wrong. Increments simply vanish.
+    - **No lock**: wrong. Increments simply vanish.
     - **File lock**: correct, but writers queue, so every millisecond of jitter is paid one
       worker at a time.
     - **SQLite, read-modify-write in Python**: a real database, and it still loses updates.
-      Watch how close the final value lands to *one* worker's total, as if the others never ran.
     - **SQLite, one statement in a transaction**: correct, because the read and the write are a
       single indivisible step no other writer can interleave with. It is quick too: there is no
       gap for the jitter to widen, and the lock is held for microseconds.
 
-    The lost-update counts for the unlocked rows will not repeat between runs. That is the lesson,
-    not a flaw: a race has no fixed answer.
+    With jitter, the unlocked workers fall into step: all read the same value, all pause, all
+    write the same +1. So both unlocked rows end near *one* worker's total, as if the others never
+    ran. Set jitter to 0 and the file race turns messy: its count changes from run to run.
                 """
             ).callout(kind="info"),
         ],
