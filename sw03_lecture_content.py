@@ -2303,7 +2303,7 @@ def _(SALES_SEED, io, mo, pd, run_lossy_money, static_table):
 def _(mo):
     compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows", show_value=True)
     compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns", show_value=True)
-    compress_repeat = mo.ui.switch(label="Only 5 distinct values per column")
+    ch4_compress_repeat = mo.ui.switch(label="Only 5 distinct values per column")
     run_compress = mo.ui.run_button(label="Run compression benchmark", kind="success")
     mo.vstack(
         [
@@ -2313,18 +2313,18 @@ def _(mo):
                 "Would your answer change if every column held only five different values?"
             ).callout(kind="info"),
             mo.hstack([compress_rows, compress_cols], widths="equal"),
-            compress_repeat,
+            ch4_compress_repeat,
             run_compress,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    return compress_cols, compress_repeat, compress_rows, run_compress
+    return ch4_compress_repeat, compress_cols, compress_rows, run_compress
 
 
 @app.cell
 def _(
+    ch4_compress_repeat,
     compress_cols,
-    compress_repeat,
     compress_rows,
     csv,
     gzip,
@@ -2342,7 +2342,7 @@ def _(
     _pool = [round(_rng.random() * 1000, 5) for _ in range(5)]
 
     def _measurement():
-        return _rng.choice(_pool) if compress_repeat.value else round(_rng.random() * 1000, 5)
+        return _rng.choice(_pool) if ch4_compress_repeat.value else round(_rng.random() * 1000, 5)
 
     _records = [
         {"id": _i, "category": _rng.choice("ABCD"), **{f"metric_{_c}": _measurement() for _c in range(compress_cols.value)}}
@@ -2364,11 +2364,13 @@ def _(
         pq.write_table(_table, _buf, compression=_codec)
         _sizes[f"Parquet ({_codec})"] = len(_buf.getvalue())
 
-    _best = min(_sizes, key=_sizes.get)
+    _smallest = min(_sizes.values())
+    _best = " and ".join(_name for _name, _size in _sizes.items() if _size == _smallest)  # ties happen: gzip 6 and 9
     _note = mo.md(
         f"""
-    **Smallest here: {_best}**, at {_sizes[_best] / _sizes['JSON']:.0%} of the JSON bytes.
-    `ratio vs JSON` is size ÷ JSON size: 0.25 means a quarter of the bytes to read from disk or network.
+    **Smallest here: {_best}**, at {_smallest / _sizes['JSON']:.0%} of the JSON bytes.
+
+    The `ratio vs JSON` column is size ÷ JSON size: 0.25 means a quarter of the bytes to read from disk or network.
 
     **And why the ranking is not a law.** Compression removes **repetition**, so the winner
     depends on your columns, not on the format's reputation. Distinct 5-decimal measurements
@@ -2403,7 +2405,7 @@ def _(mo):
                 "This chapter opened by asking whether compression cuts total query time, not just "
                 "file size. So far we have only measured size. Now we time the whole job on the sales "
                 "file already in memory: unpack it if needed, parse it, and sum one column. "
-                "Best of 5 bursts of 20 runs."
+                "Every time is the best of 5 bursts."
             ).callout(kind="info"),
             run_ctime,
         ],
