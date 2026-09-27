@@ -19,8 +19,7 @@ def _():
     import tempfile
     import threading
     import time
-    import urllib.error as url_error
-    import urllib.request as url_request
+    import timeit
     from pathlib import Path
 
     import marimo as mo
@@ -41,8 +40,7 @@ def _():
         tempfile,
         threading,
         time,
-        url_error,
-        url_request,
+        timeit,
     )
 
 
@@ -442,9 +440,11 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _(os):
     # Kept out of the first cell: the title cells above only need `mo`, so they paint
     # before these heavier libraries finish importing.
+    # One BLAS thread: the chapter 4 SVDs are tiny, and extra threads only add multi-second stalls on a busy laptop.
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     import altair as alt
     import duckdb
     import fastavro
@@ -1297,6 +1297,7 @@ def _(
     serial_rows,
     static_table,
     tempfile,
+    timeit,
 ):
     mo.stop(not run_serial.value, mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral"))
 
@@ -1347,8 +1348,6 @@ def _(
     }
 
     def _best_ms(fn, path):  # best of 3: the first call pays the warm-up, the minimum does not
-        import timeit
-
         return min(timeit.repeat(lambda: fn(path), number=1, repeat=3)) * 1000
 
     _rows = []
@@ -1736,12 +1735,10 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_rows, np, run_storage, static_table):
+def _(mo, n_rows, np, run_storage, static_table, timeit):
     mo.stop(not run_storage.value, mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral"))
 
     def _best_ms(fn, table):  # best of 5: each operation is sub-millisecond, so a stray hiccup would dominate
-        import timeit
-
         return min(timeit.repeat(lambda: fn(table), number=1, repeat=5)) * 1000
 
     _operations = {
@@ -2415,15 +2412,14 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table):
+def _(SALES_SEED, gzip, io, mo, pd, run_ctime, static_table, timeit):
     mo.stop(not run_ctime.value, mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral"))
-    import timeit as _timeit
 
     _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
     def _ms(_fn, _calls=20):
         """Milliseconds per call, fastest of 5 bursts. A burst averages out sub-millisecond noise."""
-        return min(_timeit.repeat(_fn, number=_calls, repeat=5)) / _calls * 1000
+        return min(timeit.repeat(_fn, number=_calls, repeat=5)) / _calls * 1000
 
     def _answer(_csv_bytes):
         return pd.read_csv(io.BytesIO(_csv_bytes))["total_price"].sum()
@@ -2676,11 +2672,9 @@ def _(
 
 
 @app.cell
-def _():
+def _(timeit):
     def ch5_best_seconds(con, sql, params=(), repeat=3):
         """Fastest of `repeat` runs of one SQL statement, so a cold first run does not decide a ranking."""
-        import timeit
-
         return min(timeit.repeat(lambda: con.execute(sql, params).fetchall(), number=1, repeat=repeat))
 
     return (ch5_best_seconds,)
