@@ -2559,14 +2559,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 5. DuckDB Example (SQL on Files)")
-    _section
+    mo.md("""
+    ## 5. DuckDB Example (SQL on Files)
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter5_guide = mo.md(
+    mo.md(
         """
     ### Chapter 5 Introduction
 
@@ -2574,55 +2575,43 @@ def _(mo):
 
     *Last stop in the **data tier**. Chapters 1-4 built the files; now something has to read them back.*
 
-    DuckDB is a database engine that runs directly inside your Python process.
-    No separate server is needed for this lecture demo.
-
     Two key ideas:
 
-    - **Predicate pushdown**: filters are applied early, so rows that do not match are skipped.
-    - **Projection pushdown**: only needed columns are read, unused columns are skipped.
+    - **Predicate pushdown**: the filter runs inside the scan, so non-matching rows are dropped
+      before any other work, and whole blocks whose min/max rule out a match are not read at all.
+    - **Projection pushdown**: only the columns the query needs are read; the others are skipped.
 
     Main idea:
 
     $$
-    \\text{work units} \\approx N \\times \\text{selectivity} \\times C_{needed}
+    \\text{work units} \\approx N \\times \\text{selectivity} \\times C_{\\text{needed}}
     $$
 
-    Lower selectivity and fewer needed columns usually mean less total work.
+    Lower selectivity and fewer needed columns usually mean less total work. It is a toy model:
+    the filter column itself is still read for every row unless whole blocks can be skipped, which
+    needs data sorted or clustered on that column (chapter 3).
             """
     ).callout(kind="neutral")
-    _chapter5_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
     ### DuckDB: SQL on Files, Zero Server
 
     DuckDB is an **embedded analytical database**:
 
-    - **Embedded** means it runs in your app process (like a library).
-    - **Analytical** means it is optimized for scans, filters, GROUP BY, joins, and aggregates.
+    - **Embedded**: it runs inside your Python process, like a library. There is no server to start.
+    - **Analytical**: it is built for scans, filters, `GROUP BY`, joins and aggregates over many
+      rows, stored column by column.
 
-    For this notebook, think of DuckDB as a fast SQL engine for local files.
-
-    What "pushdown" means in plain words:
-
-    - Predicate pushdown: if query says `WHERE amount > 600`, DuckDB tries to skip rows/blocks that cannot match.
-    - Projection pushdown: if query only needs `region` and `amount`, DuckDB avoids reading irrelevant columns.
-
-    Why it often outperforms direct plain-file scans for analytics (lower query runtime):
-
-    - Query optimizer + vectorized execution
-    - Columnar reads + pushdown
-    - Fast joins and aggregations without standing up a server process
-
-    The mini-labs below first estimate skipped work, then run an actual query timing demo.
+    It is fast because it reads less, pushing the filter and the column list into the scan as
+    defined above. The first mini-lab estimates how much that can skip; the second times one real
+    query on three sources.
             """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
@@ -2632,27 +2621,14 @@ def _(mo):
     push_selectivity = mo.ui.slider(0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction of rows kept)", show_value=True, debounce=True)
     push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns", show_value=True, debounce=True)
     push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query", show_value=True, debounce=True)
-    _push_note = mo.md(
-        """
-    Model used in this mini-lab:
-
-    - Without pushdown, approximate work is `rows x total_columns`.
-    - With predicate + projection pushdown, approximate work is
-      `rows x selectivity x needed_columns`.
-
-    So this is a simplified *relative work* estimate, not exact runtime.
-            """
-    ).callout(kind="info")
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Mini-lab: Pushdown Intuition (What Work Gets Skipped?)"),
             mo.hstack([push_rows, push_selectivity], widths="equal"),
             mo.hstack([push_cols_total, push_cols_needed], widths="equal"),
-            _push_note,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return push_cols_needed, push_cols_total, push_rows, push_selectivity
 
 
@@ -2665,221 +2641,177 @@ def _(
     push_selectivity,
     static_table,
 ):
-    total_cols = push_cols_total.value
-    needed_cols = min(push_cols_needed.value, total_cols)
-    rows = push_rows.value
-    sel = push_selectivity.value
-
-    no_push = rows * total_cols
-    with_push = rows * sel * needed_cols
-    gain = no_push / max(with_push, 1)
-
-    _table = static_table(
+    _n, _kept, _total = push_rows.value, push_selectivity.value, push_cols_total.value
+    _needed = min(push_cols_needed.value, _total)  # a query cannot use more columns than the table has
+    _without, _with = _n * _total, _n * _kept * _needed
+    mo.vstack(
         [
-            {
-                "metric": "Estimated work without pushdown",
-                "formula": "rows x total_columns",
-                "value": int(no_push),
-            },
-            {
-                "metric": "Estimated work with pushdown",
-                "formula": "rows x selectivity x needed_columns",
-                "value": int(with_push),
-            },
-            {
-                "metric": "Estimated reduction factor",
-                "formula": "without / with",
-                "value": round(gain, 2),
-            },
-        ],
-        label="Predicate + projection pushdown estimate (toy model)",
-    )
-    _panel = mo.vstack(
-        [
-            _table,
-            mo.md("If reduction factor is high, DuckDB has a stronger chance to speed up the query.").callout(kind="info"),
+            static_table(
+                [
+                    {
+                        "estimate": "without pushdown",
+                        "rows (N)": f"{_n:,}",
+                        "share of rows read": "1",
+                        "columns read": _total,
+                        "work units": f"{_without:,.0f}",
+                    },
+                    {
+                        "estimate": "with pushdown",
+                        "rows (N)": f"{_n:,}",
+                        "share of rows read": f"{_kept:g}",
+                        "columns read": _needed,
+                        "work units": f"{_with:,.0f}",
+                    },
+                ],
+                label="Predicate + projection pushdown estimate (toy model, not a runtime)",
+            ),
+            mo.md(
+                f"Reduction factor: **{_without / _with:,.1f}x** less work. The bigger it is, the more "
+                "there is for pushdown to skip. The next mini-lab times a real query."
+            ).callout(kind="info"),
         ],
         gap=0.6,
     )
-    _panel
     return
+
+
+@app.cell
+def _():
+    import timeit as _timeit
+
+    def ch5_best_seconds(con, sql, params=(), repeat=3):
+        """Fastest of `repeat` runs of one SQL statement, so a cold first run does not decide a ranking."""
+        return min(_timeit.repeat(lambda: con.execute(sql, params).fetchall(), number=1, repeat=repeat))
+
+    return (ch5_best_seconds,)
 
 
 @app.cell
 def _(mo):
     duck_rows = mo.ui.slider(2_000, 50_000, step=2_000, value=12_000, label="Rows", show_value=True)
     duck_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Amount threshold", show_value=True)
-    duck_storage = mo.ui.dropdown(
-        options=["CSV scan", "CSV + DuckDB table", "Parquet + DuckDB table"],
-        value="CSV + DuckDB table",
-        label="Storage path",
-    )
-    run_duck = mo.ui.button(label="Run DuckDB demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
-    _controls = mo.vstack(
+    run_duck = mo.ui.run_button(label="Run DuckDB demo", kind="success")
+    mo.vstack(
         [
+            mo.md(
+                "### Mini-lab: One Query, Three Sources\n\n"
+                "DuckDB can query a file by its name: `SELECT ... FROM 'orders.csv'`. The same "
+                "`GROUP BY` (orders and average amount per region, above the threshold) runs on a "
+                "CSV file, a Parquet file and a table loaded into DuckDB. Compare what each costs "
+                "per query and what loading costs once."
+            ),
             mo.hstack([duck_rows, duck_threshold], widths="equal"),
-            duck_storage,
             run_duck,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
-    return duck_rows, duck_storage, duck_threshold, run_duck
+    return duck_rows, duck_threshold, run_duck
 
 
 @app.cell
 def _(
     Path,
-    csv,
+    ch5_best_seconds,
     duck_rows,
-    duck_storage,
     duck_threshold,
     duckdb,
+    format_bytes,
     format_ms,
     mo,
-    pa,
-    pq,
-    random,
+    np,
+    pd,
     run_duck,
     static_table,
     tempfile,
-    time,
 ):
-    if run_duck.value == 0:
-        _output = mo.md("Click **Run DuckDB demo** to execute.").callout(kind="neutral")
-    else:
-        _rng = random.Random(33 + run_duck.value)
-        _records = []
-        for _idx in range(duck_rows.value):
-            _records.append(
-                {
-                    "order_id": _idx,
-                    "region": _rng.choice(["EU", "US", "APAC"]),
-                    "segment": _rng.choice(["consumer", "enterprise", "startup"]),
-                    "amount": round(_rng.random() * 1000, 2),
-                    "day": _rng.randint(1, 30),
-                }
-            )
+    mo.stop(not run_duck.value, mo.md("Click **Run DuckDB demo** to time one query on three sources.").callout(kind="neutral"))
 
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _tmpdir = Path(_tmpdir)
-            _csv_path = _tmpdir / "orders.csv"
-            with _csv_path.open("w", newline="", encoding="utf-8") as _f:
-                _writer = csv.DictWriter(_f, fieldnames=["order_id", "region", "segment", "amount", "day"])
-                _writer.writeheader()
-                _writer.writerows(_records)
+    _n = duck_rows.value
+    _rng = np.random.default_rng(33)
+    _orders = pd.DataFrame(
+        {
+            "order_id": np.arange(_n),
+            "region": _rng.choice(["EU", "US", "APAC"], _n),
+            "segment": _rng.choice(["consumer", "enterprise", "startup"], _n),
+            "amount": _rng.uniform(0, 1000, _n).round(2),
+            "day": _rng.integers(1, 31, _n),
+        }
+    )
+    _sql = (
+        "SELECT region, count(*) AS orders, round(avg(amount), 2) AS avg_amount "
+        "FROM {} WHERE amount > ? GROUP BY region ORDER BY region"
+    )
+    with tempfile.TemporaryDirectory() as _td:
+        _csv, _parquet, _db = (Path(_td) / _name for _name in ("orders.csv", "orders.parquet", "analytics.duckdb"))
+        _orders.to_csv(_csv, index=False)
+        _orders.to_parquet(_parquet, index=False)
+        with duckdb.connect(_db) as _con:
+            _load_csv = ch5_best_seconds(_con, "CREATE OR REPLACE TABLE orders AS FROM read_csv(?)", [str(_csv)])
+            _load_parquet = ch5_best_seconds(_con, "CREATE OR REPLACE TABLE orders AS FROM read_parquet(?)", [str(_parquet)])
+            _query_csv = ch5_best_seconds(_con, _sql.format("read_csv(?)"), [str(_csv), duck_threshold.value])
+            _query_parquet = ch5_best_seconds(_con, _sql.format("read_parquet(?)"), [str(_parquet), duck_threshold.value])
+            _query_table = ch5_best_seconds(_con, _sql.format("orders"), [duck_threshold.value])
+            _result = _con.execute(_sql.format("orders"), [duck_threshold.value]).df()
+            _block = _con.execute("SELECT block_size FROM pragma_database_size()").fetchone()[0]
+        _csv_size, _parquet_size, _db_size = (_p.stat().st_size for _p in (_csv, _parquet, _db))
 
-            _parquet_path = _tmpdir / "orders.parquet"
-            _table = pa.Table.from_pylist(_records)
-            pq.write_table(_table, _parquet_path)
-
-            _db_path = _tmpdir / "analytics.duckdb"
-            _con = duckdb.connect(str(_db_path))
-
-            _ingest_time = None
-            if duck_storage.value != "CSV scan":
-                _ingest_start = time.perf_counter()
-                if duck_storage.value.startswith("Parquet"):
-                    _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_parquet('{_parquet_path}')")
-                else:
-                    _con.execute(f"CREATE TABLE orders AS SELECT * FROM read_csv_auto('{_csv_path}')")
-                _ingest_time = time.perf_counter() - _ingest_start
-
-            _threshold = duck_threshold.value
-            _query = "SELECT region, COUNT(*) AS orders, AVG(amount) AS avg_amount " f"FROM {{source}} WHERE amount > {_threshold} GROUP BY region ORDER BY region"
-
-            _timings = []
-            _result_rows = None
-
-            # 1) CSV scan
-            _start = time.perf_counter()
-            _csv_result = _con.execute(_query.format(source=f"read_csv_auto('{_csv_path}')")).fetchall()
-            _timings.append(
-                {
-                    "source": "CSV scan",
-                    "query_ms": round((time.perf_counter() - _start) * 1000, 2),
-                }
-            )
-
-            # 2) Parquet scan
-            _start = time.perf_counter()
-            _pq_result = _con.execute(_query.format(source=f"read_parquet('{_parquet_path}')")).fetchall()
-            _timings.append(
-                {
-                    "source": "Parquet scan",
-                    "query_ms": round((time.perf_counter() - _start) * 1000, 2),
-                }
-            )
-
-            # 3) DuckDB table query
-            if duck_storage.value != "CSV scan":
-                _start = time.perf_counter()
-                _tbl_result = _con.execute(_query.format(source="orders")).fetchall()
-                _timings.append(
-                    {
-                        "source": "DuckDB table",
-                        "query_ms": round((time.perf_counter() - _start) * 1000, 2),
-                    }
-                )
-                _result_rows = _tbl_result
-            else:
-                _result_rows = _csv_result
-
-            _con.close()
-
-            _sizes = [
-                {"file": "orders.csv", "size (bytes)": _csv_path.stat().st_size},
-                {"file": "analytics.duckdb", "size (bytes)": _db_path.stat().st_size},
-                {"file": "orders.parquet", "size (bytes)": _parquet_path.stat().st_size},
-            ]
-
-        _results_table = [
+    _timings = static_table(
+        [
             {
-                "region": row[0],
-                "orders": row[1],
-                "avg_amount": round(row[2], 2),
-            }
-            for row in (_result_rows or [])
-        ]
+                "source": "CSV file (orders.csv)",
+                "size": format_bytes(_csv_size),
+                "per query": format_ms(_query_csv),
+                "load into a table, once": format_ms(_load_csv),
+            },
+            {
+                "source": "Parquet file (orders.parquet)",
+                "size": format_bytes(_parquet_size),
+                "per query": format_ms(_query_parquet),
+                "load into a table, once": format_ms(_load_parquet),
+            },
+            {
+                "source": "DuckDB table (analytics.duckdb)",
+                "size": format_bytes(_db_size),
+                "per query": format_ms(_query_table),
+                "load into a table, once": "-",
+            },
+        ],
+        label="One query, three sources (best of 3 runs)",
+    )
+    _size_note = (
+        "Push Rows up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
+    )
+    _note = mo.md(
+        f"""
+    **Here the gap is mostly parsing.** CSV is text, so every query re-reads and re-converts it;
+    Parquet and the DuckDB table are already typed columns. Predicate pushdown has next to
+    nothing to skip: the amounts are random, so every block spans roughly 0 to 1000.
 
-        _sizes_table = static_table(_sizes, label="File sizes")
-        _timing_table = static_table(_timings, label="Query timing (ms)")
-        _results_panel = static_table(_results_table, label="Query results")
+    Loading the CSV into a table cost {format_ms(_load_csv)}, about
+    {_load_csv / _query_csv:.1f} CSV queries' worth. Every query after that runs at table speed,
+    which is the case for loading data you query again and again.
 
-        _notes = []
-        if _ingest_time is not None:
-            _notes.append(mo.md(f"Ingest time to DuckDB table: **{format_ms(_ingest_time)}**"))
-        _notes.append(mo.md("DuckDB persists a **columnar, optimized** table in a `.duckdb` file for fast scans.").callout(kind="info"))
-
-        _output = mo.vstack([_sizes_table, _timing_table, _results_panel] + _notes, gap=0.6)
-
-    _output
+    **Why can `analytics.duckdb` be bigger than the CSV?** DuckDB grows its file in
+    {_block // 1024} KiB blocks, so a small table still fills whole blocks. {_size_note}
+            """
+    ).callout(kind="info")
+    mo.vstack([_timings, static_table(_result, label=f"Query result (amount > {duck_threshold.value})"), _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    _index_intro = mo.md(
+    mo.md(
         """
     ### Indexing Demo: Full Scan vs Indexed Search
 
-    So far, DuckDB pushdown helped by skipping work during scans.
-    Indexes solve a related but different problem:
-
-    - Pushdown: reduce work while scanning large datasets.
-    - Index: jump directly to matching rows for selective filters.
-
-    Now we compare:
-
-    - **Full table scan** (no index)
-    - **Indexed lookup** (index on `category` + `value`)
-
-    We also show the query plan to make the optimization explicit.
+    Pushdown skips work *during* a scan; an index avoids the scan: a sorted copy of some columns
+    that lets the engine jump to the matching rows. DuckDB relies on automatic min/max zone maps
+    rather than hand-made indexes, so we switch to SQLite, the row-store database Python ships
+    with. One query, three states of the same table: no index, an index on `category`, an index on
+    `(category, value)`, plus the plan SQLite chose for each.
             """
     ).callout(kind="neutral")
-    _index_intro
     return
 
 
@@ -2889,9 +2821,8 @@ def _(mo):
     idx_selectivity = mo.ui.slider(0.05, 0.9, step=0.05, value=0.2, label="Share of category = 'C'", show_value=True)
     idx_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Value threshold", show_value=True)
     idx_seed = mo.ui.slider(1, 999, value=17, label="Seed", show_value=True)
-    run_index = mo.ui.button(label="Run indexing demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
-    _controls = mo.vstack(
+    run_index = mo.ui.run_button(label="Run indexing demo", kind="success")
+    mo.vstack(
         [
             mo.hstack([idx_rows, idx_selectivity], widths="equal"),
             mo.hstack([idx_threshold, idx_seed], widths="equal"),
@@ -2899,14 +2830,12 @@ def _(mo):
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
     return idx_rows, idx_seed, idx_selectivity, idx_threshold, run_index
 
 
 @app.cell
 def _(
-    Path,
+    ch5_best_seconds,
     idx_rows,
     idx_seed,
     idx_selectivity,
@@ -2915,97 +2844,65 @@ def _(
     random,
     run_index,
     sqlite3,
-    static_table,
-    tempfile,
-    time,
 ):
-    if run_index.value == 0:
-        _output = mo.md("Click **Run indexing demo** to execute.").callout(kind="neutral")
-    else:
-        _rng = random.Random(idx_seed.value)
-        _rows = []
-        for _i in range(idx_rows.value):
-            _rows.append(
-                (
-                    _i,
-                    "C" if _rng.random() < idx_selectivity.value else _rng.choice(["A", "B", "D"]),
-                    round(_rng.random() * 1000, 2),
-                )
-            )
+    mo.stop(not run_index.value, mo.md("Click **Run indexing demo** to time one query on three states of the same table.").callout(kind="neutral"))
 
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _db_path = str(Path(_tmpdir) / "indexing.db")
-            _con = sqlite3.connect(_db_path)
-            _con.execute("CREATE TABLE events (id INTEGER, category TEXT, value REAL)")
-            _con.executemany("INSERT INTO events VALUES (?, ?, ?)", _rows)
-            _con.commit()
+    _rng = random.Random(idx_seed.value)
+    _con = sqlite3.connect(":memory:")  # in memory, so the timings measure SQLite and not the disk
+    _con.execute("CREATE TABLE events (id INTEGER, category TEXT, value REAL)")
+    _con.executemany(
+        "INSERT INTO events VALUES (?, ?, ?)",
+        (
+            (_i, "C" if _rng.random() < idx_selectivity.value else _rng.choice("ABD"), round(_rng.random() * 1000, 2))
+            for _i in range(idx_rows.value)
+        ),
+    )
+    _query = "SELECT count(*), round(avg(value), 2) FROM events WHERE category = 'C' AND value > ?"
+    _params = [idx_threshold.value]
+    _states, _answers = {}, set()
+    for _state, _ddl in (
+        ("no index", None),
+        ("index on (category)", "CREATE INDEX idx_cat ON events(category)"),
+        ("index on (category, value)", "CREATE INDEX idx_cat_val ON events(category, value)"),
+    ):
+        _build = ch5_best_seconds(_con, _ddl, repeat=1) if _ddl else 0.0
+        _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}", _params).fetchone()[-1]
+        _states[_state] = (_build, ch5_best_seconds(_con, _query, _params, repeat=5), _plan)
+        _answers.add(_con.execute(_query, _params).fetchone())
+    _con.close()
+    ((_count, _avg),) = _answers  # one answer, whichever plan SQLite picked
 
-            _query = "SELECT COUNT(*), AVG(value) FROM events " f"WHERE category = 'C' AND value > {idx_threshold.value}"
-
-            def _time_query():
-                _best = None
-                for _ in range(5):
-                    _t0 = time.perf_counter()
-                    _res = _con.execute(_query).fetchone()
-                    _el = time.perf_counter() - _t0
-                    _best = _el if _best is None else min(_best, _el)
-                return _res, _best
-
-            _states = []
-            _plan_scan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
-            _scan_result, _scan_time = _time_query()
-            _states.append(("no index", 0.0, _scan_time, _plan_scan[0], _scan_result))
-
-            for _name, _sql in (
-                ("index on (category)", "CREATE INDEX idx_cat ON events(category)"),
-                ("index on (category, value)", "CREATE INDEX idx_cat_val ON events(category, value)"),
-            ):
-                _t0 = time.perf_counter()
-                _con.execute(_sql)
-                _con.commit()
-                _build = time.perf_counter() - _t0
-                _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}").fetchall()
-                _res, _el = _time_query()
-                _states.append((_name, _build, _el, _plan[0], _res))
-
-            _idx_time = _states[-1][2]
-            _idx_result = _states[-1][4]
-            _con.close()
-
-        _timing_table = static_table(
-            [
-                {
-                    "state": _name,
-                    "build time (ms)": round(_build * 1000, 1),
-                    "query time (ms)": round(_el * 1000, 3),
-                    "faster than no index": "-" if _build == 0 else f"{_scan_time / _el:.1f}x",
-                }
-                for _name, _build, _el, _plan, _res in _states
-            ],
-            label="What the index costs, and what it buys",
-        )
-
-        _plan_table = static_table(
-            [{"state": _name, "SQLite plan": str(_plan[-1])} for _name, _build, _el, _plan, _res in _states],
-            label="Query plan (SQLite)",
-        )
-
-        _result_table = static_table(
-            [
-                {"metric": "count", "scan": _scan_result[0], "index": _idx_result[0]},
-                {
-                    "metric": "avg(value)",
-                    "scan": round(_scan_result[1] or 0, 2),
-                    "index": round(_idx_result[1] or 0, 2),
-                },
-            ],
-            label="Query results",
-        )
-
-        _note = mo.md(
-            """
-    **An index is not a speed setting.** It is a second copy of some of your columns, and three
-    things in this table say so.
+    _scan = _states["no index"][1]
+    _narrow = _scan / _states["index on (category)"][1]
+    _table = mo.ui.table(
+        [
+            {
+                "state": _state,
+                "build (ms)": round(_build * 1000, 1),
+                "query (ms)": round(_query_s * 1000, 3),
+                "speed-up vs scan": f"{_scan / _query_s:.1f}x",
+                "SQLite plan": _plan,
+            }
+            for _state, (_build, _query_s, _plan) in _states.items()
+        ],
+        label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
+        wrapped_columns=["SQLite plan"],
+        selection=None,
+        pagination=False,
+        show_download=False,
+        show_search=False,
+    )
+    _planner = (
+        f"Here that is exactly what happened: the `(category)` row is at {_narrow:.1f}x, slower than "
+        "the scan, and the plan still says USING INDEX."
+        if round(_narrow, 1) < 1
+        else "Push the share of C to 0.5 or more and run again: the `(category)` row drops below 1.0x "
+        "and the plan still says USING INDEX."
+    )
+    _note = mo.md(
+        f"""
+    **An index is not a speed setting.** It is a second copy of some of your columns, and this
+    table shows three consequences.
 
     - **It is not free.** Look at the build column. That cost is paid once here, but in a real
       system it is paid again on **every insert, update and delete**, forever. A table with six
@@ -3014,39 +2911,34 @@ def _(
       has found the matching rows it must still visit the table to read each `value`. The wide one
       contains both columns the query asked for, so the answer never touches the table at all.
       Watch the plan say **COVERING INDEX**: that word is the whole difference.
-    - **The planner decides, not you.** `CREATE INDEX` is a suggestion. SQLite looks at each
-      index, estimates the cost, and is free to ignore it and scan anyway, which it will do when
-      a query matches a large share of the rows. Widen the selectivity slider and watch.
+    - **The planner guesses.** SQLite does not know how many rows are C (even `ANALYZE` only
+      stores averages), so it assumes an equality match is rare and takes the index even when
+      that is slower than scanning. {_planner}
 
     So the honest rule is not "add an index to make it fast". It is: an index pays when it holds
     what the query asks for, and the query asks for **few** rows.
             """
-        ).callout(kind="info")
-
-        _output = mo.vstack(
-            [_timing_table, _plan_table, _result_table, _note],
-            gap=0.6,
-        )
-
-    _output
+    ).callout(kind="info")
+    mo.vstack([_table, _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    _schema_section = mo.md("### Schema-on-Read vs Schema-on-Write (DuckDB)")
-    _schema_section
+    mo.md("""
+    ### Schema-on-Read vs Schema-on-Write (DuckDB)
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _schema_expl = mo.md(
+    mo.md(
         """
     Two ways to deal with the fact that a file has no types of its own.
 
     **Schema-on-read** means you point a tool at the file and let it guess. DuckDB looks at the
-    values and picks `INTEGER`, `DOUBLE`, `DATE` or `VARCHAR`. Fast to start, and forgiving: one
+    values and picks `BIGINT`, `DOUBLE`, `DATE` or `VARCHAR`. Fast to start, and forgiving: one
     bad value in a column and the whole column becomes text.
 
     **Schema-on-write** means you declare the blank form *first*, with its types and its rules,
@@ -3056,14 +2948,13 @@ def _(mo):
     told.** Below, the same messy export goes down both lanes. Watch what each one reports.
             """
     ).callout(kind="neutral")
-    _schema_expl
     return
 
 
 @app.cell
 def _(mo):
-    run_schema = mo.ui.button(label="Run schema demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _controls = mo.vstack(
+    run_schema = mo.ui.run_button(label="Run schema demo", kind="success")
+    mo.vstack(
         [
             mo.md(
                 "We take 400 real sales, export them to CSV, and corrupt 5% of `total_price` with "
@@ -3074,97 +2965,75 @@ def _(mo):
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _controls
     return (run_schema,)
 
 
 @app.cell
-def _(
-    Path,
-    SALES_SEED,
-    duckdb,
-    mo,
-    pd,
-    random,
-    run_schema,
-    static_table,
-    tempfile,
-):
-    if run_schema.value == 0:
-        _output = mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral")
-    else:
-        _src = pd.read_parquet(SALES_SEED).head(400).copy()
-        _src["sale_date"] = pd.to_datetime(_src["sale_date"]).dt.date
-        _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype(
-            {"total_price": str}
-        )
-        _rng = random.Random(5)
-        _dirty_values = ["", "1 234,50", "EUR 900", "n/a"]
-        _prices = _export["total_price"].tolist()
-        for _k, _row in enumerate(_rng.sample(range(len(_prices)), 20)):
-            _prices[_row] = _dirty_values[_k % 4]
-        _export["total_price"] = _prices
+def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, tempfile):
+    mo.stop(not run_schema.value, mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral"))
 
-        with tempfile.TemporaryDirectory() as _td:
-            _csv = Path(_td) / "sales_export.csv"
-            _export.to_csv(_csv, index=False)
-            _url = _csv.as_posix()
-            _con = duckdb.connect()
+    _src = pd.read_parquet(SALES_SEED).head(400)
+    _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype({"total_price": str})
+    _bad_rows = random.Random(5).sample(range(len(_export)), 20)
+    _export.loc[_bad_rows, "total_price"] = ["", "1 234,50", "EUR 900", "n/a"] * 5
 
-            # Lane 1: let DuckDB guess the types, then do what a student would do next.
-            _described = _con.execute(f"DESCRIBE SELECT * FROM read_csv_auto('{_url}')").df()
-            _inferred = _described.set_index("column_name").loc["total_price", "column_type"]
-            _counts = _con.execute(
-                "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
-                "round(sum(TRY_CAST(total_price AS DOUBLE)), 2) "
-                f"FROM read_csv_auto('{_url}')"
-            ).fetchone()
+    with tempfile.TemporaryDirectory() as _td:
+        _csv = str(Path(_td) / "sales_export.csv")
+        _export.to_csv(_csv, index=False)
+        _con = duckdb.connect()
 
-            # Lane 2: declare the form first, with its rules, then try to load into it.
-            _con.execute(
-                """
-                    CREATE TABLE sales_clean (
-                        sale_id     INTEGER PRIMARY KEY,
-                        sale_date   DATE    NOT NULL,
-                        product_id  INTEGER NOT NULL,
-                        units_sold  INTEGER NOT NULL,
-                        total_price DOUBLE  NOT NULL CHECK (total_price > 0)
-                    )
-                    """
+        # Lane 1: let DuckDB guess the types, then do what a student would do next.
+        _inferred = dict(_row[:2] for _row in _con.execute("DESCRIBE FROM read_csv(?)", [_csv]).fetchall())["total_price"]
+        _rows, _parsed, _revenue = _con.execute(
+            "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
+            "round(sum(TRY_CAST(total_price AS DOUBLE)), 2) FROM read_csv(?)",
+            [_csv],
+        ).fetchone()
+
+        # Lane 2: declare the form first, with its rules, then try to load into it.
+        _con.execute(
+            """
+            CREATE TABLE sales_clean (
+                sale_id     INTEGER PRIMARY KEY,
+                sale_date   DATE    NOT NULL,
+                product_id  INTEGER NOT NULL,
+                units_sold  INTEGER NOT NULL,
+                total_price DOUBLE  NOT NULL CHECK (total_price > 0)
             )
-            try:
-                _con.execute(f"INSERT INTO sales_clean SELECT * FROM read_csv_auto('{_url}')")
-                _write_result = "loaded without complaint"
-            except Exception as _exc:
-                _write_result = f"{type(_exc).__name__}: {str(_exc).splitlines()[0]}"
-            _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
+            """
+        )
+        try:
+            _con.execute("INSERT INTO sales_clean FROM read_csv(?)", [_csv])
+            _told = "loaded without complaint"
+        except duckdb.Error as _exc:
+            _lines = str(_exc).splitlines()
+            _told = f"{type(_exc).__name__}: {_lines[0]}. {_lines[2]}"
+        _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
 
-        _rows = [
-            {
-                "lane": "schema-on-read (guess the types)",
-                "type of total_price": str(_inferred),
-                "rows in the file": _counts[0],
-                "rows that reached the answer": _counts[1],
-                "what you are told": "nothing at all",
-                "revenue reported": _counts[2],
-            },
-            {
-                "lane": "schema-on-write (declare, then load)",
-                "type of total_price": "DOUBLE NOT NULL CHECK (> 0)",
-                "rows in the file": _counts[0],
-                "rows that reached the answer": _loaded,
-                "what you are told": _write_result[:90],
-                "revenue reported": "none, the load stopped",
-            },
-        ]
-        _note = mo.md(
-            f"""
-    **Same file. Same 20 bad values. Two completely different days at work.**
+    _true = _src["total_price"].sum()
+    _read, _write = "schema-on-read (guess the types)", "schema-on-write (declare, then load)"
+    _table = mo.ui.table(
+        {
+            "": ["type of total_price", "rows in the file", "rows that reached the answer", "what you are told", "revenue reported"],
+            _read: [_inferred, f"{_rows:,}", f"{_parsed:,}", "nothing at all", f"{_revenue:,.2f} (true total: {_true:,.2f})"],
+            _write: ["DOUBLE NOT NULL CHECK (> 0)", f"{_rows:,}", f"{_loaded:,}", _told, "none, the load stopped"],
+        },
+        label="One messy export, two lanes",
+        wrapped_columns=[_read, _write],
+        column_widths={_read: 400, _write: 440},
+        selection=None,
+        pagination=False,
+        show_download=False,
+        show_search=False,
+    )
+    _note = mo.md(
+        f"""
+    **Same file. Same {len(_bad_rows)} bad values. Two completely different days at work.**
 
-    Schema-on-read gave you a number, and it is wrong. {_counts[0] - _counts[1]} of {_counts[0]}
-    rows were silently discarded, because `TRY_CAST` turns anything it cannot convert into `NULL`
-    and `SUM` skips nulls. Nothing raised, nothing warned. The figure looks completely ordinary
-    and would go straight into a report.
+    Schema-on-read gave you a number, and it is wrong: {1 - _revenue / _true:.1%} below the true
+    total. {_rows - _parsed} of {_rows} rows were silently discarded, because `TRY_CAST` turns
+    anything it cannot convert into `NULL` and `SUM` skips nulls. Nothing raised, nothing warned.
+    The figure looks completely ordinary and would go straight into a report.
 
     Schema-on-write refused to load and named the line it choked on. You have no number yet, and
     that is the point: you have a **problem you know about** instead of an answer you trust by
@@ -3172,151 +3041,149 @@ def _(
 
     Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you
     have just been handed. Schema-on-write is right for anything a decision rests on.
-                """
-        ).callout(kind="warn")
-        _output = mo.vstack(
-            [static_table(_rows, label="One messy export, two lanes"), _note], gap=0.6
-        )
-    _output
+            """
+    ).callout(kind="warn")
+    mo.vstack([_table, _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    run_evolution = mo.ui.button(label="Run schema evolution demo", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_evolution = mo.ui.run_button(label="Run schema evolution demo", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Add One Column, Then Read Last Year's Files"),
             mo.md(
                 "Chapter 2 showed a *format* handling a changed form. This is the same problem one "
                 "tier up, where you keep one file per year in a folder and read them together. "
-                "We split the real sales into `sales_2024.parquet`, written **before** anyone "
-                "thought of `customer_rating`, and `sales_2025.parquet`, written after."
+                "We split the real sales by year: `sales_2024.parquet` was written **before** anyone "
+                "thought of `customer_rating`; `sales_2025.parquet` and `sales_2026.parquet` have it."
             ).callout(kind="info"),
             run_evolution,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_evolution,)
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, static_table, tempfile):
-    if run_evolution.value == 0:
-        _output = mo.md("Click **Run schema evolution demo** to ask the same question three ways.").callout(kind="neutral")
-    else:
-        _all = pd.read_parquet(SALES_SEED)
-        _all["sale_date"] = pd.to_datetime(_all["sale_date"])
-        _old = _all[_all["sale_date"] < "2025-01-01"].drop(columns=["customer_rating"])
-        _new = _all[_all["sale_date"] >= "2025-01-01"]
+def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, tempfile):
+    mo.stop(not run_evolution.value, mo.md("Click **Run schema evolution demo** to read one folder three ways.").callout(kind="neutral"))
 
-        with tempfile.TemporaryDirectory() as _td:
-            _dir = Path(_td)
-            _f2024 = _dir / "sales_2024.parquet"
-            _f2025 = _dir / "sales_2025.parquet"
-            _old.to_parquet(_f2024, index=False)
-            _new.to_parquet(_f2025, index=False)
-            _con = duckdb.connect()
-            _question = "SELECT count(*) AS rows, round(avg(customer_rating), 3) AS avg_rating FROM "
+    _all = pd.read_parquet(SALES_SEED)
+    with tempfile.TemporaryDirectory() as _td:
+        _dir = Path(_td).as_posix()
+        _files = []
+        for _year, _part in _all.groupby(_all["sale_date"].dt.year):
+            _files.append(f"{_dir}/sales_{_year}.parquet")
+            # customer_rating joined the form in 2025, so the 2024 file never had it
+            (_part.drop(columns="customer_rating") if _year < 2025 else _part).to_parquet(_files[-1], index=False)
+        _con = duckdb.connect()
 
-            def _try(_from_clause):
-                try:
-                    _r = _con.execute(_question + _from_clause).fetchone()
-                    return f"rows {_r[0]}, average rating {_r[1]}"
-                except Exception as _exc:
-                    return f"{type(_exc).__name__}: {str(_exc).splitlines()[0][:95]}"
+        def _read(sql, params):
+            try:
+                _df = _con.execute(sql, params).df()
+            except duckdb.Error as _exc:
+                return f"{type(_exc).__name__}: {str(_exc).splitlines()[0].replace(_dir + '/', '')}"
+            if "customer_rating" not in _df:
+                return f"{len(_df):,} rows, {_df.shape[1]} columns, no customer_rating, no error"
+            return f"{len(_df):,} rows, rating on {_df['customer_rating'].count():,}, average {_df['customer_rating'].mean():.3f}"
 
-            _list_old_first = f"read_parquet(['{_f2024.as_posix()}', '{_f2025.as_posix()}'])"
-            _list_new_first = f"read_parquet(['{_f2025.as_posix()}', '{_f2024.as_posix()}'])"
-            _by_name = f"read_parquet('{(_dir / 'sales_*.parquet').as_posix()}', union_by_name=true)"
+        _glob = f"{_dir}/sales_*.parquet"
+        _rows = [
+            {
+                "how you read the folder": "read_parquet('sales_*.parquet')",
+                "what happens": _read("FROM read_parquet(?)", [_glob]),
+                "why": "the glob lists files alphabetically, so the oldest file sets the shape and the newer column is dropped",
+            },
+            {
+                "how you read the folder": "the same files, newest first",
+                "what happens": _read("FROM read_parquet(?)", [_files[::-1]]),
+                "why": "now the first file has the column and a later one does not, so the read is refused",
+            },
+            {
+                "how you read the folder": "read_parquet('sales_*.parquet', union_by_name = true)",
+                "what happens": _read("FROM read_parquet(?, union_by_name = true)", [_glob]),
+                "why": "columns are matched by name, and the missing ones are filled with NULL",
+            },
+        ]
 
-            _rows = [
-                {
-                    "how you read the folder": "old file first",
-                    "what happens": _try(_list_old_first),
-                    "why": "the first file sets the shape, so the newer column is simply not there",
-                },
-                {
-                    "how you read the folder": "new file first",
-                    "what happens": _try(_list_new_first),
-                    "why": "now the shapes disagree and the read is refused outright",
-                },
-                {
-                    "how you read the folder": "union_by_name=true",
-                    "what happens": _try(_by_name),
-                    "why": "match columns by name, fill the missing ones with NULL",
-                },
-            ]
+    _note = mo.md(
+        """
+    **Same folder, three readings, and only one is right.**
 
-        _note = mo.md(
-            """
-    **Same data, same question, three different answers, and only one is right.**
-
-    The first is the dangerous one. Nothing failed: you asked for the average rating and the
-    column had quietly vanished, because the first file read decided what the shape was. The
-    second at least had the decency to shout. Only the third gives the honest answer, over the
-    rows that actually have a rating.
+    The first is the dangerous one. Nothing failed: you read the folder and `customer_rating` had
+    quietly vanished, because the first file read decided what the shape was. The second at least
+    had the decency to shout. Only the third gives the honest answer, over the rows that actually
+    have a rating.
 
     This is what "schema evolution" means once your data lives in more than one file. The rule to
     take away: **when a folder of files has grown new columns over time, say so when you read
     it.** The default is not to guess kindly.
-                """
-        ).callout(kind="warn")
-        _output = mo.vstack(
-            [static_table(_rows, label="One folder, two file shapes, three readings"), _note],
-            gap=0.6,
-        )
-    _output
+            """
+    ).callout(kind="warn")
+    mo.vstack(
+        [
+            mo.ui.table(
+                _rows,
+                label="One folder, two file shapes, three readings",
+                wrapped_columns=["how you read the folder", "what happens", "why"],
+                column_widths={"how you read the folder": 250, "what happens": 480, "why": 330},
+                selection=None,
+                pagination=False,
+                show_download=False,
+                show_search=False,
+            ),
+            _note,
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    _qa_block_duckdb = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
       <h3>Discussion — DuckDB & Schema</h3>
       <details>
         <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
-        <p><strong>Answer:</strong> If the same queries or joins run repeatedly, loading once avoids repeated parsing and enables columnar optimizations (materialization = storing structured intermediate data for reuse).</p>
+        <p><strong>Answer:</strong> When the same queries or joins run repeatedly: the file is parsed once at load instead of on every query, as the timing lab showed (materialization = storing structured intermediate data for reuse).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> What risk appears with schema‑on‑read?</summary>
-        <p><strong>Answer:</strong> Bad types can slip through; errors show up later as `NULL`s or wrong totals (schema‑on‑read).</p>
+        <summary><strong>Q2:</strong> What risk appears with schema-on-read?</summary>
+        <p><strong>Answer:</strong> Bad values slip through silently: they turn into <code>NULL</code>s and totals come out wrong without any error.</p>
       </details>
       <details>
         <summary><strong>Q3:</strong> How can data drift be detected over time?</summary>
         <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
       </details>
     </div>
-            """
-    )
-    _qa_block_duckdb
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _conclusion_duckdb = mo.md(
+    mo.md(
         """
     <div class="section-card">
       <h3>Chapter 5 Conclusion</h3>
       <ul>
-        <li>DuckDB gives SQL analytics directly on files with strong performance for scans and aggregates.</li>
+        <li>DuckDB runs SQL directly on files; typed columns (Parquet, a loaded table) answer far faster than CSV, which is re-parsed on every query.</li>
         <li>Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.</li>
-        <li>Track null rates and inferred types over time to detect data quality drift (distribution/type changes in incoming data).</li>
+        <li>An index is a second copy of some columns: it pays when it covers the query and the query asks for few rows, and every write pays for it.</li>
+        <li>Reading a folder whose files grew columns: say <code>union_by_name=true</code>, or the first file decides the shape.</li>
       </ul>
     </div>
             """
     ).callout(kind="success")
-    _conclusion_duckdb
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
@@ -3332,7 +3199,6 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
