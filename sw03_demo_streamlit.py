@@ -19,7 +19,7 @@ import streamlit as st
 st.set_page_config(page_title="Sales Analysis Dashboard", page_icon=":material/monitoring:", layout="wide")
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
-API_COMMAND = "uvicorn sw03_demo_api:app --reload"
+API_COMMAND = "uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000"
 
 # What the dashboard can group by (label -> column) and measure (label -> column, aggregation, d3 number format).
 DIMENSIONS = {
@@ -276,12 +276,12 @@ def dashboard(api_url: str) -> None:
             st.altair_chart(fitted[0], width="stretch")
             st.caption(fitted[1])
 
-    with st.expander(f"All {len(sales):,} filtered sales, newest first"):
+    with st.expander("All filtered sales, newest first"):  # a constant label, so a filter click keeps it open
         st.dataframe(sales.set_index("sale_id"), column_order=SALE_COLUMNS, column_config=COLUMNS)
 
 
 def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str, pick_key: str) -> None:
-    """Send one write. On success: toast, fresh data, and the edit box shows the saved row."""
+    """Send one write. On success: toast, fresh data, and the edit box shows the saved row if it is listed."""
     try:
         row = api(method, url, json=payload)
     except RuntimeError as exc:
@@ -305,7 +305,9 @@ def record_tab(
     column_order: list[str] | None = None,
 ) -> None:
     """The table as the API returns it, then a create form and an edit form side by side."""
-    st.dataframe(pd.DataFrame(rows).set_index(id_col), column_order=column_order, column_config=COLUMNS)
+    table = pd.DataFrame(rows).set_index(id_col)
+    # Lookup tables read in id order, so a new row lands at the bottom; sales stay newest first.
+    st.dataframe(table if column_order else table.sort_index(), column_order=column_order, column_config=COLUMNS)
     by_id = {row[id_col]: row for row in rows}
     pick_key = f"pick {path}"
     new, edit = st.columns(2, gap="large")
@@ -386,7 +388,9 @@ def records(api_url: str) -> None:
             "customer_rating": st.slider("Customer rating", 1, 5, row.get("customer_rating", 4)),
         }
         if row:
-            st.caption(f"Stored total: ${row['total_price']:,.2f}. The API recomputes it when units or product change.")
+            st.caption(
+                f"Stored total: ${row['total_price']:,.2f}. The API recomputes it when units or product change."
+            )
         else:
             st.caption("No total to type: the API computes units × unit price.")
         return payload
@@ -403,7 +407,10 @@ def records(api_url: str) -> None:
     with product_tab:
         record_tab(api_url, "product", "/products", "product_id", products, product, product_name)
     with sale_tab:
-        st.caption("The 200 most recent sales.")
+        st.caption(
+            "The 200 most recent sales by date. A sale saved with an older date drops out of this list;"
+            " /docs reaches every sale."
+        )
         record_tab(api_url, "sale", "/sales", "sale_id", sales, sale, sale_name, SALE_COLUMNS)
 
 
@@ -413,7 +420,7 @@ if flash := st.session_state.pop("flash", None):
     st.toast(flash, icon=":material/check_circle:")
 
 # The look config.toml cannot express: a soft teal-to-cream page, a tinted hero card, larger tab labels,
-# and less empty space above the hero (the header strip is transparent).
+# and less empty space above the hero (with the header strip transparent, also when the sidebar is collapsed).
 st.html(
     """<style>
     .stApp {
@@ -425,6 +432,7 @@ st.html(
     }
     .st-key-hero { background: linear-gradient(120deg, #ffffff 0%, #eaf8f9 60%, #dff3f4 100%); }
     [data-testid="stTab"] p { font-size: 1.05rem; }
+    [data-testid="stHeader"] { background: transparent; }
     [data-testid="stMainBlockContainer"] { padding-top: 4rem; }
     </style>"""
 )
