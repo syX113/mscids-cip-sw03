@@ -1,7 +1,7 @@
 """FastAPI app that persists normalized sales data to Parquet files.
 
 Run with:
-    uvicorn sw03_demo_api:app --reload
+    uvicorn sw03_demo_api:app            # add --reload only while you edit this file
 
 The four small lookup tables (regions, countries, categories, products) share one generic set of
 endpoints. Sales, the resource the lecture follows, have every verb written out at the bottom.
