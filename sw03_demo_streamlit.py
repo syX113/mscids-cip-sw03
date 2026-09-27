@@ -124,7 +124,7 @@ def fetch_sales(url: str, params: dict[str, Any]) -> pd.DataFrame:
 
 
 def by_name(channel: type, field: str, names: list[str], shown: pd.Series) -> Any:
-    """Colour or shape per name, pinned to every name there is: a filter never repaints the lines it keeps."""
+    """Colour or shape per name, pinned to every name there is: a filter never repaints the series it keeps."""
     return channel(f"{field}:N", scale=alt.Scale(domain=names), legend=alt.Legend(values=sorted(shown.unique())))
 
 
@@ -234,8 +234,16 @@ def dashboard(api_url: str) -> None:
     options = fetch_json(f"{api_url}/meta/options")
     first = date.fromisoformat(options["min_date"]) if options["min_date"] else date.today()  # None: no sales yet
     last = date.fromisoformat(options["max_date"]) if options["max_date"] else date.today()
-    # every name per dimension, filtered or not, so each name keeps its colour whichever filters are on
-    names = dict(zip(DIMENSIONS, (options[key] for key in ("regions", "countries", "categories", "products"))))
+    # every name per dimension in id order, filtered or not: a filter or a new row never repaints the names there
+    names = {
+        label: [row["name"] for row in sorted(fetch_json(f"{api_url}/{table}"), key=lambda row: row[id_col])]
+        for label, table, id_col in (
+            ("Sales Region", "regions", "region_id"),
+            ("Country", "countries", "country_id"),
+            ("Category", "categories", "category_id"),
+            ("Product", "products", "product_id"),
+        )
+    }
 
     with st.container(border=True):
         c1, c2 = st.columns(2)
@@ -282,7 +290,8 @@ def dashboard(api_url: str) -> None:
         c1, c2 = st.columns(2)
         level = c1.selectbox("Aggregation level", list(REGRESSION_LEVELS))
         # one sale per dot: its average is its total, so only the first two predictors differ
-        x = c2.selectbox("Predictor (X)", list(PREDICTORS)[:2] if level == "Sale" else list(PREDICTORS))
+        predictors = list(PREDICTORS)[:2] if level == "Sale" else list(PREDICTORS)
+        x = c2.selectbox("Predictor (X)", predictors, key="predictor")  # the key keeps the pick across levels
         st.caption(
             "Monthly levels average many sales into one dot: fewer, smoother dots"
             " and a higher R² than single sales support (lecture ch. 10)."
@@ -299,17 +308,18 @@ def dashboard(api_url: str) -> None:
         st.dataframe(sales.set_index("sale_id"), column_order=SALE_COLUMNS, column_config=COLUMNS)
 
 
-def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str, pick_key: str) -> None:
+def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str, pick_key: str, outcome: Any) -> None:
     """Send one write. On success: a confirmation, fresh data, and the edit box shows the saved row if it is listed."""
     try:
         row = api(method, url, json=payload)
     except RuntimeError as exc:
-        st.error(str(exc), title=f"The API refused this {noun}", icon=":material/block:")
+        outcome.error(str(exc), title=f"The API refused this {noun}", icon=":material/block:")
         return
     st.cache_data.clear()
     st.session_state.saves += 1  # new form keys, so the create forms start empty again
     st.session_state.reselect = {pick_key: row[id_col]}
-    st.session_state.flash = {pick_key: f"{'Created' if method == 'POST' else 'Updated'} {noun} #{row[id_col]}"}
+    done = "Created" if method == "POST" else "Updated"
+    st.session_state.flash = {(pick_key, method): f"{done} {noun} #{row[id_col]}"}
     st.rerun()
 
 
@@ -329,16 +339,18 @@ def record_tab(
         table = pd.DataFrame(rows).set_index(id_col)
         # Lookup tables read in id order, so a new row lands at the bottom; sales stay newest first.
         st.dataframe(table if column_order else table.sort_index(), column_order=column_order, column_config=COLUMNS)
-    if message := st.session_state.get("flash", {}).pop(pick_key, None):
-        st.success(message, icon=":material/check_circle:")
+    flash = st.session_state.get("flash", {})  # confirmations of the save that ran just before this rerun
     by_id = {row[id_col]: row for row in rows}
     new, edit = st.columns(2, gap="large")
     with new.container(border=True):
         st.subheader(f"New {noun}", anchor=False)
         with st.form(f"new {path} {st.session_state.saves}", border=False):
             payload = fields({})
+            outcome = st.empty()  # a save's confirmation or the API's refusal, where the clicked button was
+            if message := flash.pop((pick_key, "POST"), None):
+                outcome.success(message, icon=":material/check_circle:")
             if st.form_submit_button(f"Create {noun}", type="primary", icon=":material/add:"):
-                save("POST", f"{api_url}{path}", payload, noun, id_col, pick_key)
+                save("POST", f"{api_url}{path}", payload, noun, id_col, pick_key, outcome)
     with edit.container(border=True):
         st.subheader(f"Edit {noun}", anchor=False)
         picked = st.selectbox(f"Pick a {noun}", list(by_id), format_func=lambda i: label(by_id[i]), key=pick_key)
@@ -346,8 +358,11 @@ def record_tab(
             return
         with st.form(f"edit {path} {picked}", border=False):
             payload = fields(by_id[picked])
+            outcome = st.empty()
+            if message := flash.pop((pick_key, "PUT"), None):
+                outcome.success(message, icon=":material/check_circle:")
             if st.form_submit_button(f"Update {noun}", type="primary", icon=":material/save:"):
-                save("PUT", f"{api_url}{path}/{picked}", payload, noun, id_col, pick_key)
+                save("PUT", f"{api_url}{path}/{picked}", payload, noun, id_col, pick_key, outcome)
 
 
 def choose(
@@ -474,7 +489,10 @@ except RuntimeError as exc:
 if problem:
     st.error(f"Cannot reach the Sales Analysis API at **{api_base_url}**.", icon=":material/cloud_off:")
     st.write("Start it in another terminal, or fix the base URL in the sidebar:")
-    port = urlsplit(api_base_url).netloc.partition(":")[2] or 8000  # the port the sidebar URL expects
+    try:
+        port = urlsplit(api_base_url).port or 8000  # the port the sidebar URL expects
+    except ValueError:  # a typo such as "[127.0.0.1" or ":abc": the README's port
+        port = 8000
     st.code(f"uvicorn sw03_demo_api:app --host 127.0.0.1 --port {port}", language="bash")
     st.caption(problem)
     st.button("Try again", icon=":material/refresh:")

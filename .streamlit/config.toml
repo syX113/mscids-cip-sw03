@@ -1,7 +1,8 @@
 [server]
 # No "Email:" question and no "install agent skills" pop-up over the dashboard.
-# The browser does not open by itself: open the Local URL the terminal prints.
+# The browser does not open by itself: open the URL the terminal prints.
 headless = true
+address = "localhost"  # this machine only, like the API; also skips headless mode's public-IP lookup
 
 [browser]
 gatherUsageStats = false
