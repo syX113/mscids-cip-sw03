@@ -49,7 +49,7 @@ cd mscids-cip-sw03
 
 > [!IMPORTANT]
 > Run every command below from inside the `mscids-cip-sw03` folder.
-> If a command fails with "file not found", you are probably in the wrong folder. Check with `pwd` (macOS/Linux) or `cd` (Windows).
+> If a command fails with "file not found", you are probably in the wrong folder. Check with `pwd` (works in PowerShell too).
 
 ### 1. Check prerequisites
 
@@ -115,7 +115,7 @@ python -m pip install -r requirements.txt
 ### 4. Verify the environment
 
 ```bash
-python -c "import marimo, pandas, duckdb, fastapi, pyarrow, PIL, altair, streamlit, fastavro, numpy, pydantic, requests, uvicorn; print('Environment OK')"
+python -c "import marimo, pandas, duckdb, fastapi, pyarrow, PIL, altair, streamlit, fastavro, numpy, pydantic, requests, uvicorn, httpx2; print('Environment OK')"
 ```
 
 This checks **every** package the materials need. If it prints `Environment OK`, you are ready.
@@ -134,7 +134,7 @@ Use separate terminals so each service stays running.
 | Terminal 1 | 📓 Lecture notebook | `marimo run sw03_lecture_content.py` |
 | Terminal 2 | 🧪 Exercises notebook | `marimo edit sw03_lecture_exercises.py` |
 | Terminal 2 (optional) | ✅ Solutions notebook | `marimo edit sw03_lecture_exercises_solutions.py` |
-| Terminal 3 | 🚀 FastAPI demo | `uvicorn sw03_demo_api:app --reload --host 127.0.0.1 --port 8000` |
+| Terminal 3 | 🚀 FastAPI demo | `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
 | Terminal 4 (optional) | 🎛️ Streamlit demo | `streamlit run sw03_demo_streamlit.py` |
 
 Chapters 6 and 8 of the lecture talk to the API, so start Terminal 3 before those chapters.
@@ -143,14 +143,18 @@ The Streamlit demo needs the API too; its default base URL is `http://127.0.0.1:
 To stop a running process in a terminal: `Ctrl + C`.
 
 > [!IMPORTANT]
-> On every API start, the files in `data/` are reset from `data/seed/`.
-> With `--reload` that also happens each time you save a file. Anything you create through the API is
-> deliberately temporary, so you can experiment without breaking the lecture.
+> On every API start, the files in `data/` are reset from `data/seed/`. Anything you create through the
+> API is deliberately temporary, so you can experiment without breaking the lecture.
 
-### Heavy demos run only when you click
+> [!WARNING]
+> With `--reload` the API restarts, and resets `data/`, whenever a `.py` file in this folder is saved.
+> marimo autosaves the exercises notebook while you type, so leave `--reload` out during the lecture
+> and add it only while you edit `sw03_demo_api.py` yourself.
 
-The benchmarks in the notebook are behind **Run** buttons. Nothing expensive happens when the
-notebook opens; click the button in a chapter to run that chapter's experiment.
+### Benchmarks run only when you click
+
+The benchmarks in the lecture notebook sit behind **Run** buttons: click a chapter's button to run
+its experiment.
 
 ### Check the API still works
 
@@ -158,8 +162,8 @@ notebook opens; click the button in a chapter to run that chapter's experiment.
 python test_sw03_demo_api.py
 ```
 
-Prints one line per check and exits non-zero if anything is broken. Stop the API first, or run it in
-another terminal; the test starts its own copy in-process.
+Prints one line per check and exits non-zero if anything is broken. Stop the API first: the check
+resets `data/` and then edits the same files a running API reads. Starting the API again reseeds them.
 
 ---
 
@@ -171,7 +175,7 @@ another terminal; the test starts its own copy in-process.
 | 📖 API docs (ReDoc) | `http://127.0.0.1:8000/redoc` |
 | ❤️ API health | `http://127.0.0.1:8000/health` |
 | ⚡ Marimo | Printed in terminal, usually `http://127.0.0.1:2718` (or next free port) |
-| 🎛️ Streamlit | Printed in terminal, usually `http://localhost:8501` |
+| 🎛️ Streamlit | Printed in terminal as URL, usually `http://localhost:8501`; open it in your browser |
 
 The API supports all four REST verbs (`GET`, `POST`, `PUT`, `DELETE`) on regions, countries,
 categories, products and sales. Try them from `/docs`.
@@ -199,10 +203,10 @@ routes give identical versions.
 | 📦 `ModuleNotFoundError` | Activate the environment, then `python -m pip install -r requirements.txt` |
 | ⚡ `marimo: command not found` | Activate the environment first: `source .venv/bin/activate` (Windows: `.\.venv\Scripts\Activate.ps1`) |
 | 🚫 PowerShell blocks `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then activate again |
-| 🌐 API not reachable | Start it again: `uvicorn sw03_demo_api:app --reload --host 127.0.0.1 --port 8000` |
-| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update the base URL in the notebook and the Streamlit sidebar. |
-| 🔄 API returns old data | The API reseeds `data/` from `data/seed/` on every start. That is expected. |
-| 📁 Wrong folder | `ls` (macOS/Linux) or `dir` (Windows) should show `sw03_lecture_content.py`. If not, `cd` into `mscids-cip-sw03`. |
+| 🌐 API not reachable | Start it again: `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
+| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update the API base URL box in the lecture (chapter 6; chapter 8 shows the same box) and the Streamlit sidebar. |
+| 🔄 Your API changes are gone | Expected: the API reseeds `data/` from `data/seed/` on every start, and with `--reload` on every saved `.py` file. Start it without `--reload` to keep your changes while you work. |
+| 📁 Wrong folder | `ls` (works in PowerShell too) should show `sw03_lecture_content.py`. If not, `cd` into `mscids-cip-sw03`. |
 
 > [!NOTE]
 > If commands still fail, close the terminal, open a new one, re-activate the environment, and retry.

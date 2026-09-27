@@ -1,1490 +1,506 @@
-"""Streamlit UI for the normalized Sales Analysis dashboard.
+"""Streamlit front end for the Sales Analysis API: a dashboard plus create/update forms.
 
-Run with:
+Start the API first, then run:
     streamlit run sw03_demo_streamlit.py
+
+Font, colours and the chart palette live in .streamlit/config.toml.
 """
 
-from __future__ import annotations
-
-from datetime import date, timedelta
+import statistics
+from collections.abc import Callable
+from datetime import date
 from typing import Any
+from urllib.parse import urlsplit
 
 import altair as alt
-import numpy as np
 import pandas as pd
 import requests
-
 import streamlit as st
 
-st.set_page_config(
-    page_title="Sales Analysis Dashboard",
-    page_icon="📊",
-    layout="wide",
-)
+st.set_page_config(page_title="Sales Analysis Dashboard", page_icon=":material/monitoring:", layout="wide")
 
-REQUEST_TIMEOUT_SECONDS = 12
-META_CACHE_TTL_SECONDS = 90
-ENTITY_CACHE_TTL_SECONDS = 90
-SALES_CACHE_TTL_SECONDS = 25
+DEFAULT_API_URL = "http://127.0.0.1:8000"
 
-if "api_base_url" not in st.session_state:
-    st.session_state.api_base_url = "http://127.0.0.1:8000"
-if "flash_success" not in st.session_state:
-    st.session_state.flash_success = ""
-
-PASTEL_CATEGORICAL_COLORS = [
-    "#73cdd4",
-    "#8fdcbe",
-    "#a8e8d0",
-    "#b6dff4",
-    "#c4e6ff",
-    "#f3df9a",
-    "#f7ebb9",
-    "#9dd6f5",
-    "#89c5ef",
-    "#7bc7b7",
+# What the dashboard can group by (label -> column) and measure (label -> column, aggregation, d3 number format).
+# Money is in francs: "$" in a d3 format prints the currency the chart theme below sets, "CHF ".
+DIMENSIONS = {
+    "Sales Region": "region_name",
+    "Country": "country_name",
+    "Category": "category_name",
+    "Product": "product_name",
+}
+METRICS = {
+    "Total Sales": ("total_price", "sum", "$.3~s"),
+    "Units Sold": ("units_sold", "sum", ",.0f"),
+    "Average Rating": ("customer_rating", "mean", ".2f"),
+}
+PREDICTORS = {
+    "Average Order Value": ("total_price", "mean", "$.3~s"),
+    "Average Units Sold": ("units_sold", "mean", ",.1f"),
+    "Total Sales": ("total_price", "sum", "$.3~s"),
+    "Total Units Sold": ("units_sold", "sum", ",.0f"),
+}
+REGRESSION_LEVELS = {  # level -> (one dot per ..., coloured by)
+    "Product (monthly)": ("product_name", "Category"),
+    "Country (monthly)": ("country_name", "Sales Region"),
+    "Category (monthly)": ("category_name", "Category"),
+    "Sales Region (monthly)": ("region_name", "Sales Region"),
+    "Sale": ("sale_id", "Category"),
+}
+# Human headers for every table the app shows.
+COLUMNS = {
+    "sale_id": st.column_config.NumberColumn("Sale", format="#%d"),
+    "region_id": st.column_config.NumberColumn("Region #"),
+    "country_id": st.column_config.NumberColumn("Country #"),
+    "category_id": st.column_config.NumberColumn("Category #"),
+    "product_id": st.column_config.NumberColumn("Product #"),
+    "name": "Name",
+    "description": "Description",
+    "price": st.column_config.NumberColumn("Unit price", format="CHF %,.2f"),
+    "sale_date": st.column_config.DateColumn("Date", format="D MMM YYYY"),
+    "region_name": "Region",
+    "country_name": "Country",
+    "category_name": "Category",
+    "product_name": "Product",
+    "units_sold": st.column_config.NumberColumn("Units", format="%,d"),
+    "total_price": st.column_config.NumberColumn("Total", format="CHF %,.2f"),
+    "customer_rating": st.column_config.NumberColumn("Rating", format="%d ★"),
+}
+# Sales tables show the names the API joined in, not the ids behind them.
+SALE_COLUMNS = [
+    "sale_date",
+    "region_name",
+    "country_name",
+    "category_name",
+    "product_name",
+    "units_sold",
+    "total_price",
+    "customer_rating",
 ]
-PASTEL_HEATMAP_RANGE = ["#fff8d6", "#e7f8d9", "#c8efe3", "#9adfed", "#79c3e8"]
-REGRESSION_TREND_COLOR = "#3f8b8f"
 
 
-def inject_theme() -> None:
-    st.markdown(
-        """
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400&display=swap');
-
-          :root {
-            --bg-a: #edf9fb;
-            --bg-b: #f8feff;
-            --bg-c: #f5fdf4;
-            --bg-d: #fffdf2;
-            --surface: #ffffff;
-            --surface-soft: #f9feff;
-            --text: #000000;
-            --border: #d7e9ea;
-            --border-strong: #bfdcdf;
-            --accent: #76c9cf;
-            --accent-soft: #d8f2f3;
-            --accent-mint: #bde9cd;
-            --accent-yellow: #f4e7ad;
-            --shadow-soft: 0 5px 14px rgba(61, 113, 123, 0.08);
-            --chart-grid: #d6e8ea;
-            --chart-bg: #ffffff;
-            --table-header: #eaf8f7;
-          }
-
-          .stApp {
-            background:
-              radial-gradient(840px 520px at -8% 0%, rgba(180, 234, 239, 0.42), transparent 60%),
-              radial-gradient(920px 520px at 105% -5%, rgba(194, 239, 214, 0.39), transparent 60%),
-              radial-gradient(720px 440px at 50% 105%, rgba(251, 239, 187, 0.32), transparent 64%),
-              linear-gradient(180deg, var(--bg-a) 0%, var(--bg-b) 38%, var(--bg-c) 72%, var(--bg-d) 100%);
-            color: var(--text);
-          }
-
-          html, body, [class*="css"] {
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
-          p, span, label, li, div, small {
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
-          b, strong, th {
-            font-weight: 400 !important;
-          }
-
-          h1, h2, h3 {
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-            font-weight: 400;
-            color: var(--text) !important;
-            letter-spacing: 0.01em;
-          }
-
-          .block-container {
-            padding-top: 1.1rem;
-            padding-bottom: 2rem;
-          }
-
-          .hero {
-            border: 1px solid var(--border-strong);
-            border-radius: 22px;
-            padding: 1.15rem 1.25rem;
-            background: linear-gradient(135deg, #ffffff 0%, #f3fbfc 58%, #f7fffb 100%);
-            box-shadow: var(--shadow-soft);
-            margin-bottom: 0.95rem;
-          }
-
-          .hero h1 {
-            margin: 0;
-            font-size: 2rem;
-            line-height: 1.1;
-            font-weight: 400;
-          }
-
-          .hero p {
-            margin: 0.38rem 0 0;
-            font-weight: 400;
-          }
-
-          [data-testid="stSidebar"] > div:first-child {
-            background: #ffffff;
-            border-right: 1px solid var(--border);
-          }
-
-          [data-testid="stSidebar"] * {
-            color: var(--text) !important;
-          }
-
-          [data-testid="stTabs"] [role="tablist"] {
-            border-bottom: none !important;
-            gap: 0.55rem;
-            padding-bottom: 0.3rem;
-          }
-
-          [data-testid="stTabs"] button[role="tab"] {
-            white-space: nowrap !important;
-            width: auto !important;
-            min-width: fit-content !important;
-            min-height: 2.7rem !important;
-            height: auto !important;
-            padding: 0.38rem 1.02rem !important;
-            border-radius: 999px !important;
-            border: 1px solid var(--border) !important;
-            background: linear-gradient(145deg, #ffffff, #f6fbfd) !important;
-            color: var(--text) !important;
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif !important;
-            font-size: 1.02rem !important;
-            font-weight: 400 !important;
-            line-height: 1.12 !important;
-            box-shadow: none !important;
-          }
-
-          [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            border-color: #78c9cf !important;
-            background: linear-gradient(145deg, #ffffff 0%, #ddf4f6 58%, #e6f6ea 100%) !important;
-            box-shadow: inset 0 0 0 1px rgba(118, 201, 207, 0.35) !important;
-          }
-
-          [data-testid="stWidgetLabel"] p {
-            color: var(--text) !important;
-            font-weight: 400 !important;
-            font-size: 0.95rem !important;
-          }
-
-          [data-testid="stNumberInputContainer"] button {
-            background: linear-gradient(145deg, #e4f6f7, #f3faec) !important;
-            border-left: 1px solid var(--border) !important;
-            color: var(--text) !important;
-          }
-
-          [data-testid="stDateInput"] * {
-            color: var(--text) !important;
-          }
-
-          .stButton > button,
-          .stFormSubmitButton > button {
-            min-height: 2.65rem !important;
-            border-radius: 12px !important;
-            border: 1px solid #b9dfe1 !important;
-            background: linear-gradient(145deg, #e3f5f6 0%, #eefbe6 100%) !important;
-            color: var(--text) !important;
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif !important;
-            font-weight: 400 !important;
-            box-shadow: 0 4px 12px rgba(93, 173, 177, 0.12);
-          }
-
-          .stButton > button:hover,
-          .stFormSubmitButton > button:hover {
-            border-color: var(--accent) !important;
-            filter: brightness(1.01);
-          }
-
-          [data-testid="stMetric"] {
-            border: 1px solid var(--border) !important;
-            border-radius: 14px !important;
-            background: linear-gradient(140deg, #ffffff, #f5fcff) !important;
-            box-shadow: var(--shadow-soft);
-            padding: 0.5rem 0.75rem;
-          }
-
-          [data-testid="stMetricLabel"],
-          [data-testid="stMetricLabel"] * {
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
-          [data-testid="stMetricValue"] {
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif !important;
-            font-size: 1.38rem !important;
-            font-weight: 400 !important;
-            color: var(--text) !important;
-          }
-
-          [data-testid="stAlert"] {
-            border-radius: 12px;
-            border: 1px solid var(--border) !important;
-          }
-
-          [data-testid="stExpander"] {
-            border: 1px solid var(--border) !important;
-            border-radius: 14px !important;
-            background: linear-gradient(135deg, #ffffff, #f7fdff) !important;
-            box-shadow: var(--shadow-soft);
-            overflow: hidden;
-          }
-
-          [data-testid="stExpander"] summary,
-          [data-testid="stExpander"] summary * {
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
-          [data-testid="stVegaLiteChart"] {
-            background: var(--chart-bg) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 14px !important;
-            box-shadow: var(--shadow-soft);
-            padding: 0.35rem 0.4rem 0.08rem !important;
-          }
-
-          [data-testid="stVegaLiteChart"] svg text {
-            fill: var(--text) !important;
-          }
-
-          [data-testid="stVegaLiteChart"] svg .domain,
-          [data-testid="stVegaLiteChart"] svg .tick line,
-          [data-testid="stVegaLiteChart"] svg .grid line {
-            stroke: var(--chart-grid) !important;
-          }
-
-          [data-testid="stDataFrame"] div[role="grid"] {
-            background: #ffffff !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px !important;
-            color: var(--text) !important;
-          }
-
-          [data-testid="stDataFrame"] {
-            --gdg-bg-cell: #ffffff;
-            --gdg-bg-cell-medium: #f6fcfd;
-            --gdg-bg-header: #eaf8f7;
-            --gdg-bg-header-hovered: #e2f3f4;
-            --gdg-bg-header-has-focus: #e2f3f4;
-            --gdg-bg-icon-header: #d2ecee;
-            --gdg-bg-search-result: #f3faeb;
-            --gdg-border-color: #d8e9eb;
-            --gdg-fg-cell: #000000;
-            --gdg-fg-header: #000000;
-            --gdg-fg-icon-header: #2c7378;
-            --gdg-text-dark: #000000;
-            --gdg-text-medium: #2f4345;
-            --gdg-text-light: #5a7072;
-            --gdg-link-color: #2b7f86;
-          }
-
-          [data-testid="stDataFrame"] canvas {
-            background: #ffffff !important;
-          }
-
-          [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
-          [data-testid="stDataFrame"] [data-testid="StyledDataFrameResizable"] {
-            background: #ffffff !important;
-            border-radius: 12px !important;
-          }
-
-          [data-testid="stDataFrame"] [data-testid="stToolbar"],
-          [data-testid="stDataFrame"] [data-testid="stStatusWidget"] {
-            background: #ffffff !important;
-            color: var(--text) !important;
-          }
-
-          [data-testid="stDataFrame"] [role="columnheader"] {
-            background: var(--table-header) !important;
-            color: var(--text) !important;
-            border-color: var(--border) !important;
-            font-weight: 400 !important;
-          }
-
-          [data-testid="stDataFrame"] [role="gridcell"],
-          [data-testid="stDataFrame"] [role="rowheader"] {
-            background: #ffffff !important;
-            color: var(--text) !important;
-            border-color: #e5f0f1 !important;
-          }
-
-          [data-testid="stTable"] table {
-            background: #ffffff !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px;
-          }
-
-          [data-testid="stTable"] th {
-            background: var(--table-header) !important;
-            color: var(--text) !important;
-            font-weight: 400 !important;
-          }
-
-          [data-testid="stTable"] td {
-            background: #ffffff !important;
-            color: var(--text) !important;
-            border-top: 1px solid #e5f0f1 !important;
-          }
-
-          [data-testid="stCaptionContainer"] p {
-            color: var(--text) !important;
-            opacity: 0.85;
-          }
-
-          [data-testid="stElementToolbar"] {
-            background: rgba(255, 255, 255, 0.94) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 10px !important;
-            box-shadow: 0 4px 12px rgba(61, 113, 123, 0.12) !important;
-          }
-
-          [data-testid="stElementToolbar"] * {
-            color: var(--text) !important;
-          }
-
-          .vega-tooltip {
-            background: rgba(255, 255, 255, 0.98) !important;
-            color: var(--text) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 10px !important;
-            box-shadow: 0 6px 16px rgba(61, 113, 123, 0.12) !important;
-            font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif !important;
-            font-size: 0.92rem !important;
-            padding: 0.45rem 0.62rem !important;
-          }
-
-          .vega-tooltip table {
-            border-collapse: collapse !important;
-          }
-
-          .vega-tooltip th,
-          .vega-tooltip td {
-            color: var(--text) !important;
-            border: none !important;
-            background: transparent !important;
-            font-weight: 400 !important;
-            padding: 0.16rem 0.28rem !important;
-          }
-
-          .vega-tooltip hr {
-            border: 0 !important;
-            border-top: 1px solid #e1ecee !important;
-            margin: 0.2rem 0 !important;
-          }
-
-          @media (max-width: 980px) {
-            [data-testid="stTabs"] button[role="tab"] {
-              font-size: 0.95rem !important;
-              padding: 0.35rem 0.85rem !important;
-            }
-
-            .hero h1 {
-              font-size: 1.65rem;
-            }
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+@alt.theme.register("projector", enable=True)
+def projector_theme() -> alt.theme.ThemeConfig:
+    """On top of Streamlit's chart theme: darker, larger axis and legend text, no chart background, francs."""
+    text = {"labelColor": "#3f5b5f", "titleColor": "#3f5b5f", "labelFontSize": 13, "titleFontSize": 14}
+    francs = {"number": {"decimal": ".", "thousands": ",", "grouping": [3], "currency": ["CHF ", ""]}}
+    return {"config": {"background": "transparent", "axis": text, "legend": text, "locale": francs}}
 
 
-def _build_url(api_base: str, path: str) -> str:
-    return f"{api_base.rstrip('/')}{path}"
-
-
-def _parse_error_detail(response: requests.Response) -> str:
+def error_text(response: requests.Response) -> str:
     try:
-        payload = response.json()
-    except Exception:
-        payload = response.text.strip()
-
-    if isinstance(payload, dict) and "detail" in payload:
-        detail = payload["detail"]
-    else:
-        detail = payload
-    return f"{response.status_code} - {detail}"
+        detail = response.json()["detail"]
+    except (ValueError, KeyError, TypeError):
+        detail = response.text.strip()
+    if isinstance(detail, list):  # 422 from pydantic: one entry per rejected field
+        detail = "\n".join(f"- **{error['loc'][-1]}**: {error['msg']}" for error in detail)
+    return f"{response.status_code} {response.reason}\n\n{detail}"
 
 
-def _request_json(
-    method: str,
-    api_base: str,
-    path: str,
-    *,
-    params: list[tuple[str, Any]] | None = None,
-    payload: dict[str, Any] | None = None,
-) -> Any:
-    url = _build_url(api_base, path)
+def api(method: str, url: str, **kwargs: Any) -> Any:
+    """One request to the API: the JSON body, or a RuntimeError that reads well on screen."""
     try:
-        response = requests.request(
-            method=method,
-            url=url,
-            params=params,
-            json=payload,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Request failed: {exc}") from exc
-
-    if response.status_code >= 400:
-        raise RuntimeError(_parse_error_detail(response))
-
-    if not response.content:
-        return None
-    try:
-        return response.json()
-    except ValueError:
-        return response.text
+        response = requests.request(method, url, timeout=5, **kwargs)
+        if response.ok:
+            return response.json()
+    except requests.RequestException as exc:  # no connection, a timeout, or a body that is not JSON
+        raise RuntimeError(f"No usable answer from {url} ({type(exc).__name__})") from None
+    raise RuntimeError(error_text(response))
 
 
-def _safe_get(api_base: str, path: str, params: list[tuple[str, Any]] | None = None) -> Any:
-    return _request_json("GET", api_base, path, params=params)
+# Short TTLs, so changes made from /docs or the notebook show up here within seconds.
+@st.cache_data(ttl="15s", show_spinner=False)
+def fetch_json(url: str) -> Any:
+    return api("GET", url)
 
 
-def _safe_post(api_base: str, path: str, payload: dict[str, Any]) -> Any:
-    return _request_json("POST", api_base, path, payload=payload)
-
-
-def _safe_put(api_base: str, path: str, payload: dict[str, Any]) -> Any:
-    return _request_json("PUT", api_base, path, payload=payload)
-
-
-def _freeze_params(params: list[tuple[str, Any]]) -> tuple[tuple[str, str], ...]:
-    return tuple((str(k), str(v)) for k, v in params)
-
-
-def clear_data_caches() -> None:
-    # Invalidate only this app's data caches to keep refreshes fast and predictable.
-    fetch_meta_options.clear()
-    fetch_regions.clear()
-    fetch_countries.clear()
-    fetch_categories.clear()
-    fetch_products.clear()
-    fetch_sales.clear()
-
-
-@st.cache_data(show_spinner=False, ttl=META_CACHE_TTL_SECONDS)
-def fetch_meta_options(api_base: str) -> dict[str, Any]:
-    return _safe_get(api_base, "/meta/options")
-
-
-@st.cache_data(show_spinner=False, ttl=ENTITY_CACHE_TTL_SECONDS)
-def fetch_regions(api_base: str) -> list[dict[str, Any]]:
-    return _safe_get(api_base, "/regions")
-
-
-@st.cache_data(show_spinner=False, ttl=ENTITY_CACHE_TTL_SECONDS)
-def fetch_countries(api_base: str) -> list[dict[str, Any]]:
-    return _safe_get(api_base, "/countries")
-
-
-@st.cache_data(show_spinner=False, ttl=ENTITY_CACHE_TTL_SECONDS)
-def fetch_categories(api_base: str) -> list[dict[str, Any]]:
-    return _safe_get(api_base, "/categories")
-
-
-@st.cache_data(show_spinner=False, ttl=ENTITY_CACHE_TTL_SECONDS)
-def fetch_products(api_base: str) -> list[dict[str, Any]]:
-    return _safe_get(api_base, "/products")
-
-
-@st.cache_data(show_spinner=False, ttl=SALES_CACHE_TTL_SECONDS)
-def fetch_sales(api_base: str, params_key: tuple[tuple[str, str], ...]) -> pd.DataFrame:
-    records = _safe_get(api_base, "/sales", params=[(k, v) for k, v in params_key])
-    df = pd.DataFrame(records)
-    if df.empty:
-        return df
-
-    df["sale_date"] = pd.to_datetime(df["sale_date"], errors="coerce")
-    for col in ["units_sold", "total_price", "customer_rating"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+@st.cache_data(ttl="15s", show_spinner="Loading sales…")
+def fetch_sales(url: str, params: dict[str, Any]) -> pd.DataFrame:
+    df = pd.DataFrame(api("GET", url, params=params))  # requests repeats list values: ?region=Asia&region=Europe
+    if not df.empty:
+        df["sale_date"] = pd.to_datetime(df["sale_date"])
+        df["month"] = df["sale_date"].dt.to_period("M").dt.to_timestamp()
     return df
 
 
-def _axis(title: str | None = None, fmt: str | None = None, label_angle: int = 0) -> alt.Axis:
-    args: dict[str, Any] = {
-        "title": title,
-        "labelColor": "#000000",
-        "titleColor": "#000000",
-        "labelFont": "Manrope",
-        "titleFont": "Manrope",
-        "labelFontSize": 11,
-        "titleFontSize": 11,
-        "domainColor": "#d7e9ea",
-        "tickColor": "#d7e9ea",
-        "gridColor": "#e5f1f2",
-        "labelAngle": label_angle,
-        "labelFontWeight": 400,
-        "titleFontWeight": 400,
-    }
-    if fmt is not None:
-        args["format"] = fmt
-    return alt.Axis(**args)
+def by_name(channel: type, field: str, names: list[str], shown: pd.Series) -> Any:
+    """Colour or shape per name, pinned to every name there is: a filter never repaints the series it keeps."""
+    return channel(f"{field}:N", scale=alt.Scale(domain=names), legend=alt.Legend(values=sorted(shown.unique())))
 
 
-def _configure_chart(chart: alt.Chart) -> alt.Chart:
+def line_chart(df: pd.DataFrame, metric: str, compare: str, split_by_category: bool, names: list[str]) -> alt.Chart:
+    column, agg, fmt = METRICS[metric]
+    groups = ["month", DIMENSIONS[compare]] + (["category_name"] if split_by_category else [])
+    monthly = df.groupby(groups, as_index=False).agg(value=(column, agg))
+    chart = (
+        alt.Chart(monthly)
+        .mark_line(point=not split_by_category, strokeWidth=2)
+        .encode(
+            x=alt.X("month:T", title="Month", axis=alt.Axis(format="%b %Y")),
+            y=alt.Y(
+                "value:Q",
+                title=metric,
+                axis=alt.Axis(format=fmt),
+                scale=alt.Scale(domain=[1, 5]) if agg == "mean" else alt.Undefined,  # a rating keeps its 1-5 scale
+            ),
+            color=by_name(alt.Color, DIMENSIONS[compare], names, monthly[DIMENSIONS[compare]]).title(compare),
+            tooltip=[
+                alt.Tooltip("month:T", title="Month", format="%b %Y"),
+                alt.Tooltip(f"{DIMENSIONS[compare]}:N", title=compare),
+                *([alt.Tooltip("category_name:N", title="Category")] if split_by_category else []),
+                alt.Tooltip("value:Q", title=metric, format=fmt),
+            ],
+        )
+    )
+    if split_by_category:
+        dashes = alt.Scale(range=[[1, 0], [8, 4], [2, 3]])  # solid, dashed, dotted: tellable apart at a glance
+        legend = alt.Legend(symbolType="stroke", symbolSize=500, symbolStrokeColor="#3f5b5f", symbolStrokeWidth=2)
+        chart = chart.encode(
+            strokeDash=alt.StrokeDash("category_name:N", title="Category", scale=dashes, legend=legend)
+        )
+    return chart.properties(height=380)
+
+
+def heatmap(df: pd.DataFrame, rows: str, columns: str, metric: str) -> alt.LayerChart:
+    column, agg, fmt = METRICS[metric]
+    cells = df.groupby([DIMENSIONS[rows], DIMENSIONS[columns]], as_index=False).agg(value=(column, agg))
+    ranked = alt.EncodingSortField("value", op=agg, order="descending")  # biggest row and column first
+    base = alt.Chart(cells).encode(
+        x=alt.X(
+            f"{DIMENSIONS[columns]}:N",
+            title=columns,
+            sort=ranked,
+            axis=alt.Axis(labelAngle=0, labelExpr="split(datum.label, ' ')", labelOverlap=False, labelFlush=False),
+        ),
+        y=alt.Y(f"{DIMENSIONS[rows]}:N", title=rows, sort=ranked),
+    )
+    rects = base.mark_rect(cornerRadius=4, stroke="white", strokeWidth=2).encode(
+        color=alt.Color("value:Q", title=metric, legend=alt.Legend(format=fmt)),
+        tooltip=[
+            alt.Tooltip(f"{DIMENSIONS[rows]}:N", title=rows),
+            alt.Tooltip(f"{DIMENSIONS[columns]}:N", title=columns),
+            alt.Tooltip("value:Q", title=metric, format=fmt),
+        ],
+    )
+    labels = base.mark_text(fontSize=13).encode(text=alt.Text("value:Q", format=fmt.replace("~", "")))
+    return (rects + labels).properties(height=alt.Step(44))
+
+
+def regression_points(df: pd.DataFrame, level: str) -> pd.DataFrame:
+    """One row per dot: its average rating plus every predictor, aggregated at the chosen level."""
+    entity, colour = REGRESSION_LEVELS[level]
+    dot = "#" + df[entity].astype(str) if level == "Sale" else df[entity] + " | " + df["month"].dt.strftime("%Y-%m")
     return (
-        chart.configure_view(stroke="#d7e9ea", strokeWidth=0.7)
-        .configure_axis(
-            labelFont="Manrope",
-            titleFont="Manrope",
-            labelFontWeight=400,
-            titleFontWeight=400,
-        )
-        .configure_legend(
-            labelFont="Manrope",
-            titleFont="Manrope",
-            orient="top",
-            labelColor="#000000",
-            titleColor="#000000",
-            labelFontSize=11,
-            titleFontSize=11,
-            labelFontWeight=400,
-            titleFontWeight=400,
-        )
-        .configure_title(font="Manrope", fontSize=19, fontWeight=400, anchor="start", color="#000000")
-        .configure(background="transparent")
-    )
-
-
-def build_line_chart(
-    df: pd.DataFrame,
-    *,
-    metric_column: str,
-    metric_title: str,
-    compare_column: str,
-    compare_title: str,
-    split_by_category: bool,
-) -> alt.Chart:
-    line_df = df.copy()
-    line_df["month"] = line_df["sale_date"].dt.to_period("M").dt.to_timestamp()
-
-    group_cols = ["month", compare_column]
-    tooltip_cols: list[alt.Tooltip] = [
-        alt.Tooltip("month:T", title="Month", format="%b %Y"),
-        alt.Tooltip(f"{compare_column}:N", title=compare_title),
-        alt.Tooltip("metric_value:Q", title=metric_title, format=",.2f" if metric_column == "total_price" else ",.0f"),
-    ]
-
-    if split_by_category and compare_column != "category_name":
-        group_cols.append("category_name")
-        tooltip_cols.append(alt.Tooltip("category_name:N", title="Category"))
-
-    grouped = (
-        line_df.groupby(group_cols, as_index=False)
-        .agg(metric_value=(metric_column, "sum"))
-        .sort_values("month")
-    )
-
-    if grouped.empty:
-        return _configure_chart(alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_line()).properties(
-            height=420,
-            title="Monthly Sales Analysis",
-        )
-
-    y_fmt = ",.0f" if metric_column == "units_sold" else ",.2f"
-
-    base = alt.Chart(grouped).encode(
-        x=alt.X("month:T", axis=_axis("Month"), title="Month"),
-        y=alt.Y("metric_value:Q", axis=_axis(metric_title, fmt=y_fmt), title=metric_title),
-        color=alt.Color(
-            f"{compare_column}:N",
-            title=compare_title,
-            scale=alt.Scale(range=PASTEL_CATEGORICAL_COLORS),
-        ),
-        tooltip=tooltip_cols,
-    )
-
-    if split_by_category and compare_column != "category_name":
-        chart = base.mark_line(point=True, strokeWidth=1.6).encode(strokeDash=alt.StrokeDash("category_name:N", title="Category"))
-    else:
-        chart = base.mark_line(point=True, strokeWidth=1.6)
-
-    return _configure_chart(chart).properties(height=420, title="Monthly Sales Analysis")
-
-
-def build_heatmap(
-    df: pd.DataFrame,
-    *,
-    row_column: str,
-    row_title: str,
-    col_column: str,
-    col_title: str,
-    metric_label: str,
-) -> alt.Chart:
-    metric_map: dict[str, tuple[str, str]] = {
-        "Total Sales": ("total_price", "sum"),
-        "Units Sold": ("units_sold", "sum"),
-        "Average Rating": ("customer_rating", "mean"),
-    }
-    metric_col, agg = metric_map[metric_label]
-
-    grouped = (
-        df.groupby([row_column, col_column], as_index=False)
-        .agg(metric_value=(metric_col, agg))
-        .sort_values([row_column, col_column])
-    )
-
-    if grouped.empty:
-        return _configure_chart(alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_rect()).properties(
-            height=420,
-            title="Heatmap Comparison",
-        )
-
-    value_format = ",.2f" if metric_label == "Total Sales" else ",.0f" if metric_label == "Units Sold" else ".2f"
-
-    heat = alt.Chart(grouped).mark_rect(cornerRadius=4).encode(
-        x=alt.X(f"{col_column}:N", axis=_axis(col_title, label_angle=-20), sort="-y"),
-        y=alt.Y(f"{row_column}:N", axis=_axis(row_title), sort="-x"),
-        color=alt.Color(
-            "metric_value:Q",
-            title=metric_label,
-            scale=alt.Scale(range=PASTEL_HEATMAP_RANGE),
-        ),
-        tooltip=[
-            alt.Tooltip(f"{row_column}:N", title=row_title),
-            alt.Tooltip(f"{col_column}:N", title=col_title),
-            alt.Tooltip("metric_value:Q", title=metric_label, format=value_format),
-        ],
-    )
-
-    text = alt.Chart(grouped).mark_text(font="Manrope", fontSize=11).encode(
-        x=alt.X(f"{col_column}:N", sort="-y"),
-        y=alt.Y(f"{row_column}:N", sort="-x"),
-        text=alt.Text("metric_value:Q", format=".2s"),
-        color=alt.value("#000000"),
-    )
-
-    return _configure_chart((heat + text).properties(height=420, title="Heatmap Comparison"))
-
-
-def prepare_regression_data(df: pd.DataFrame, level: str) -> pd.DataFrame:
-    if level == "Sale":
-        out = df.copy()
-        out["entity"] = out["sale_id"].astype(int).astype(str)
-        out["avg_rating"] = out["customer_rating"].astype(float)
-        out["avg_order_value"] = out["total_price"].astype(float)
-        out["avg_units_sold"] = out["units_sold"].astype(float)
-        out["total_sales"] = out["total_price"].astype(float)
-        out["total_units_sold"] = out["units_sold"].astype(float)
-        out["color_group"] = out["category_name"].astype(str)
-        return out[
-            [
-                "entity",
-                "avg_rating",
-                "avg_order_value",
-                "avg_units_sold",
-                "total_sales",
-                "total_units_sold",
-                "color_group",
-            ]
-        ]
-
-    base = df.copy()
-    base["month"] = base["sale_date"].dt.to_period("M").dt.to_timestamp()
-    base["month_label"] = base["month"].dt.strftime("%Y-%m")
-
-    if level in ("Product", "Product (monthly)"):
-        grouped = (
-            base.groupby(["product_name", "category_name", "month", "month_label"], as_index=False)
-            .agg(
-                avg_rating=("customer_rating", "mean"),
-                avg_order_value=("total_price", "mean"),
-                avg_units_sold=("units_sold", "mean"),
-                total_sales=("total_price", "sum"),
-                total_units_sold=("units_sold", "sum"),
-            )
-            .rename(columns={"product_name": "base_entity"})
-        )
-        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
-        grouped["color_group"] = grouped["category_name"].astype(str)
-        return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
-
-    if level in ("Category", "Category (monthly)"):
-        grouped = (
-            base.groupby(["category_name", "month", "month_label"], as_index=False)
-            .agg(
-                avg_rating=("customer_rating", "mean"),
-                avg_order_value=("total_price", "mean"),
-                avg_units_sold=("units_sold", "mean"),
-                total_sales=("total_price", "sum"),
-                total_units_sold=("units_sold", "sum"),
-            )
-            .rename(columns={"category_name": "base_entity"})
-        )
-        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
-        grouped["color_group"] = grouped["base_entity"].astype(str)
-        return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
-
-    if level in ("Country", "Country (monthly)"):
-        grouped = (
-            base.groupby(["country_name", "region_name", "month", "month_label"], as_index=False)
-            .agg(
-                avg_rating=("customer_rating", "mean"),
-                avg_order_value=("total_price", "mean"),
-                avg_units_sold=("units_sold", "mean"),
-                total_sales=("total_price", "sum"),
-                total_units_sold=("units_sold", "sum"),
-            )
-            .rename(columns={"country_name": "base_entity"})
-        )
-        grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
-        grouped["color_group"] = grouped["region_name"].astype(str)
-        return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
-
-    grouped = (
-        base.groupby(["region_name", "month", "month_label"], as_index=False)
+        df.groupby([dot.rename("Dot"), df[DIMENSIONS[colour]].rename(colour)])
         .agg(
-            avg_rating=("customer_rating", "mean"),
-            avg_order_value=("total_price", "mean"),
-            avg_units_sold=("units_sold", "mean"),
-            total_sales=("total_price", "sum"),
-            total_units_sold=("units_sold", "sum"),
+            **{"Average Rating": ("customer_rating", "mean")},
+            **{x: (column, agg) for x, (column, agg, _) in PREDICTORS.items()},
         )
-        .rename(columns={"region_name": "base_entity"})
+        .reset_index()
     )
-    grouped["entity"] = grouped["base_entity"] + " | " + grouped["month_label"]
-    grouped["color_group"] = grouped["base_entity"].astype(str)
-    return grouped[["entity", "avg_rating", "avg_order_value", "avg_units_sold", "total_sales", "total_units_sold", "color_group"]]
 
 
-def build_regression_chart(reg_df: pd.DataFrame, x_column: str, x_title: str) -> tuple[alt.Chart | None, float | None, float | None, float | None]:
-    plot_df = reg_df.copy()
-    plot_df = plot_df.dropna(subset=[x_column, "avg_rating"])
-
-    if len(plot_df) < 2 or plot_df[x_column].nunique() < 2:
-        return None, None, None, None
-
-    x = plot_df[x_column].astype(float).to_numpy()
-    y = plot_df["avg_rating"].astype(float).to_numpy()
-
+def regression_chart(points: pd.DataFrame, x: str, colour: str, names: list[str]) -> tuple[alt.LayerChart, str] | None:
     try:
-        slope, intercept = np.polyfit(x, y, 1)
-    except np.linalg.LinAlgError:
-        return None, None, None, None
-    y_pred = slope * x + intercept
-    ss_tot = np.sum((y - np.mean(y)) ** 2)
-    ss_res = np.sum((y - y_pred) ** 2)
-    r_squared = 0.0 if ss_tot == 0 else float(1 - (ss_res / ss_tot))
-
-    x_min = float(np.min(x))
-    x_max = float(np.max(x))
-    line_domain = np.linspace(x_min, x_max, 100)
-    line_df = pd.DataFrame(
-        {
-            "x": line_domain,
-            "y": slope * line_domain + intercept,
-        }
-    )
-
-    points = alt.Chart(plot_df).mark_circle(size=90, opacity=0.62).encode(
-        x=alt.X(f"{x_column}:Q", title=x_title, axis=_axis(x_title, fmt=",.2f" if "sales" in x_column or "value" in x_column else ",.0f")),
-        y=alt.Y("avg_rating:Q", title="Average Customer Rating", scale=alt.Scale(domain=[1, 5]), axis=_axis("Average Customer Rating", fmt=".2f")),
-        color=alt.Color(
-            "color_group:N",
-            title="Color Group",
-            scale=alt.Scale(range=PASTEL_CATEGORICAL_COLORS),
-        ),
-        tooltip=[
-            alt.Tooltip("entity:N", title="Entity"),
-            alt.Tooltip(f"{x_column}:Q", title=x_title, format=",.2f" if "sales" in x_column or "value" in x_column else ",.0f"),
-            alt.Tooltip("avg_rating:Q", title="Avg rating", format=".2f"),
-            alt.Tooltip("total_sales:Q", title="Total sales", format=",.2f"),
-            alt.Tooltip("total_units_sold:Q", title="Total units", format=",.0f"),
-        ],
-    )
-
-    trend = alt.Chart(line_df).mark_line(color=REGRESSION_TREND_COLOR, strokeWidth=1.8).encode(
-        x=alt.X("x:Q"),
-        y=alt.Y("y:Q"),
-    )
-
-    chart = _configure_chart((points + trend).properties(height=420, title="Regression: Customer Satisfaction Trend"))
-    return chart, float(slope), float(intercept), r_squared
-
-
-def add_multi_param(params: list[tuple[str, Any]], key: str, values: list[str]) -> None:
-    for value in values:
-        params.append((key, value))
-
-
-inject_theme()
-st.markdown(
-    """
-    <div class="hero">
-      <h1>Sales Analysis Dashboard</h1>
-      <p>Explore sales by region, country, product, and category with API-backed records management.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-if st.session_state.flash_success:
-    st.success(st.session_state.flash_success)
-    st.session_state.flash_success = ""
-
-with st.sidebar:
-    st.subheader("API Configuration")
-    api_base_input = st.text_input(
-        "FastAPI Base URL",
-        value=str(st.session_state.api_base_url),
-        help="Example: http://127.0.0.1:8000",
-    )
-    cleaned = api_base_input.strip().rstrip("/")
-    if not cleaned:
-        cleaned = "http://127.0.0.1:8000"
-
-    if cleaned != st.session_state.api_base_url:
-        st.session_state.api_base_url = cleaned
-        clear_data_caches()
-
-    st.caption("Backend command: `uvicorn sw03_demo_api:app --reload`")
-
-api_base_url = str(st.session_state.api_base_url)
-
-try:
-    health = _safe_get(api_base_url, "/health")
-    if not isinstance(health, dict) or health.get("status") != "ok":
-        raise RuntimeError(f"{api_base_url} answered, but it is not the Sales Analysis API.")
-    st.sidebar.success("API is reachable")
-except RuntimeError as exc:
-    st.sidebar.error(f"API connection failed: {exc}")
-    st.sidebar.info(
-        "Start the API in another terminal:\n\n"
-        "`uvicorn sw03_demo_api:app --reload`\n\n"
-        "then check the base URL above is `http://127.0.0.1:8000`."
-    )
-    st.stop()
-
-
-dashboard_tab, records_tab = st.tabs(["Dashboard", "Records"])
-
-with dashboard_tab:
-    try:
-        options = fetch_meta_options(api_base_url)
-    except RuntimeError as exc:
-        st.error(f"Could not load filter options: {exc}")
-        st.stop()
-
-    region_options = options.get("regions", [])
-    country_options = options.get("countries", [])
-    category_options = options.get("categories", [])
-    product_options = options.get("products", [])
-
-    c1, c2, c3, c4 = st.columns(4)
-    selected_regions = c1.multiselect("Sales Region", region_options, default=region_options)
-    selected_countries = c2.multiselect("Country", country_options, default=country_options)
-    selected_categories = c3.multiselect("Category", category_options, default=category_options)
-    selected_products = c4.multiselect("Product", product_options, default=product_options)
-
-    min_date_raw = options.get("min_date")
-    max_date_raw = options.get("max_date")
-    if min_date_raw and max_date_raw:
-        min_date = pd.to_datetime(min_date_raw).date()
-        max_date = pd.to_datetime(max_date_raw).date()
-    else:
-        max_date = date.today()
-        min_date = max_date - timedelta(days=365)
-
-    picked_range = st.date_input("Date range", value=(min_date, max_date), min_value=min_date, max_value=max_date)
-    if isinstance(picked_range, tuple) and len(picked_range) == 2:
-        start_date, end_date = picked_range
-    elif isinstance(picked_range, list) and len(picked_range) == 2:
-        start_date, end_date = picked_range[0], picked_range[1]
-    else:
-        start_date, end_date = min_date, max_date
-
-    if start_date > end_date:
-        st.error("Start date must be before end date.")
-        st.stop()
-
-    if not all([selected_regions, selected_countries, selected_categories, selected_products]):
-        sales_df = pd.DataFrame()
-    else:
-        params: list[tuple[str, Any]] = []
-        add_multi_param(params, "region", selected_regions)
-        add_multi_param(params, "country", selected_countries)
-        add_multi_param(params, "category", selected_categories)
-        add_multi_param(params, "product", selected_products)
-        params.append(("start_date", start_date.isoformat()))
-        params.append(("end_date", end_date.isoformat()))
-        params.append(("limit", 20000))
-
-        try:
-            with st.spinner("Loading dashboard data..."):
-                sales_df = fetch_sales(api_base_url, _freeze_params(params))
-        except RuntimeError as exc:
-            st.error(f"Could not load sales data: {exc}")
-            sales_df = pd.DataFrame()
-
-    if sales_df.empty:
-        st.info("No sales data matches the current filters.")
-    else:
-        sales_df = sales_df.dropna(subset=["sale_date", "total_price", "units_sold", "customer_rating"]).copy()
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Transactions", f"{len(sales_df):,}")
-        m2.metric("Total Sales", f"${sales_df['total_price'].sum():,.2f}")
-        m3.metric("Units Sold", f"{int(sales_df['units_sold'].sum()):,}")
-        m4.metric("Avg Rating", f"{sales_df['customer_rating'].mean():.2f} / 5")
-
-        st.markdown("### 1) Sales Line Analysis")
-        lc1, lc2, lc3 = st.columns(3)
-        line_metric = lc1.selectbox("Metric", ["Total Sales", "Units Sold"], index=0)
-        line_compare = lc2.selectbox("Compare lines by", ["Sales Region", "Country", "Category", "Product"], index=0)
-        split_by_category = lc3.checkbox("Split by category", value=True)
-
-        metric_map = {
-            "Total Sales": ("total_price", "Total Sales"),
-            "Units Sold": ("units_sold", "Units Sold"),
-        }
-        compare_map = {
-            "Sales Region": ("region_name", "Sales Region"),
-            "Country": ("country_name", "Country"),
-            "Category": ("category_name", "Category"),
-            "Product": ("product_name", "Product"),
-        }
-
-        metric_col, metric_title = metric_map[line_metric]
-        compare_col, compare_title = compare_map[line_compare]
-
-        line_chart = build_line_chart(
-            sales_df,
-            metric_column=metric_col,
-            metric_title=metric_title,
-            compare_column=compare_col,
-            compare_title=compare_title,
-            split_by_category=split_by_category,
+        slope, intercept = statistics.linear_regression(points[x], points["Average Rating"])
+        r_squared = statistics.correlation(points[x], points["Average Rating"]) ** 2
+    except statistics.StatisticsError:  # fewer than two dots, or a column that never varies
+        return None
+    x_format = PREDICTORS[x][2]
+    dots = (
+        alt.Chart(points)
+        .mark_point(filled=True, size=70, opacity=0.7)
+        .encode(
+            x=alt.X(f"{x}:Q", scale=alt.Scale(zero=False), axis=alt.Axis(format=x_format, labelSeparation=8)),
+            y=alt.Y("Average Rating:Q", scale=alt.Scale(domain=[1, 5])),
+            color=by_name(alt.Color, colour, names, points[colour]),
+            shape=by_name(alt.Shape, colour, names, points[colour]),  # a second cue, for colour-blind readers
+            tooltip=["Dot", alt.Tooltip(f"{x}:Q", format=x_format), alt.Tooltip("Average Rating:Q", format=".2f")],
         )
-        st.altair_chart(line_chart, width="stretch")
+    )
+    trend = alt.Chart(points).transform_regression(x, "Average Rating").mark_line(color="#0b2a2e", strokeWidth=2.5)
+    trend = trend.encode(x=f"{x}:Q", y="Average Rating:Q")
+    sign = "+" if slope >= 0 else "−"
+    money = x_format.startswith("$")  # slope per CHF 10k, as in lecture ch. 10, not 8.78e-06 per franc
+    term = f"({x.lower()} / CHF 10k)" if money else x.lower()
+    caption = (
+        f"Model: rating = {intercept:.2f} {sign} {abs(slope) * (1e4 if money else 1):.3g} × {term}"
+        f" · R² = {r_squared:.2f} · n = {len(points):,} dots"
+    )
+    return (dots + trend).properties(height=420), caption
 
-        st.markdown("### 2) Sales Heatmap")
-        hc1, hc2, hc3 = st.columns(3)
-        heat_row = hc1.selectbox("Row axis", ["Sales Region", "Country"], index=1)
-        heat_col = hc2.selectbox("Column axis", ["Category", "Product"], index=0)
-        heat_metric = hc3.selectbox("Heatmap metric", ["Total Sales", "Units Sold", "Average Rating"], index=0)
 
-        heat_row_map = {"Sales Region": ("region_name", "Sales Region"), "Country": ("country_name", "Country")}
-        heat_col_map = {"Category": ("category_name", "Category"), "Product": ("product_name", "Product")}
-        row_col, row_title = heat_row_map[heat_row]
-        col_col, col_title = heat_col_map[heat_col]
-
-        heatmap_chart = build_heatmap(
-            sales_df,
-            row_column=row_col,
-            row_title=row_title,
-            col_column=col_col,
-            col_title=col_title,
-            metric_label=heat_metric,
+def dashboard(api_url: str) -> None:
+    options = fetch_json(f"{api_url}/meta/options")
+    first = date.fromisoformat(options["min_date"]) if options["min_date"] else date.today()  # None: no sales yet
+    last = date.fromisoformat(options["max_date"]) if options["max_date"] else date.today()
+    # every name per dimension in id order, filtered or not: a filter or a new row never repaints the names there
+    names = {
+        label: [row["name"] for row in sorted(fetch_json(f"{api_url}/{table}"), key=lambda row: row[id_col])]
+        for label, table, id_col in (
+            ("Sales Region", "regions", "region_id"),
+            ("Country", "countries", "country_id"),
+            ("Category", "categories", "category_id"),
+            ("Product", "products", "product_id"),
         )
-        st.altair_chart(heatmap_chart, width="stretch")
+    }
 
-        st.markdown("### 3) Interactive Regression")
-        rc1, rc2 = st.columns(2)
-        regression_level = rc1.selectbox(
-            "Aggregation level",
-            ["Product (monthly)", "Country (monthly)", "Category (monthly)", "Sales Region (monthly)", "Sale"],
-            index=0,
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        regions = c1.pills("Sales Region", options["regions"], selection_mode="multi")
+        categories = c2.pills("Category", options["categories"], selection_mode="multi")
+        c1, c2, c3 = st.columns(3)
+        countries = c1.multiselect("Country", options["countries"], placeholder="All countries")
+        products = c2.multiselect("Product", options["products"], placeholder="All products")
+        picked = c3.date_input("Date range", (first, last), min_value=first, max_value=last, format="YYYY-MM-DD")
+        st.caption("A filter with nothing picked keeps everything.")
+    start, end = picked if len(picked) == 2 else (first, last)
+    params = {"region": regions, "country": countries, "category": categories, "product": products}
+    sales = fetch_sales(f"{api_url}/sales", params | {"start_date": start, "end_date": end, "limit": 20000})
+    if sales.empty:
+        st.info("No sales match these filters.", icon=":material/filter_alt_off:")
+        return
+
+    total = sales["total_price"].sum()
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Transactions", len(sales), format="%,d", border=True)
+    k2.metric("Total Sales (CHF)", f"{total / 1e6:,.1f}M" if total >= 1e6 else f"{total / 1e3:,.1f}k", border=True)
+    k3.metric("Units Sold", int(sales["units_sold"].sum()), format="%,d", border=True)
+    k4.metric("Average Rating", f"{sales['customer_rating'].mean():.2f} / 5", border=True)
+
+    with st.container(border=True):
+        st.subheader("Sales over time", anchor=False)
+        c1, c2, c3 = st.columns(3, vertical_alignment="bottom")
+        metric = c1.selectbox("Metric", list(METRICS))
+        compare = c2.selectbox("Compare lines by", list(DIMENSIONS))
+        split = c3.checkbox("Split by category", disabled=compare == "Category")
+        chart = line_chart(sales, metric, compare, split and compare != "Category", names[compare])
+        st.altair_chart(chart, width="stretch")
+
+    with st.container(border=True):
+        st.subheader("Sales heatmap", anchor=False)
+        c1, c2, c3 = st.columns(3)
+        rows = c1.selectbox("Rows", ["Sales Region", "Country"], index=1)
+        columns = c2.selectbox("Columns", ["Category", "Product"])
+        metric = c3.selectbox("Cell value", list(METRICS))
+        st.altair_chart(heatmap(sales, rows, columns, metric), width="stretch")
+
+    with st.container(border=True):
+        st.subheader("What goes with a good rating?", anchor=False)
+        c1, c2 = st.columns(2)
+        level = c1.selectbox("Aggregation level", list(REGRESSION_LEVELS))
+        # one sale per dot: its average is its total, so only the first two predictors differ
+        predictors = list(PREDICTORS)[:2] if level == "Sale" else list(PREDICTORS)
+        x = c2.selectbox("Predictor (X)", predictors, key="predictor")  # the key keeps the pick across levels
+        st.caption(
+            "Monthly levels average many sales into one dot: fewer, smoother dots"
+            " and a higher R² than single sales support (lecture ch. 10)."
         )
-        rc1.caption("Monthly levels create denser regression points while preserving grouping context.")
-        regression_x = rc2.selectbox(
-            "Predictor (X)",
-            ["Average Order Value", "Average Units Sold", "Total Sales", "Total Units Sold"],
-            index=0,
-        )
-
-        regression_df = prepare_regression_data(sales_df, level=regression_level)
-        x_map = {
-            "Average Order Value": ("avg_order_value", "Average Order Value"),
-            "Average Units Sold": ("avg_units_sold", "Average Units Sold"),
-            "Total Sales": ("total_sales", "Total Sales"),
-            "Total Units Sold": ("total_units_sold", "Total Units Sold"),
-        }
-        x_col, x_title = x_map[regression_x]
-
-        regression_chart, slope, intercept, r_squared = build_regression_chart(regression_df, x_column=x_col, x_title=x_title)
-        if regression_chart is None:
-            st.info("Not enough variability in the current filtered data to fit a regression line.")
+        colour = REGRESSION_LEVELS[level][1]
+        fitted = regression_chart(regression_points(sales, level), x, colour, names[colour])
+        if fitted is None:
+            st.info("Too little variation in the filtered sales to fit a line.")
         else:
-            st.altair_chart(regression_chart, width="stretch")
-            st.caption(
-                f"Model: rating = {slope:.4f} x {x_title.lower()} + {intercept:.4f} | R² = {r_squared:.4f}"
-            )
+            st.altair_chart(fitted[0], width="stretch")
+            st.caption(fitted[1])
 
-        with st.expander("Show full filtered sales table", expanded=False):
-            table_columns = [
-                "sale_id",
-                "sale_date",
-                "region_name",
-                "country_name",
-                "category_name",
-                "product_name",
-                "units_sold",
-                "total_price",
-                "customer_rating",
-            ]
-            table_df = sales_df[table_columns].sort_values("sale_date", ascending=False).copy()
-            table_df["sale_date"] = table_df["sale_date"].dt.date
-            st.dataframe(table_df, width="stretch", hide_index=True)
+    with st.expander("All filtered sales, newest first"):  # a constant label, so a filter click keeps it open
+        st.dataframe(sales.set_index("sale_id"), column_order=SALE_COLUMNS, column_config=COLUMNS)
 
-with records_tab:
+
+def save(method: str, url: str, payload: dict[str, Any], noun: str, id_col: str, pick_key: str, outcome: Any) -> None:
+    """Send one write. On success: a confirmation, fresh data, and the edit box shows the saved row if it is listed."""
     try:
-        regions = fetch_regions(api_base_url)
-        countries = fetch_countries(api_base_url)
-        categories = fetch_categories(api_base_url)
-        products = fetch_products(api_base_url)
-        sales_for_records = fetch_sales(api_base_url, _freeze_params([("limit", 5000)]))
+        row = api(method, url, json=payload)
     except RuntimeError as exc:
-        st.error(f"Could not load records data: {exc}")
-        st.stop()
+        outcome.error(str(exc), title=f"The API refused this {noun}", icon=":material/block:")
+        return
+    st.cache_data.clear()
+    st.session_state.saves += 1  # new form keys, so the create forms start empty again
+    st.session_state.reselect = {pick_key: row[id_col]}
+    done = "Created" if method == "POST" else "Updated"
+    st.session_state.flash = {(pick_key, method): f"{done} {noun} #{row[id_col]}"}
+    st.rerun()
 
-    region_labels = [f"{r['name']} (#{r['region_id']})" for r in regions]
-    region_by_label = {f"{r['name']} (#{r['region_id']})": r for r in regions}
-    region_label_by_id = {int(r["region_id"]): f"{r['name']} (#{r['region_id']})" for r in regions}
 
-    category_labels = [f"{c['name']} (#{c['category_id']})" for c in categories]
-    category_by_label = {f"{c['name']} (#{c['category_id']})": c for c in categories}
-    category_label_by_id = {int(c["category_id"]): f"{c['name']} (#{c['category_id']})" for c in categories}
+def record_tab(
+    api_url: str,
+    noun: str,
+    path: str,
+    id_col: str,
+    rows: list[dict[str, Any]],
+    fields: Callable[[dict[str, Any]], dict[str, Any]],
+    label: Callable[[dict[str, Any]], str],
+    column_order: list[str] | None = None,
+) -> None:
+    """The table as the API returns it, then a create form and an edit form side by side."""
+    pick_key = f"pick {path}"
+    if rows:  # empty only once every row was deleted; the New form still works then
+        table = pd.DataFrame(rows).set_index(id_col)
+        # Lookup tables read in id order, so a new row lands at the bottom; sales stay newest first.
+        st.dataframe(table if column_order else table.sort_index(), column_order=column_order, column_config=COLUMNS)
+    flash = st.session_state.get("flash", {})  # confirmations of the save that ran just before this rerun
+    by_id = {row[id_col]: row for row in rows}
+    new, edit = st.columns(2, gap="large")
+    with new.container(border=True):
+        st.subheader(f"New {noun}", anchor=False)
+        with st.form(f"new {path} {st.session_state.saves}", border=False):
+            payload = fields({})
+            outcome = st.empty()  # a save's confirmation or the API's refusal, where the clicked button was
+            if message := flash.pop((pick_key, "POST"), None):
+                outcome.success(message, icon=":material/check_circle:")
+            if st.form_submit_button(f"Create {noun}", type="primary", icon=":material/add:"):
+                save("POST", f"{api_url}{path}", payload, noun, id_col, pick_key, outcome)
+    with edit.container(border=True):
+        st.subheader(f"Edit {noun}", anchor=False)
+        picked = st.selectbox(f"Pick a {noun}", list(by_id), format_func=lambda i: label(by_id[i]), key=pick_key)
+        if picked is None:
+            return
+        with st.form(f"edit {path} {picked}", border=False):
+            payload = fields(by_id[picked])
+            outcome = st.empty()
+            if message := flash.pop((pick_key, "PUT"), None):
+                outcome.success(message, icon=":material/check_circle:")
+            if st.form_submit_button(f"Update {noun}", type="primary", icon=":material/save:"):
+                save("PUT", f"{api_url}{path}/{picked}", payload, noun, id_col, pick_key, outcome)
 
-    product_labels = [f"{p['name']} | ${float(p['price']):.2f} (#{p['product_id']})" for p in products]
-    product_by_label = {f"{p['name']} | ${float(p['price']):.2f} (#{p['product_id']})": p for p in products}
-    product_label_by_id = {
-        int(p["product_id"]): f"{p['name']} | ${float(p['price']):.2f} (#{p['product_id']})" for p in products
-    }
 
-    country_labels = [f"{c['name']} ({c['region_name']}) (#{c['country_id']})" for c in countries]
-    country_by_label = {f"{c['name']} ({c['region_name']}) (#{c['country_id']})": c for c in countries}
-    country_label_by_id = {
-        int(c["country_id"]): f"{c['name']} ({c['region_name']}) (#{c['country_id']})" for c in countries
-    }
+def choose(
+    label: str, rows: list[dict[str, Any]], id_col: str, current: dict[str, Any], text: Callable[[dict[str, Any]], str]
+) -> Any:
+    """A selectbox over rows that returns the id, preselecting the one the record points at now."""
+    by_id = {row[id_col]: row for row in rows}
+    ids = list(by_id)
+    return st.selectbox(
+        label, ids, index=ids.index(current[id_col]) if current else 0, format_func=lambda i: text(by_id[i])
+    )
 
-    region_tab, country_tab, category_tab, product_tab, sales_tab = st.tabs(
+
+def records(api_url: str) -> None:
+    regions, countries, categories, products = (
+        fetch_json(f"{api_url}/{table}") for table in ("regions", "countries", "categories", "products")
+    )
+    sales = fetch_sales(f"{api_url}/sales", {"limit": 200}).to_dict("records")  # the API sends newest first
+    newest = sales[0]["sale_date"] if sales else date.today()  # a new sale lands at the end of the data
+
+    def name(row: dict[str, Any]) -> str:
+        return row["name"]
+
+    def country_name(row: dict[str, Any]) -> str:
+        return f"{row['name']} ({row['region_name']})"
+
+    def product_name(row: dict[str, Any]) -> str:
+        return f"{row['name']} · CHF {row['price']:,.2f}"
+
+    def sale_name(row: dict[str, Any]) -> str:
+        return f"#{row['sale_id']} · {row['sale_date']:%d %b %Y} · {row['product_name']} · {row['country_name']}"
+
+    def described(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": st.text_input("Name", row.get("name", "")),
+            "description": st.text_area("Description", row.get("description", "")),
+        }
+
+    def country(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": st.text_input("Name", row.get("name", "")),
+            "region_id": choose("Sales region", regions, "region_id", row, name),
+        }
+
+    def product(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": st.text_input("Name", row.get("name", "")),
+            "price": st.number_input(
+                "Unit price (CHF)", min_value=0.01, value=row.get("price", 100.0), step=1.0, format="%.2f"
+            ),
+            "description": st.text_area("Description", row.get("description", "")),
+            "category_id": choose("Category", categories, "category_id", row, name),
+        }
+
+    def sale(row: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            "sale_date": st.date_input("Sale date", row.get("sale_date", newest), format="YYYY-MM-DD").isoformat(),
+            "product_id": choose("Product", products, "product_id", row, product_name),
+            "country_id": choose("Country", countries, "country_id", row, country_name),
+            "units_sold": st.number_input("Units sold", min_value=1, value=row.get("units_sold", 10), step=1),
+            "customer_rating": st.slider("Customer rating", 1, 5, row.get("customer_rating", 4)),
+        }
+        if row:
+            st.caption(
+                f"Stored total: CHF {row['total_price']:,.2f}. The API recomputes it when units or product change."
+            )
+        else:
+            st.caption("No total to type: the API computes units × unit price.")
+        return payload
+
+    region_tab, country_tab, category_tab, product_tab, sale_tab = st.tabs(
         ["Sales Regions", "Countries", "Categories", "Products", "Sales"]
     )
-
     with region_tab:
-        st.subheader("Sales Regions")
-
-        with st.form("create_region_form", clear_on_submit=True):
-            new_region_name = st.text_input("Region name")
-            new_region_desc = st.text_area("Region description")
-            create_region_submitted = st.form_submit_button("Create region")
-
-        if create_region_submitted:
-            payload = {
-                "name": new_region_name.strip(),
-                "description": new_region_desc.strip(),
-            }
-            try:
-                created = _safe_post(api_base_url, "/regions", payload)
-                clear_data_caches()
-                st.session_state.flash_success = f"Region #{created['region_id']} created"
-                st.rerun()
-            except RuntimeError as exc:
-                st.error(f"Create region failed: {exc}")
-
-        if regions:
-            region_choice = st.selectbox("Select region to update", region_labels, key="region_update_choice")
-            selected_region = region_by_label[region_choice]
-            with st.form(f"update_region_form_{selected_region['region_id']}"):
-                upd_region_name = st.text_input(
-                    "Region name",
-                    value=str(selected_region["name"]),
-                    key=f"upd_region_name_{selected_region['region_id']}",
-                )
-                upd_region_desc = st.text_area(
-                    "Region description",
-                    value=str(selected_region["description"]),
-                    key=f"upd_region_desc_{selected_region['region_id']}",
-                )
-                upd_region_submitted = st.form_submit_button("Update region")
-
-            if upd_region_submitted:
-                payload = {
-                    "name": upd_region_name.strip(),
-                    "description": upd_region_desc.strip(),
-                }
-                try:
-                    _safe_put(api_base_url, f"/regions/{selected_region['region_id']}", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Region #{selected_region['region_id']} updated"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Update region failed: {exc}")
-
-        if regions:
-            st.dataframe(pd.DataFrame(regions).sort_values("region_id"), width="stretch", hide_index=True)
-        else:
-            st.info("No regions found.")
-
+        record_tab(api_url, "region", "/regions", "region_id", regions, described, name)
     with country_tab:
-        st.subheader("Countries")
-
-        if not regions:
-            st.warning("Create at least one sales region before creating countries.")
-        else:
-            with st.form("create_country_form", clear_on_submit=True):
-                new_country_name = st.text_input("Country name")
-                new_country_region = st.selectbox("Sales region", region_labels, key="create_country_region")
-                create_country_submitted = st.form_submit_button("Create country")
-
-            if create_country_submitted:
-                payload = {
-                    "name": new_country_name.strip(),
-                    "region_id": int(region_by_label[new_country_region]["region_id"]),
-                }
-                try:
-                    created = _safe_post(api_base_url, "/countries", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Country #{created['country_id']} created"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Create country failed: {exc}")
-
-        if countries and regions:
-            country_choice = st.selectbox("Select country to update", country_labels, key="country_update_choice")
-            selected_country = country_by_label[country_choice]
-
-            default_region_label = region_label_by_id.get(int(selected_country["region_id"]), region_labels[0])
-            region_index = region_labels.index(default_region_label) if default_region_label in region_labels else 0
-
-            with st.form(f"update_country_form_{selected_country['country_id']}"):
-                upd_country_name = st.text_input(
-                    "Country name",
-                    value=str(selected_country["name"]),
-                    key=f"upd_country_name_{selected_country['country_id']}",
-                )
-                upd_country_region = st.selectbox(
-                    "Sales region",
-                    region_labels,
-                    index=region_index,
-                    key=f"upd_country_region_{selected_country['country_id']}",
-                )
-                upd_country_submitted = st.form_submit_button("Update country")
-
-            if upd_country_submitted:
-                payload = {
-                    "name": upd_country_name.strip(),
-                    "region_id": int(region_by_label[upd_country_region]["region_id"]),
-                }
-                try:
-                    _safe_put(api_base_url, f"/countries/{selected_country['country_id']}", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Country #{selected_country['country_id']} updated"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Update country failed: {exc}")
-
-        if countries:
-            st.dataframe(pd.DataFrame(countries).sort_values("country_id"), width="stretch", hide_index=True)
-        else:
-            st.info("No countries found.")
-
+        record_tab(api_url, "country", "/countries", "country_id", countries, country, country_name)
     with category_tab:
-        st.subheader("Categories")
-
-        with st.form("create_category_form", clear_on_submit=True):
-            new_category_name = st.text_input("Category name")
-            new_category_desc = st.text_area("Category description")
-            create_category_submitted = st.form_submit_button("Create category")
-
-        if create_category_submitted:
-            payload = {
-                "name": new_category_name.strip(),
-                "description": new_category_desc.strip(),
-            }
-            try:
-                created = _safe_post(api_base_url, "/categories", payload)
-                clear_data_caches()
-                st.session_state.flash_success = f"Category #{created['category_id']} created"
-                st.rerun()
-            except RuntimeError as exc:
-                st.error(f"Create category failed: {exc}")
-
-        if categories:
-            category_choice = st.selectbox("Select category to update", category_labels, key="category_update_choice")
-            selected_category = category_by_label[category_choice]
-
-            with st.form(f"update_category_form_{selected_category['category_id']}"):
-                upd_category_name = st.text_input(
-                    "Category name",
-                    value=str(selected_category["name"]),
-                    key=f"upd_category_name_{selected_category['category_id']}",
-                )
-                upd_category_desc = st.text_area(
-                    "Category description",
-                    value=str(selected_category["description"]),
-                    key=f"upd_category_desc_{selected_category['category_id']}",
-                )
-                upd_category_submitted = st.form_submit_button("Update category")
-
-            if upd_category_submitted:
-                payload = {
-                    "name": upd_category_name.strip(),
-                    "description": upd_category_desc.strip(),
-                }
-                try:
-                    _safe_put(api_base_url, f"/categories/{selected_category['category_id']}", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Category #{selected_category['category_id']} updated"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Update category failed: {exc}")
-
-        if categories:
-            st.dataframe(pd.DataFrame(categories).sort_values("category_id"), width="stretch", hide_index=True)
-        else:
-            st.info("No categories found.")
-
+        record_tab(api_url, "category", "/categories", "category_id", categories, described, name)
     with product_tab:
-        st.subheader("Products")
+        record_tab(api_url, "product", "/products", "product_id", products, product, product_name)
+    with sale_tab:
+        st.caption(
+            "The 200 most recent sales by date. A sale saved with an older date drops out of this list;"
+            " /docs reaches every sale."
+        )
+        record_tab(api_url, "sale", "/sales", "sale_id", sales, sale, sale_name, SALE_COLUMNS)
 
-        if not categories:
-            st.warning("Create at least one category before creating products.")
-        else:
-            with st.form("create_product_form", clear_on_submit=True):
-                new_product_name = st.text_input("Product name")
-                new_product_price = st.number_input("Product price", min_value=0.01, value=100.0, step=1.0)
-                new_product_desc = st.text_area("Product description")
-                new_product_category = st.selectbox("Category", category_labels, key="create_product_category")
-                create_product_submitted = st.form_submit_button("Create product")
 
-            if create_product_submitted:
-                payload = {
-                    "name": new_product_name.strip(),
-                    "price": float(new_product_price),
-                    "description": new_product_desc.strip(),
-                    "category_id": int(category_by_label[new_product_category]["category_id"]),
-                }
-                try:
-                    created = _safe_post(api_base_url, "/products", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Product #{created['product_id']} created"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Create product failed: {exc}")
+st.session_state.setdefault("saves", 0)
+st.session_state.update(st.session_state.pop("reselect", {}))  # before any widget: select the row just saved
 
-        if products and categories:
-            product_choice = st.selectbox("Select product to update", product_labels, key="product_update_choice")
-            selected_product = product_by_label[product_choice]
+# The look config.toml cannot express: a soft teal-to-cream page, a tinted hero card, larger tab labels,
+# and less empty space above the hero (with the header strip transparent, also when the sidebar is collapsed).
+st.html(
+    """<style>
+    .stApp {
+      background:
+        radial-gradient(840px 520px at -8% 0%, rgba(180, 234, 239, 0.42), transparent 60%),
+        radial-gradient(920px 520px at 105% -5%, rgba(194, 239, 214, 0.39), transparent 60%),
+        radial-gradient(720px 440px at 50% 105%, rgba(251, 239, 187, 0.32), transparent 64%),
+        linear-gradient(180deg, #edf9fb 0%, #f8feff 38%, #f5fdf4 72%, #fffdf2 100%);
+    }
+    .st-key-hero { background: linear-gradient(120deg, #ffffff 0%, #eaf8f9 60%, #dff3f4 100%); }
+    [data-testid="stTab"] p { font-size: 1.05rem; }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stMainBlockContainer"] { padding-top: 4rem; }
+    </style>"""
+)
 
-            default_category_label = category_label_by_id.get(int(selected_product["category_id"]), category_labels[0])
-            category_index = category_labels.index(default_category_label) if default_category_label in category_labels else 0
+api_base_url = st.sidebar.text_input("FastAPI base URL", DEFAULT_API_URL).strip().rstrip("/") or DEFAULT_API_URL
 
-            with st.form(f"update_product_form_{selected_product['product_id']}"):
-                upd_product_name = st.text_input(
-                    "Product name",
-                    value=str(selected_product["name"]),
-                    key=f"upd_product_name_{selected_product['product_id']}",
-                )
-                upd_product_price = st.number_input(
-                    "Product price",
-                    min_value=0.01,
-                    value=float(selected_product["price"]),
-                    step=1.0,
-                    key=f"upd_product_price_{selected_product['product_id']}",
-                )
-                upd_product_desc = st.text_area(
-                    "Product description",
-                    value=str(selected_product["description"]),
-                    key=f"upd_product_desc_{selected_product['product_id']}",
-                )
-                upd_product_category = st.selectbox(
-                    "Category",
-                    category_labels,
-                    index=category_index,
-                    key=f"upd_product_category_{selected_product['product_id']}",
-                )
-                upd_product_submitted = st.form_submit_button("Update product")
+with st.container(border=True, key="hero"):
+    st.title("Sales Analysis Dashboard", anchor=False)
+    st.write(
+        "Explore sales by region, country, product and category, and manage the records behind them through the API."
+    )
 
-            if upd_product_submitted:
-                payload = {
-                    "name": upd_product_name.strip(),
-                    "price": float(upd_product_price),
-                    "description": upd_product_desc.strip(),
-                    "category_id": int(category_by_label[upd_product_category]["category_id"]),
-                }
-                try:
-                    _safe_put(api_base_url, f"/products/{selected_product['product_id']}", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Product #{selected_product['product_id']} updated"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Update product failed: {exc}")
+try:
+    healthy = api("GET", f"{api_base_url}/health") == {"status": "ok"}
+    problem = "" if healthy else "It answered, but not like the Sales Analysis API."
+except RuntimeError as exc:
+    problem = str(exc)
+if problem:
+    st.error(f"Cannot reach the Sales Analysis API at **{api_base_url}**.", icon=":material/cloud_off:")
+    st.write("Start it in another terminal, or fix the base URL in the sidebar:")
+    try:
+        port = urlsplit(api_base_url).port or 8000  # the port the sidebar URL expects
+    except ValueError:  # a typo such as "[127.0.0.1" or ":abc": the README's port
+        port = 8000
+    st.code(f"uvicorn sw03_demo_api:app --host 127.0.0.1 --port {port}", language="bash")
+    st.caption(problem)
+    st.button("Try again", icon=":material/refresh:")
+    st.stop()
+st.sidebar.badge("API connected", icon=":material/check_circle:", color="green")
 
-        if products:
-            st.dataframe(pd.DataFrame(products).sort_values("product_id"), width="stretch", hide_index=True)
-        else:
-            st.info("No products found.")
-
-    with sales_tab:
-        st.subheader("Sales")
-
-        if not products or not countries:
-            st.warning("Create at least one product and one country before creating sales.")
-        else:
-            with st.form("create_sale_form", clear_on_submit=True):
-                create_sale_date = st.date_input("Sale date", value=date.today())
-                create_sale_product = st.selectbox("Product", product_labels, key="create_sale_product")
-                create_sale_country = st.selectbox("Country", country_labels, key="create_sale_country")
-                create_sale_units = st.number_input("Units sold", min_value=1, value=10, step=1)
-                create_sale_rating = st.slider("Customer rating", min_value=1, max_value=5, value=4)
-                selected_create_product = product_by_label[create_sale_product]
-                st.caption(
-                    f"Unit price: ${float(selected_create_product['price']):,.2f}. "
-                    "Leave the override unticked and the API computes units x unit price."
-                )
-                create_override_total = st.checkbox("Override total price", value=False, key="create_override_total")
-                override_total_value = st.number_input(
-                    "Total price (only used when the override is ticked)",
-                    min_value=0.01,
-                    value=float(selected_create_product["price"]),
-                    step=1.0,
-                )
-
-                create_sale_submitted = st.form_submit_button("Create sale")
-
-            if create_sale_submitted:
-                payload: dict[str, Any] = {
-                    "sale_date": create_sale_date.isoformat(),
-                    "product_id": int(selected_create_product["product_id"]),
-                    "country_id": int(country_by_label[create_sale_country]["country_id"]),
-                    "units_sold": int(create_sale_units),
-                    "customer_rating": int(create_sale_rating),
-                }
-                if create_override_total:
-                    payload["total_price"] = float(override_total_value)
-
-                try:
-                    created = _safe_post(api_base_url, "/sales", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Sale #{created['sale_id']} created"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Create sale failed: {exc}")
-
-        if sales_for_records.empty or not products or not countries:
-            st.info("No sales available for updating.")
-        else:
-            EDITABLE_SALES_LIMIT = 200
-            editable_sales = sales_for_records.sort_values(
-                ["sale_date", "sale_id"], ascending=False
-            ).head(EDITABLE_SALES_LIMIT).copy()
-            if len(sales_for_records) > EDITABLE_SALES_LIMIT:
-                st.caption(
-                    f"Showing the {EDITABLE_SALES_LIMIT} most recent sales "
-                    f"of {len(sales_for_records):,}."
-                )
-            sales_options = []
-            sale_by_label: dict[str, dict[str, Any]] = {}
-            for row in editable_sales.to_dict(orient="records"):
-                row_date = pd.to_datetime(row["sale_date"]).date()
-                label = f"#{int(row['sale_id'])} | {row_date} | {row['product_name']} | {row['country_name']}"
-                sales_options.append(label)
-                sale_by_label[label] = row
-
-            selected_sale_label = st.selectbox("Select sale to update", sales_options, key="sale_update_choice")
-            selected_sale = sale_by_label[selected_sale_label]
-
-            default_product_label = product_label_by_id.get(int(selected_sale["product_id"]), product_labels[0])
-            default_country_label = country_label_by_id.get(int(selected_sale["country_id"]), country_labels[0])
-
-            product_index = product_labels.index(default_product_label) if default_product_label in product_labels else 0
-            country_index = country_labels.index(default_country_label) if default_country_label in country_labels else 0
-
-            with st.form(f"update_sale_form_{int(selected_sale['sale_id'])}"):
-                upd_sale_date = st.date_input(
-                    "Sale date",
-                    value=pd.to_datetime(selected_sale["sale_date"]).date(),
-                    key=f"upd_sale_date_{int(selected_sale['sale_id'])}",
-                )
-                upd_sale_product = st.selectbox(
-                    "Product",
-                    product_labels,
-                    index=product_index,
-                    key=f"upd_sale_product_{int(selected_sale['sale_id'])}",
-                )
-                upd_sale_country = st.selectbox(
-                    "Country",
-                    country_labels,
-                    index=country_index,
-                    key=f"upd_sale_country_{int(selected_sale['sale_id'])}",
-                )
-                upd_sale_units = st.number_input(
-                    "Units sold",
-                    min_value=1,
-                    value=int(selected_sale["units_sold"]),
-                    step=1,
-                    key=f"upd_sale_units_{int(selected_sale['sale_id'])}",
-                )
-                upd_sale_rating = st.slider(
-                    "Customer rating",
-                    min_value=1,
-                    max_value=5,
-                    value=int(selected_sale["customer_rating"]),
-                    key=f"upd_sale_rating_{int(selected_sale['sale_id'])}",
-                )
-                upd_override_total = st.checkbox(
-                    "Override total price",
-                    value=False,
-                    key=f"upd_override_total_{int(selected_sale['sale_id'])}",
-                )
-
-                selected_upd_product = product_by_label[upd_sale_product]
-                st.caption(
-                    f"Current stored total: ${float(selected_sale['total_price']):,.2f}. "
-                    f"Unit price: ${float(selected_upd_product['price']):,.2f}. "
-                    "Leave the override unticked and the API recomputes the total."
-                )
-                upd_total_value = st.number_input(
-                    "Total price (only used when the override is ticked)",
-                    min_value=0.01,
-                    value=float(selected_sale["total_price"]),
-                    step=1.0,
-                    key=f"upd_total_value_{int(selected_sale['sale_id'])}",
-                )
-
-                upd_sale_submitted = st.form_submit_button("Update sale")
-
-            if upd_sale_submitted:
-                payload = {
-                    "sale_date": upd_sale_date.isoformat(),
-                    "product_id": int(selected_upd_product["product_id"]),
-                    "country_id": int(country_by_label[upd_sale_country]["country_id"]),
-                    "units_sold": int(upd_sale_units),
-                    "customer_rating": int(upd_sale_rating),
-                }
-                if upd_override_total:
-                    payload["total_price"] = float(upd_total_value)
-
-                try:
-                    _safe_put(api_base_url, f"/sales/{int(selected_sale['sale_id'])}", payload)
-                    clear_data_caches()
-                    st.session_state.flash_success = f"Sale #{int(selected_sale['sale_id'])} updated"
-                    st.rerun()
-                except RuntimeError as exc:
-                    st.error(f"Update sale failed: {exc}")
-
-        if not sales_for_records.empty:
-            preview_cols = [
-                "sale_id",
-                "sale_date",
-                "region_name",
-                "country_name",
-                "category_name",
-                "product_name",
-                "units_sold",
-                "total_price",
-                "customer_rating",
-            ]
-            preview_sales = sales_for_records[preview_cols].sort_values("sale_date", ascending=False).copy()
-            preview_sales["sale_date"] = pd.to_datetime(preview_sales["sale_date"]).dt.date
-            st.dataframe(preview_sales.head(250), width="stretch", hide_index=True)
+dashboard_tab, records_tab = st.tabs([":material/monitoring: Dashboard", ":material/table_edit: Records"])
+with dashboard_tab:
+    dashboard(api_base_url)
+with records_tab:
+    records(api_base_url)

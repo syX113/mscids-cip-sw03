@@ -1,7 +1,35 @@
+[server]
+# No "Email:" question and no "install agent skills" pop-up over the dashboard.
+# The browser does not open by itself: open the URL the terminal prints.
+headless = true
+address = "localhost"  # this machine only, like the API; also skips headless mode's public-IP lookup
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"  # no Deploy button while presenting
+
 [theme]
 base = "light"
-primaryColor = "#76c9cf"
+# The brand teal is #76c9cf (see the heatmap ramp). Widgets draw text and white ticks in primaryColor,
+# and #76c9cf gives only 1.9:1 there, so they use the same teal three steps deeper (4.8:1).
+primaryColor = "#0f7f86"
 backgroundColor = "#f8feff"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#000000"
-font = "sans serif"
+secondaryBackgroundColor = "#eef8f9"
+textColor = "#0b2a2e"
+font = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+headingFontSizes = ["2.4rem", "1.75rem", "1.4rem"]
+headingFontWeights = [800, 700, 700, 600, 600, 600]
+metricValueFontWeight = 700
+baseRadius = "12px"
+borderColor = "#cfe3e5"
+showWidgetBorder = true
+dataframeHeaderBackgroundColor = "#e6f5f6"
+# Series colours: teal first, every one at least 3:1 against the page, neighbours colour-blind safe.
+chartCategoricalColors = ["#009096", "#c43d3d", "#2f63c6", "#a97c00", "#b3437d", "#d0620f", "#5b45a8", "#3d8a3d"]
+# Heatmap ramp through the brand teal; the darkest step still carries dark cell labels at 4.5:1.
+chartSequentialColors = ["#eef9fa", "#d7f0f1", "#c0e6e9", "#a8dce0", "#90d3d7", "#76c9cf", "#65bdc4", "#53b2b8", "#40a6ad", "#2a9ba3"]
+
+[theme.sidebar]
+backgroundColor = "#ffffff"

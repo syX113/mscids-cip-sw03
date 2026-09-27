@@ -4,17 +4,18 @@
 #
 #   python -m pip install -r requirements.txt
 
-altair==6.2.2
+altair==6.3.0
 duckdb==1.5.5
 fastapi==0.141.1
 fastavro==1.12.2
-marimo==0.24.0
+# httpx2 is only for FastAPI's TestClient (test_sw03_demo_api.py, exercise 7)
+httpx2==2.13.1
+marimo==0.25.0
 numpy==2.5.3
-pandas==3.0.5
+pandas==3.0.6
 pillow==12.3.0
-protobuf==7.36.1
 pyarrow==25.0.1
 pydantic==2.13.5
 requests==2.34.2
-streamlit==1.63.0
-uvicorn==0.52.4
+streamlit==1.64.0
+uvicorn==0.54.0
