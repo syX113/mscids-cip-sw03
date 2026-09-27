@@ -1373,7 +1373,7 @@ def _(
         .encode(y=alt.Y("format:N", sort=None, title=None))
         .properties(width="container", height=200)  # half the page each, at any screen width
         .configure(background="transparent")  # sit on the page, light or dark
-        .configure_axis(labelFontSize=13, titleFontSize=13, tickCount=5)
+        .configure_axis(labelFontSize=13, titleFontSize=13, tickCount=4)
     )
 
     mo.vstack(
@@ -1730,39 +1730,41 @@ def _(mo):
 @app.cell
 def _(mo):
     n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Rows (thousands)", show_value=True)
-    n_cols = mo.ui.slider(2, 16, value=8, label="Columns", show_value=True)
     run_storage = mo.ui.run_button(label="Run storage benchmark", kind="success")
-    mo.vstack([mo.hstack([n_rows, n_cols], widths="equal"), run_storage], gap=0.6).callout(kind="neutral")
-    return n_cols, n_rows, run_storage
+    mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2).callout(kind="neutral")
+    return n_rows, run_storage
 
 
 @app.cell
-def _(mo, n_cols, n_rows, np, run_storage, static_table):
+def _(mo, n_rows, np, run_storage, static_table):
     mo.stop(not run_storage.value, mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral"))
 
-    # The same numbers stored twice in memory, like the shoebox and the ledger.
-    _row_store = np.random.default_rng(7).random((n_rows.value * 1000, n_cols.value))  # C order: each record contiguous
-    _col_store = np.asfortranarray(_row_store)  # F order: each column contiguous
-
-    def _best_ms(fn, table):  # best of 5, like the benchmark in chapter 2
+    def _best_ms(fn, table):  # best of 5: each operation is sub-millisecond, so a stray hiccup would dominate
         import timeit
 
         return min(timeit.repeat(lambda: fn(table), number=1, repeat=5)) * 1000
 
-    _results = []
-    for _operation, _fn in {
+    _operations = {
         "Count c0 > 0.75": lambda t: np.count_nonzero(t[:, 0] > 0.75),
         "Sum c0": lambda t: t[:, 0].sum(),
-    }.items():
-        _row_ms, _col_ms = _best_ms(_fn, _row_store), _best_ms(_fn, _col_store)
-        _results.append(
-            {
-                "operation": _operation,
-                "row layout (ms)": round(_row_ms, 3),
-                "column layout (ms)": round(_col_ms, 3),
-                "column is faster by": f"{_row_ms / _col_ms:.1f}x",
-            }
-        )
+    }
+    _results = []
+    for _cols in (2, 4, 8, 16):
+        # The same numbers stored twice in memory, like the shoebox and the ledger.
+        _row_store = np.random.default_rng(7).random((n_rows.value * 1000, _cols))  # C order: each record contiguous
+        _col_store = np.asfortranarray(_row_store)  # F order: each column contiguous
+        for _operation, _fn in _operations.items():
+            _row_ms, _col_ms = _best_ms(_fn, _row_store), _best_ms(_fn, _col_store)
+            _results.append(
+                {
+                    "operation": _operation,
+                    "columns (C)": _cols,
+                    "row layout (ms)": round(_row_ms, 3),
+                    "column layout (ms)": round(_col_ms, 3),
+                    "column is faster by": f"{_row_ms / _col_ms:.1f}x",
+                }
+            )
+    _results.sort(key=lambda r: r["operation"])  # stable: each operation's rows stay in column order
 
     _note = mo.md(
         """
@@ -1773,8 +1775,9 @@ def _(mo, n_cols, n_rows, np, run_storage, static_table):
     CPU fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
     away. In the column layout the values lie side by side and every byte fetched is used.
 
-    **Raise Columns**, run it again, and watch the row side slow down while the column side stays
-    put: that is $C/k$ at work. Parquet goes further and never reads the unused columns from disk.
+    **Read down the table:** as the column count grows, the row side slows down while the column
+    side stays put. That is $C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
+    goes further and never reads the unused columns from disk.
             """
     ).callout(kind="info")
 
