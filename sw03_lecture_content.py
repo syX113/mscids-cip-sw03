@@ -1080,14 +1080,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 2. Serialization & Deserialization Benchmarks")
-    _section
+    mo.md("""
+    ## 2. Serialization & Deserialization Benchmarks
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter2_guide = mo.md(
+    mo.md(
         """
     ### Chapter 2 Introduction
 
@@ -1096,7 +1097,7 @@ def _(mo):
     *Still in the **data tier**. Chapter 1 made writes correct; now we choose what those bytes look like.*
 
     Serialization is packaging data for storage or transfer.
-    Different packages have different trade-offs (explicit compromises between competing goals):
+    Different packages have different trade-offs:
 
     - readable vs compact
     - Python-specific vs cross-language
@@ -1109,7 +1110,6 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _chapter2_guide
     return
 
 
@@ -1120,8 +1120,7 @@ def _(mo):
     ### Serialization = Bytes on Disk (or Wire)
 
     Serialization transforms Python objects into bytes so they can be stored or sent.
-    Deserialization rebuilds objects from bytes. The format choice affects speed, file size,
-    interoperability, type fidelity, schema evolution, and safety.
+    Deserialization rebuilds objects from bytes.
 
     **First, one word we will use all day.** A **schema** is the blank form. Not the answers,
     the printed boxes: what fields exist, in what order, and what kind of thing goes in each one.
@@ -1144,21 +1143,14 @@ def _(mo):
     Pydantic **enforces** it in chapter 7, FastAPI **publishes** it in chapter 8.
 
     **Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
-    **What to compare:** speed, size, interop, **type fidelity**, schema evolution, safety.
+    **What to compare:**
 
-    - **Speed**: write + read throughput  
+    - **Speed**: how long writing and reading take  
     - **Size**: how many bytes hit disk  
     - **Interop**: language/tool compatibility  
     - **Type fidelity**: do types round-trip cleanly?  
+    - **Schema evolution**: do old files survive a new field?
     - **Safety**: Pickle can execute arbitrary code
-
-    A simple performance model (quantitative summary):
-
-    $$
-    \\text{Throughput} = \\frac{\\text{bytes written}}{\\text{write time}}
-    \\qquad
-    \\text{Latency} = \\text{write time} + \\text{read time}
-    $$
 
     Two words that sound alike and are not.
 
@@ -1167,10 +1159,20 @@ def _(mo):
     **Throughput** is how much gets through per unit of time. The van leaving the depot each
     night carries 40,000 letters.
 
+    In the benchmark below, one round trip is a file written and read back, and what gets through
+    is records, counted like letters rather than by the weight of the paper:
+
+    $$
+    \\text{Latency} = \\text{write time} + \\text{read time}
+    \\qquad
+    \\text{Throughput} = \\frac{\\text{rows written}}{\\text{write time}}
+    $$
+
     They trade against each other, and this is the part people get wrong. Waiting to fill the van
     raises throughput and *hurts* the latency of the first letter that boarded it. A container
     ship has appalling latency and colossal throughput. When someone says a system is fast, ask
-    which one they mean. In the benchmark below we measure both, and they do not rank the same way.
+    which one they mean. The benchmark below measures both: check whether they rank the formats
+    the same way.
 
     *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
 
@@ -1193,12 +1195,10 @@ def _(mo):
         <div class="flow-arrow">&rarr;</div>
         <div class="flow-box">Python object</div>
       </div>
-      <div class="flow-note">Format choice determines runtime, file size, interoperability, and safety risk.</div>
     </div>
             """
     )
-    _panel = mo.vstack([_explanation, _flow], gap=0.6)
-    _panel
+    mo.vstack([_explanation, _flow], gap=0.6)
     return
 
 
@@ -1225,18 +1225,16 @@ def _(mo):
     This is a starting heuristic, not a final rule.
             """
     ).callout(kind="info")
-    _panel = mo.vstack(
+    mo.vstack(
         [mo.md("### Mini-lab: Format Decision Assistant"), format_use_case, format_priority, _note],
         gap=0.5,
     ).callout(kind="neutral")
-    _panel
     return format_priority, format_use_case
 
 
 @app.cell
 def _(format_priority, format_use_case, mo):
-    key = (format_use_case.value, format_priority.value)
-    recommendations = {
+    _recommendations = {
         ("Public API payload", "Interoperability"): "JSON",
         ("Public API payload", "Speed"): "JSON (or MessagePack if both sides support it)",
         ("Public API payload", "Small size"): "Compressed JSON or binary protocol",
@@ -1254,269 +1252,153 @@ def _(format_priority, format_use_case, mo):
         ("Streaming event log", "Small size"): "Avro with compression",
         ("Streaming event log", "Safety"): "Avro + schema registry",
     }
-    choice = recommendations.get(key, "JSON")
-    _text = mo.md(f"Recommended starting point: **{choice}**\n\n" "Treat this as a default, then benchmark on the real workload (actual data + query pattern).").callout(
-        kind="info"
-    )
-    _text
+    _choice = _recommendations[(format_use_case.value, format_priority.value)]
+    mo.md(
+        f"Recommended starting point: **{_choice}**\n\nTreat this as a default, then benchmark on the real workload."
+    ).callout(kind="info")
     return
 
 
 @app.cell
 def _(mo):
     serial_rows = mo.ui.slider(200, 3000, step=200, value=800, label="Rows", show_value=True)
-    serial_cols = mo.ui.slider(2, 8, value=5, label="Numeric columns", show_value=True)
-    serial_seed = mo.ui.slider(1, 999, value=42, label="Seed", show_value=True)
-    run_serial = mo.ui.button(label="Run serialization benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _note = mo.md("Includes Arrow, Parquet, and Avro.")
-
-    _controls = mo.vstack(
+    serial_cols = mo.ui.slider(2, 8, value=5, label="Metric columns", show_value=True)
+    run_serial = mo.ui.run_button(label="Run serialization benchmark", kind="success")
+    mo.vstack(
         [
             mo.hstack([serial_rows, serial_cols], widths="equal"),
-            serial_seed,
-            _note,
+            mo.md(
+                "Six formats, the same records. Every write and every read runs three times and "
+                "the table keeps the fastest, so a one-off start-up cost cannot decide the ranking."
+            ),
             run_serial,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-
-    _controls
-    return run_serial, serial_cols, serial_rows, serial_seed
+    return run_serial, serial_cols, serial_rows
 
 
 @app.cell
 def _(
     Path,
+    alt,
     csv,
     fastavro,
     feather,
-    format_bytes,
-    format_ms,
     json,
     mo,
     pa,
+    pd,
     pickle,
     pq,
     random,
     run_serial,
     serial_cols,
     serial_rows,
-    serial_seed,
     static_table,
     tempfile,
-    time,
 ):
-    def _make_records(count, num_cols, seed_value):
-        rng = random.Random(seed_value)
-        cities = ["Zurich", "Basel", "Geneva", "Bern", "Lugano"]
-        records = []
-        for idx in range(count):
-            row = {
-                "id": idx,
-                "city": rng.choice(cities),
-                "score": round(rng.random() * 100, 3),
-            }
-            for c in range(num_cols):
-                row[f"metric_{c}"] = round(rng.random() * 1000, 5)
-            records.append(row)
-        return records
+    mo.stop(not run_serial.value, mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral"))
 
-    def bench(label, write_fn, read_fn, path):
-        start = time.perf_counter()
-        write_fn(path)
-        write_time = time.perf_counter() - start
-        size = path.stat().st_size
-        start = time.perf_counter()
-        read_fn(path)
-        read_time = time.perf_counter() - start
-        latency = write_time + read_time
-        throughput = 0.0 if write_time == 0 else size / write_time
-        return {
-            "format": label,
-            "write_s": write_time,
-            "read_s": read_time,
-            "latency_s": latency,
-            "size_bytes": size,
-            "throughput_mbps": throughput / (1024 * 1024),
-        }
+    _rng = random.Random(42)
+    _records = [
+        {"id": _i, "city": _rng.choice(["Zurich", "Basel", "Geneva", "Bern", "Lugano"]), "score": round(_rng.random() * 100, 3)}
+        | {f"metric_{_c}": round(_rng.random() * 1000, 5) for _c in range(serial_cols.value)}
+        for _i in range(serial_rows.value)
+    ]
+    _avro_schema = {
+        "type": "record",
+        "name": "Record",
+        "fields": [{"name": "id", "type": "int"}, {"name": "city", "type": "string"}]
+        + [{"name": _field, "type": "double"} for _field in list(_records[0])[2:]],
+    }
 
-    if run_serial.value == 0:
-        _output = mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral")
-    else:
-        _records = _make_records(serial_rows.value, serial_cols.value, serial_seed.value + run_serial.value)
-        sample = static_table(_records[:5], label="Sample records")
+    def _csv_write(path):
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=_records[0])
+            writer.writeheader()
+            writer.writerows(_records)
 
-        _results = []
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            _tmpdir = Path(_tmpdir)
+    def _csv_read(path):
+        with path.open(newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
 
-            def json_write(path):
-                with path.open("w", encoding="utf-8") as f:
-                    json.dump(_records, f)
+    def _avro_write(path):
+        with path.open("wb") as f:
+            fastavro.writer(f, _avro_schema, _records)
 
-            def json_read(path):
-                with path.open("r", encoding="utf-8") as f:
-                    json.load(f)
+    def _avro_read(path):
+        with path.open("rb") as f:
+            return list(fastavro.reader(f))
 
-            _results.append(bench("JSON", json_write, json_read, _tmpdir / "data.json"))
+    _formats = {  # label: (write(path), read(path))
+        "JSON": (
+            lambda p: p.write_text(json.dumps(_records), encoding="utf-8"),
+            lambda p: json.loads(p.read_text(encoding="utf-8")),
+        ),
+        "Pickle (unsafe)": (
+            lambda p: p.write_bytes(pickle.dumps(_records, pickle.HIGHEST_PROTOCOL)),
+            lambda p: pickle.loads(p.read_bytes()),
+        ),
+        "CSV": (_csv_write, _csv_read),
+        "Arrow/Feather": (lambda p: feather.write_feather(pa.Table.from_pylist(_records), p), feather.read_table),
+        "Parquet": (lambda p: pq.write_table(pa.Table.from_pylist(_records), p), pq.read_table),
+        "Avro": (_avro_write, _avro_read),
+    }
 
-            def pickle_write(path):
-                with path.open("wb") as f:
-                    pickle.dump(_records, f, protocol=pickle.HIGHEST_PROTOCOL)
+    def _best_ms(fn, path):  # best of 3: the first call pays the warm-up, the minimum does not
+        import timeit
 
-            def pickle_read(path):
-                with path.open("rb") as f:
-                    pickle.load(f)
+        return min(timeit.repeat(lambda: fn(path), number=1, repeat=3)) * 1000
 
-            _results.append(bench("Pickle (unsafe)", pickle_write, pickle_read, _tmpdir / "data.pkl"))
-
-            def csv_write(path):
-                with path.open("w", newline="", encoding="utf-8") as f:
-                    writer = csv.DictWriter(f, fieldnames=_records[0].keys())
-                    writer.writeheader()
-                    writer.writerows(_records)
-
-            def csv_read(path):
-                with path.open("r", newline="", encoding="utf-8") as f:
-                    list(csv.DictReader(f))
-
-            _results.append(bench("CSV", csv_write, csv_read, _tmpdir / "data.csv"))
-
-            # Pay pyarrow's one-time initialisation before the clock starts,
-            # otherwise the first measurement is ~70x too slow.
-            feather.write_feather(
-                pa.Table.from_pylist([{"warmup": 1}]), (_tmpdir / "_warmup.feather").as_posix()
-            )
-
-            def arrow_write(path):
-                table = pa.Table.from_pylist(_records)
-                feather.write_feather(table, path)
-
-            def arrow_read(path):
-                feather.read_table(path)
-
-            _results.append(
-                bench(
-                    "Arrow/Feather",
-                    arrow_write,
-                    arrow_read,
-                    _tmpdir / "data.feather",
-                )
-            )
-
-            def parquet_write(path):
-                table = pa.Table.from_pylist(_records)
-                pq.write_table(table, path)
-
-            def parquet_read(path):
-                pq.read_table(path)
-
-            _results.append(
-                bench(
-                    "Parquet",
-                    parquet_write,
-                    parquet_read,
-                    _tmpdir / "data.parquet",
-                )
-            )
-
-            schema = {
-                "type": "record",
-                "name": "Record",
-                "fields": [
-                    {"name": "id", "type": "int"},
-                    {"name": "city", "type": "string"},
-                    {"name": "score", "type": "double"},
-                ]
-                + [{"name": f"metric_{c}", "type": "double"} for c in range(serial_cols.value)],
-            }
-
-            def avro_write(path):
-                with path.open("wb") as f:
-                    fastavro.writer(f, schema, _records)
-
-            def avro_read(path):
-                with path.open("rb") as f:
-                    list(fastavro.reader(f))
-
-            _results.append(bench("Avro", avro_write, avro_read, _tmpdir / "data.avro"))
-
-        _display_rows = []
-        for row in _results:
-            _display_rows.append(
+    _rows = []
+    with tempfile.TemporaryDirectory() as _tmp:
+        for _label, (_write, _read) in _formats.items():
+            _path = Path(_tmp) / _label.replace("/", "_")
+            _write_ms, _read_ms = _best_ms(_write, _path), _best_ms(_read, _path)
+            _rows.append(
                 {
-                    "format": row["format"],
-                    "write (ms)": round(row["write_s"] * 1000, 3),
-                    "read (ms)": round(row["read_s"] * 1000, 3),
-                    "latency (ms)": round(row["latency_s"] * 1000, 3),
-                    "size (bytes)": row["size_bytes"],
-                    "write (MB/s)": round(row["throughput_mbps"], 3),
+                    "format": _label,
+                    "write (ms)": round(_write_ms, 2),
+                    "read (ms)": round(_read_ms, 2),
+                    "latency (ms)": round(_write_ms + _read_ms, 2),
+                    "size (KB)": round(_path.stat().st_size / 1024, 1),
+                    "rows/s written": round(len(_records) / _write_ms * 1000),
                 }
             )
 
-        def _bar_chart(title, rows, value_key, formatter):
-            if not rows:
-                return None
-            max_val = max(row[value_key] for row in rows) or 1
-            _bars = []
-            for row in rows:
-                value = row[value_key]
-                pct = min(100.0, (value / max_val) * 100.0)
-                _bars.append(
-                    f"""
-    <div class="bar-row">
-      <div class="bar-label">{row["format"]}</div>
-      <div class="bar-track">
-        <div class="bar-fill" style="width: {pct:.1f}%"></div>
-      </div>
-      <div class="bar-value">{formatter(value)}</div>
-    </div>
-                        """
-                )
-            return mo.Html(
-                f"""
-    <div class="section-card">
-      <h3>{title}</h3>
-      <div class="bar-chart">
-        {''.join(_bars)}
-      </div>
-      <div class="chart-note">Higher bars = larger values.</div>
-    </div>
-                    """
-            )
+    _bars = (
+        alt.Chart(pd.DataFrame(_rows))
+        .mark_bar()
+        .encode(y=alt.Y("format:N", sort=None, title=None))
+        .properties(width="container", height=200)  # half the page each, at any screen width
+        .configure(background="transparent")  # sit on the page, light or dark
+        .configure_axis(labelFontSize=13, titleFontSize=13, tickCount=5)
+    )
 
-        _size_chart = _bar_chart(
-            "File size (smaller is better)",
-            _results,
-            "size_bytes",
-            format_bytes,
-        )
-        _latency_chart = _bar_chart(
-            "Total latency (write + read)",
-            _results,
-            "latency_s",
-            format_ms,
-        )
-        _charts = mo.vstack([_size_chart, _latency_chart], gap=0.6)
-
-        results_table = static_table(_display_rows, label="Serialization benchmark")
-        benchmark_note = mo.md("Numbers vary by machine and caching. Treat this as a **relative** comparison, not an absolute benchmark.").callout(kind="info")
-        warning = mo.md(
-            """
-    **Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources.
-                """
-        ).callout(kind="warn")
-
-        _output = mo.vstack([sample, results_table, _charts, benchmark_note, warning], gap=0.6)
-
-    _output
+    mo.vstack(
+        [
+            static_table(_records[:3], label="Sample records"),
+            static_table(_rows, label="Serialization benchmark (best of 3)"),
+            mo.md("**Shorter bars win in both charts.**"),
+            mo.hstack([_bars.encode(x="size (KB):Q"), _bars.encode(x="latency (ms):Q")], widths="equal", gap=2),
+            mo.md(
+                "Numbers vary by machine and caching, so compare the formats with each other, not with "
+                "another laptop. The reads are not quite like for like: Arrow and Parquet stop at a columnar "
+                "table without building Python objects, and CSV hands back strings it never converts to numbers."
+            ).callout(kind="info"),
+            mo.md(
+                "**Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources."
+            ).callout(kind="warn"),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
-    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500).copy()
-    _src["sale_date"] = pd.to_datetime(_src["sale_date"])
+    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500)
     # Store codes are the classic case: they look like numbers and are not.
     _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
 
@@ -1541,8 +1423,8 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
     def _span(_df):
         try:
             return str(_df["sale_date"].max() - _df["sale_date"].min())
-        except Exception as _exc:
-            return f"{type(_exc).__name__}: {_exc}"
+        except TypeError as _exc:
+            return f"TypeError: {_exc}"
 
     _answers = [
         {
@@ -1559,29 +1441,38 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
 
     _note = mo.md(
         """
-    Open both files in a text editor and the date looks identical in each: `2024-03-07`.
-    The bytes did not lose the date. The file lost **the note saying it was a date**, and that
-    note is what your analysis was standing on.
+    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not
+    lose the date. They lost **the note saying it was a date**, and that note is what your analysis
+    was standing on. Parquet stores the date as a plain number and keeps the note in its schema,
+    which is why it came back as `datetime64`.
 
     The first failure shouted. The second did not: the store codes came back as `7, 10, 42`
     with no error, no warning and nothing in the log. That is the one that ends up in a report.
             """
     ).callout(kind="warn")
 
-    _panel = mo.vstack(
+    mo.vstack(
         [
             static_table(_dtypes, label="Same 500 rows, written two ways and read back"),
-            static_table(_answers, label="Now ask the data a question"),
+            # static_table, plus wrapping so the TypeError is read in full
+            mo.ui.table(
+                _answers,
+                label="Now ask the data a question",
+                wrapped_columns=["via CSV"],
+                selection=None,
+                pagination=False,
+                show_download=False,
+                show_search=False,
+            ),
             _note,
         ],
         gap=0.6,
     )
-    _panel
     return
 
 
 @app.cell
-def _(csv, fastavro, io, mo, static_table):
+def _(csv, fastavro, io, mo):
     # It is next March. Your team adds a `channel` field to the sales event.
     # Two years of old files sit on disk, and one old program nobody redeployed
     # is still running in production. What happens?
@@ -1611,11 +1502,7 @@ def _(csv, fastavro, io, mo, static_table):
     _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
     _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
 
-    _csv_buf = io.StringIO()
-    _writer = csv.DictWriter(_csv_buf, fieldnames=["sale_id", "total_price"])
-    _writer.writeheader()
-    _writer.writerow({"sale_id": 1, "total_price": 4034.91})
-    _csv_row = next(csv.DictReader(io.StringIO(_csv_buf.getvalue())))
+    _csv_row = next(csv.DictReader(io.StringIO("sale_id,total_price\n1,4034.91\n")))
     try:
         _csv_row["channel"]
         _csv_result = "no error"
@@ -1640,26 +1527,33 @@ def _(csv, fastavro, io, mo, static_table):
         },
     ]
     _note = mo.md(
-        "The packing list on the box is not decoration. It is what lets a file written last "
-        "year and a program written this morning still agree. CSV has no packing list, so "
-        "the agreement lives only in someone's memory."
+        "The printed form is not decoration. It is what lets a sheet filled in last year and a "
+        "program written this morning still agree. CSV ships without the form, so the agreement "
+        "lives only in someone's memory."
     ).callout(kind="info")
-    _panel = mo.vstack(
+    mo.vstack(
         [
             mo.md("### Schema Evolution: the office adds a box to the form"),
-            static_table(_rows, label="Same change, three situations"),
+            # static_table, plus wrapping so the punchlines are read in full
+            mo.ui.table(
+                _rows,
+                label="Same change, three situations",
+                wrapped_columns=["result", "verdict"],
+                selection=None,
+                pagination=False,
+                show_download=False,
+                show_search=False,
+            ),
             _note,
         ],
         gap=0.6,
     )
-    _panel
     return
 
 
 @app.cell
 def _(mo):
-    _qa_block_serialization = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
       <h3>Discussion — Serialization Choices</h3>
       <details>
@@ -1674,36 +1568,35 @@ def _(mo):
       </details>
       <details>
         <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
-        <p><strong>Answer:</strong> Measure write/read latency and storage costs in a staging or canary pipeline (test environment with production-like traffic), then compare before/after.</p>
+        <p><strong>Answer:</strong> In staging (a production-like test environment), then confirmed on a canary (the new format serving a small share of real traffic). Compare before/after on the same workload.</p>
       </details>
     </div>
-            """
-    )
-    _qa_block_serialization
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _conclusion_serialization = mo.md(
+    mo.md(
         """
     <div class="section-card">
       <h3>Chapter 2 Conclusion</h3>
       <ul>
-        <li>Format choice is a trade-off (explicit compromise) between speed, size, interoperability, and safety.</li>
-        <li>Use benchmarks from a representative workload (actual data + query pattern) to compare latency and storage cost.</li>
+        <li>Format choice is a trade-off between speed, size, interoperability, and safety.</li>
+        <li>Use benchmarks from a representative workload to compare latency and storage cost.</li>
+        <li>CSV keeps values but drops types: dates came back as <code>str</code>, store code <code>007</code> as <code>7</code>. Parquet and Avro carry the schema.</li>
+        <li>An Avro reader schema with defaults lets last year's files and this year's code agree.</li>
         <li>Pickle preserves Python types but should not be used for untrusted data.</li>
       </ul>
     </div>
             """
     ).callout(kind="success")
-    _conclusion_serialization
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
@@ -1719,20 +1612,20 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 3. Column-Based vs Row-Based Storage")
-    _section
+    mo.md("""
+    ## 3. Column-Based vs Row-Based Storage
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter3_guide = mo.md(
+    mo.md(
         """
     ### Chapter 3 Introduction
 
@@ -1754,13 +1647,12 @@ def _(mo):
     If a query needs only $k$ of $C$ columns, columnar layout can reduce read work substantially.
             """
     ).callout(kind="neutral")
-    _chapter3_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
     ### Row Store vs Column Store
 
@@ -1778,15 +1670,15 @@ def _(mo):
     Where:
     - $N$: number of rows  
     - $C$: total columns in the dataset  
-    - $k$: columns actually needed by the query ($k \\ll C$ for selective scans)
+    - $k$: columns actually needed by the query ($k \\ll C$ for narrow queries)
 
     A shop keeps its sales two ways.
 
-    **The shoebox.** Every sale is one till receipt: date, product, country, units, price and
-    rating printed together on one slip. To answer *what did we take in January 2026?* you pick up
-    all 3,360 slips one at a time, read the date, read the price, and put down the other four
-    fields untouched. You handled every field of every sale to use two of them. That is a **row
-    store**, and it is exactly the right shape for *show me sale 2,914*: one slip, one grab.
+    **The shoebox.** Every sale is one till receipt: sale number, date, product, country, units,
+    price and rating printed together on one slip. To answer *what did we take in January 2026?*
+    you pick up all 3,360 slips one at a time, read the date, read the price, and put down the
+    other five fields untouched. You handled every field of every sale to use two of them. That
+    is a **row store**, and it is exactly the right shape for *show me sale 2,914*: one slip, one grab.
 
     **The ledger.** The same sales copied into a bookkeeper's ledger, one field per page: a long
     page of dates, a long page of prices, a long page of product codes. The same question now
@@ -1799,52 +1691,100 @@ def _(mo):
 
     *Two things the picture does not show.* The ledger pages are written in shorthand, so they are
     not all the same size, which is chapter 4. And the ledger is not one endless page per field,
-    which is the next cell.
+    which comes right after the benchmark.
 
-    Below we simulate column selection and filtering to reveal the runtime difference (execution-time gap).
-
-    **Format perspective:** Avro is a row‑based, schema‑driven file format (great for event logs).
-    Parquet is a column‑based file format (great for analytics and scans).
-    Arrow is columnar in‑memory (fast interchange between systems).
+    Below we time both layouts on the same numbers.
             """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
 @app.cell
 def _(mo):
-    _layout_diagram = mo.md(
-        """
+    mo.md("""
     <div class="section-card flow-card">
       <h3>Visual: Same Table, Two Physical Layouts</h3>
       <div class="grid-2">
         <div>
           <h4>Row layout (record-oriented)</h4>
-          <pre><code>row1: [id, city, sales, qty]
-    row2: [id, city, sales, qty]
-    row3: [id, city, sales, qty]</code></pre>
+          <pre>sale 1: [sale_id, sale_date, total_price, …]
+    sale 2: [sale_id, sale_date, total_price, …]
+    sale 3: [sale_id, sale_date, total_price, …]
+    …</pre>
           <div class="flow-note">Good when each request needs most fields of one row.</div>
         </div>
         <div>
           <h4>Column layout (analytics-oriented)</h4>
-          <pre><code>id:   [id1, id2, id3, ...]
-    city: [c1,  c2,  c3,  ...]
-    sales:[s1,  s2,  s3,  ...]
-    qty:  [q1,  q2,  q3,  ...]</code></pre>
+          <pre>sale_id:     [1,  2,  3,  …]
+    sale_date:   [d1, d2, d3, …]
+    total_price: [p1, p2, p3, …]
+    …</pre>
           <div class="flow-note">Good when queries touch a few columns across many rows.</div>
         </div>
       </div>
     </div>
-            """
-    )
-    _layout_diagram
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _binder = mo.md(
+    n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Rows (thousands)", show_value=True)
+    n_cols = mo.ui.slider(2, 16, value=8, label="Columns", show_value=True)
+    run_storage = mo.ui.run_button(label="Run storage benchmark", kind="success")
+    mo.vstack([mo.hstack([n_rows, n_cols], widths="equal"), run_storage], gap=0.6).callout(kind="neutral")
+    return n_cols, n_rows, run_storage
+
+
+@app.cell
+def _(mo, n_cols, n_rows, np, run_storage, static_table):
+    mo.stop(not run_storage.value, mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral"))
+
+    # The same numbers stored twice in memory, like the shoebox and the ledger.
+    _row_store = np.random.default_rng(7).random((n_rows.value * 1000, n_cols.value))  # C order: each record contiguous
+    _col_store = np.asfortranarray(_row_store)  # F order: each column contiguous
+
+    def _best_ms(fn, table):  # best of 5, like the benchmark in chapter 2
+        import timeit
+
+        return min(timeit.repeat(lambda: fn(table), number=1, repeat=5)) * 1000
+
+    _results = []
+    for _operation, _fn in {
+        "Count c0 > 0.75": lambda t: np.count_nonzero(t[:, 0] > 0.75),
+        "Sum c0": lambda t: t[:, 0].sum(),
+    }.items():
+        _row_ms, _col_ms = _best_ms(_fn, _row_store), _best_ms(_fn, _col_store)
+        _results.append(
+            {
+                "operation": _operation,
+                "row layout (ms)": round(_row_ms, 3),
+                "column layout (ms)": round(_col_ms, 3),
+                "column is faster by": f"{_row_ms / _col_ms:.1f}x",
+            }
+        )
+
+    _note = mo.md(
+        """
+    **Discussion:** The same numbers, stored once record by record and once column by column.
+    No file is written, so this is not Avro against Parquet, only the access pattern each one uses.
+
+    Both operations read one column. In the row layout its values sit a whole record apart, and the
+    CPU fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
+    away. In the column layout the values lie side by side and every byte fetched is used.
+
+    **Raise Columns**, run it again, and watch the row side slow down while the column side stays
+    put: that is $C/k$ at work. Parquet goes further and never reads the unused columns from disk.
+            """
+    ).callout(kind="info")
+
+    mo.vstack([static_table(_results, label="Row vs column layout, same numbers"), _note], gap=0.6)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
         """
     ### The Binder and the Index Card
 
@@ -1859,8 +1799,8 @@ def _(mo):
     records two numbers and nothing else: the smallest value in that section and the largest.
     Parquet calls this the **footer**, and those two numbers the **column statistics**.
 
-    Now watch what the index card buys. Someone asks for revenue in 2026. You read the card first
-    and it says:
+    Now watch what the index card buys. Someone asks for the average sale in 2026. You read the
+    card first and it says:
 
     ```
     section 0   dates 2024-03-01 .. 2024-05-27
@@ -1879,8 +1819,8 @@ def _(mo):
     **Two fences, and the second one matters more than it looks.**
 
     - The card can prove a section is **hopeless**. It can never prove a section is **useful**.
-      A section labelled `2024-03-01 .. 2026-02-27` must be opened even if it holds one match.
-      Min and max are a rejection test, not a search.
+      A section labelled `2024-03-01 .. 2026-02-27` must be opened, and may turn out to hold no
+      2026 sale at all. Min and max are a rejection test, not a search.
     - This is why the order rows were written in is not cosmetic. Drop the sales into the binder
       in random order and every section's card reads roughly `2024-03-01 .. 2026-02-27`. Every
       label spans everything, every label is useless, and you open all eight sections. The
@@ -1888,95 +1828,13 @@ def _(mo):
       that, on the real file.
         """
     ).callout(kind="neutral")
-    _binder
     return
 
 
 @app.cell
 def _(mo):
-    n_rows = mo.ui.slider(5_000, 50_000, step=5_000, value=15_000, label="Rows", show_value=True)
-    n_cols = mo.ui.slider(3, 12, value=6, label="Columns", show_value=True)
-    storage_seed = mo.ui.slider(1, 999, value=7, label="Seed", show_value=True)
-    run_storage = mo.ui.button(label="Run storage benchmark", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
-    _controls = mo.vstack([mo.hstack([n_rows, n_cols], widths="equal"), storage_seed, run_storage], gap=0.6).callout(kind="neutral")
-    _controls
-    return n_cols, n_rows, run_storage, storage_seed
-
-
-@app.cell
-def _(
-    mo,
-    n_cols,
-    n_rows,
-    random,
-    run_storage,
-    static_table,
-    storage_seed,
-    time,
-):
-    def build_data(rows, cols, seed_value):
-        rng = random.Random(seed_value)
-        rows_list = [tuple(rng.random() for _ in range(cols)) for _ in range(rows)]
-        col_names = [f"c{idx}" for idx in range(cols)]
-        columns = {name: [row[i] for row in rows_list] for i, name in enumerate(col_names)}
-        return rows_list, columns, col_names
-
-    if run_storage.value == 0:
-        _output = mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral")
-    else:
-        rows_list, columns, col_names = build_data(n_rows.value, n_cols.value, storage_seed.value + run_storage.value)
-        target_col = col_names[0]
-        threshold = 0.75
-
-        def time_it(fn):
-            start = time.perf_counter()
-            result = fn()
-            return time.perf_counter() - start, result
-
-        row_filter_time, row_filter = time_it(lambda: [row for row in rows_list if row[0] > threshold])
-        col_filter_time, col_filter = time_it(lambda: [val for val in columns[target_col] if val > threshold])
-
-        row_sum_time, row_sum = time_it(lambda: sum(row[0] for row in rows_list))
-        col_sum_time, col_sum = time_it(lambda: sum(columns[target_col]))
-
-        _results = [
-            {
-                "operation": "Filter column > 0.75",
-                "Row-style access (ms)": round(row_filter_time * 1000, 3),
-                "Column-style access (ms)": round(col_filter_time * 1000, 3),
-            },
-            {
-                "operation": "Sum column",
-                "Row-style access (ms)": round(row_sum_time * 1000, 3),
-                "Column-style access (ms)": round(col_sum_time * 1000, 3),
-            },
-        ]
-
-        _table = static_table(_results, label="Row vs Column timing (Python simulation)")
-        _note = mo.md(
-            """
-    **Discussion:** These timings simulate the two *access patterns* in plain Python. No file is written
-    and no library is called, so this is not a measurement of Avro against Parquet. Avro stores data the
-    row way and Parquet the column way, which is why the pattern matters.
-
-    Both operations read one column out of many. The row layout still has to step over every other value
-    in each record to reach it; the column layout has that column already lying together. Real column
-    formats like Parquet win by more than this, because they also skip reading the unused columns from
-    disk entirely.
-                """
-        ).callout(kind="info")
-
-        _output = mo.vstack([_table, _note], gap=0.6)
-
-    _output
-    return
-
-
-@app.cell
-def _(mo):
-    run_rowgroup = mo.ui.button(label="Run row-group audit", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _panel = mo.vstack(
+    run_rowgroup = mo.ui.run_button(label="Run row-group audit", kind="success")
+    mo.vstack(
         [
             mo.md("### Mini-lab: Which Sections Did We Open?"),
             mo.md(
@@ -1988,83 +1846,76 @@ def _(mo):
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
     return (run_rowgroup,)
 
 
 @app.cell
 def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, static_table, tempfile):
-    if run_rowgroup.value == 0:
-        _output = mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral")
-    else:
-        _df = pd.read_parquet(SALES_SEED)
-        _df["sale_date"] = pd.to_datetime(_df["sale_date"])
-        _cut = "2026-01-01"
-        _wanted = ["sale_date", "total_price"]
+    mo.stop(not run_rowgroup.value, mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral"))
+    _df = pd.read_parquet(SALES_SEED)
+    _cut = "2026-01-01"
+    _wanted = ["sale_date", "total_price"]
 
-        with tempfile.TemporaryDirectory() as _td:
-            _ordered = Path(_td) / "date_ordered.parquet"
-            _shuffled = Path(_td) / "shuffled.parquet"
-            _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
-            _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
+    with tempfile.TemporaryDirectory() as _td:
+        _ordered = Path(_td) / "date_ordered.parquet"
+        _shuffled = Path(_td) / "shuffled.parquet"
+        _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
+        _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
 
-            _con = duckdb.connect()
-            _rows = []
-            for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
-                _md = _con.execute(
-                    "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
-                    f"FROM parquet_metadata('{_path.as_posix()}')"
-                ).df()
-                _groups = _md["row_group_id"].nunique()
-                _all_cols = int(_md["total_compressed_size"].sum())
-                _two_cols_all = _md[_md["path_in_schema"].isin(_wanted)]
-                _b_bytes = int(_two_cols_all["total_compressed_size"].sum())
-                # The index card: a section survives only if its LATEST date reaches the cut-off.
-                _dates = _md[_md["path_in_schema"] == "sale_date"]
-                _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"].tolist()
-                _c_bytes = int(_two_cols_all[_two_cols_all["row_group_id"].isin(_live)]["total_compressed_size"].sum())
-                _answer = _con.execute(
-                    f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
-                ).fetchone()[0]
-                _rows.append(
-                    {
-                        "file": _label,
-                        "file size (B)": _path.stat().st_size,
-                        "A: every column, every section": _all_cols,
-                        "B: 2 columns, every section": _b_bytes,
-                        "C: 2 columns, surviving sections": _c_bytes,
-                        "sections opened": f"{len(_live)} of {_groups}",
-                        "answer": _answer,
-                    }
-                )
+        _con = duckdb.connect()
+        _rows = []
+        _ordered_size, _shuffled_size = _ordered.stat().st_size, _shuffled.stat().st_size
+        for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
+            _md = _con.execute(
+                "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
+                f"FROM parquet_metadata('{_path.as_posix()}')"
+            ).df()
+            _two_cols = _md[_md["path_in_schema"].isin(_wanted)]
+            # The index card: a section survives only if its LATEST date reaches the cut-off.
+            _dates = _md[_md["path_in_schema"] == "sale_date"]
+            _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"]
+            _answer = _con.execute(
+                f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
+            ).fetchone()[0]
+            _rows.append(
+                {
+                    "file": _label,
+                    "A: all columns": int(_md["total_compressed_size"].sum()),
+                    "B: 2 columns": int(_two_cols["total_compressed_size"].sum()),
+                    "C: 2 columns, open sections": int(
+                        _two_cols[_two_cols["row_group_id"].isin(_live)]["total_compressed_size"].sum()
+                    ),
+                    "opened": f"{len(_live)} of {_md['row_group_id'].nunique()}",
+                    "answer": _answer,
+                }
+            )
 
-        _note = mo.md(
-            """
-    Read the top row left to right. Choosing columns took the read from **62,705** bytes to
-    **33,029**. That is what chapter 3 has taught so far. The index card then took it from
-    33,029 to **4,131**, and nobody wrote that in the query.
+    _sorted, _mixed = _rows
+    _note = mo.md(
+        f"""
+    Read the top row left to right. Choosing columns took the read from **{_sorted['A: all columns']:,}**
+    bytes to **{_sorted['B: 2 columns']:,}**. That is what chapter 3 has taught so far. The index card
+    then took it from {_sorted['B: 2 columns']:,} to **{_sorted['C: 2 columns, open sections']:,}**, and
+    nobody wrote that in the query.
 
     Now read the second row. Identical data, identical query, rows written in a different order,
-    and the index card buys **nothing**: every section survives, because every label spans the
-    whole range. Sorting is not tidying. It is what makes the skipping possible.
+    and the index card buys **nothing**: {_mixed['opened']} sections opened, because every
+    label spans the whole range. Sorting is not tidying. It is what makes the skipping possible.
 
     Two honesty notes. These are bytes the engine is *entitled to skip*, computed from the file's
-    own footer, not bytes measured leaving the disk. And the shuffled file is also 23% larger
-    from the very same rows, which is a preview of chapter 4: order is itself a form of
-    compression. Both files return the same answer, which is the point.
-                """
-        ).callout(kind="info")
-        _output = mo.vstack(
-            [static_table(_rows, label="Bytes the query must read"), _note], gap=0.6
-        )
-    _output
+    own footer, not bytes measured leaving the disk. And the shuffled file is also
+    {_shuffled_size / _ordered_size - 1:.0%} larger ({_shuffled_size:,} against {_ordered_size:,} bytes)
+    from the very same rows, which is a preview of chapter 4: order is itself a form of compression.
+    Both files return the same answer, which is the point.
+            """
+    ).callout(kind="info")
+    mo.vstack([static_table(_rows, label="Bytes the query must read"), _note], gap=0.6)
     return
 
 
 @app.cell
 def _(mo):
-    _qa_block_storage = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
       <h3>Discussion — Row vs Column Storage</h3>
       <details>
@@ -2076,37 +1927,34 @@ def _(mo):
         <p><strong>Answer:</strong> Unused columns are skipped, which reduces I/O and speeds up scans. This is called projection pushdown (applying column selection early in query execution).</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> When can compression make things slower?</summary>
-        <p><strong>Answer:</strong> If data is small or CPU is the dominant limiting resource (bottleneck), decompression overhead can outweigh I/O savings (CPU‑bound).</p>
+        <summary><strong>Q3:</strong> Why does write order matter for Parquet?</summary>
+        <p><strong>Answer:</strong> Min/max can only exclude a row group whose range misses the filter. Sorted data gives narrow ranges; shuffled data gives every group the full range.</p>
       </details>
     </div>
-            """
-    )
-    _qa_block_storage
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _conclusion_storage = mo.md(
+    mo.md(
         """
     <div class="section-card">
       <h3>Chapter 3 Conclusion</h3>
       <ul>
         <li>Row layouts favor transactional record-level access; column layouts favor scans and aggregates.</li>
         <li>Reading only required columns cuts I/O and typically improves analytics performance.</li>
-        <li>Compression gains depend on which resource is the dominant limiting factor (bottleneck): disk I/O or CPU.</li>
+        <li>Parquet keeps min/max per row group in its footer. Sorted by date, the engine skipped 7 of 8 row groups (predicate pushdown); shuffled, it skipped none.</li>
       </ul>
     </div>
             """
     ).callout(kind="success")
-    _conclusion_storage
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
@@ -2118,7 +1966,6 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
