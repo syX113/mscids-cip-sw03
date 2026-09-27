@@ -3212,14 +3212,15 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)")
-    _section
+    mo.md("""
+    ## 6. REST API Demo (GET, POST, PUT, DELETE)
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter6_guide = mo.md(
+    mo.md(
         """
     ### Chapter 6 Introduction
 
@@ -3228,7 +3229,7 @@ def _(mo):
     *We move up to the **logic tier**. The data tier is finished; now other programs need to ask for that data.*
 
     An API is a contract between systems.
-    Most API bugs are contract mismatches (interface mismatches): wrong path, wrong payload shape, or wrong status handling.
+    Most API bugs are contract mismatches: wrong path, wrong payload shape, or wrong status handling.
 
     Quick basics:
 
@@ -3252,13 +3253,12 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _chapter6_guide
     return
 
 
 @app.cell
 def _(mo):
-    rest = mo.md(
+    mo.md(
         """
     ### REST Principles (Quick Recap)
 
@@ -3271,15 +3271,16 @@ def _(mo):
 
     The four verbs say what you want done to a resource:
 
-    - **GET**: fetch a resource  
-    - **POST**: create a new resource  
-    - **PUT**: update a resource  
-    - **DELETE**: remove a resource  
+    - **GET**: fetch a resource
+    - **POST**: create a new resource
+    - **PUT**: replace a resource with the version you send. Our API also accepts just the
+      fields you change, which strict HTTP calls **PATCH**; its `/docs` page says so.
+    - **DELETE**: remove a resource
 
-    One more word, because the next mini-lab turns on it. **Idempotent** means pressing it twice
-    changes nothing more than pressing it once. The button to call a lift is idempotent: jab it
-    ten times, one lift comes. A ticket dispenser is not: press it ten times and you are holding
-    ten tickets.
+    One more word, because the mini-lab below and chapter 8's *Press It Twice* lab turn on it.
+    **Idempotent** means pressing it twice changes nothing more than pressing it once. The button
+    to call a lift is idempotent: jab it ten times, one lift comes. A ticket dispenser is not:
+    press it ten times and you are holding ten tickets.
 
     GET, PUT and DELETE are lift buttons. POST is a ticket dispenser. That is the whole reason a
     failed POST is frightening to retry and a failed PUT is not: when the network drops before
@@ -3288,7 +3289,9 @@ def _(mo):
 
     *The lift button suggests nothing happens on the second press, and something does.* The
     request really is sent and really is processed. Idempotent means the **end state** is the
-    same, not that the work is skipped.
+    same, not that the work is skipped, and not even that the answer is the same: DELETE a sale
+    twice and you get **204**, then **404**. Still idempotent, because after one press or ten the
+    sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
 
     Core REST constraints (why it scales):
 
@@ -3311,270 +3314,198 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    rest
     return
 
 
 @app.cell
 def _(mo):
-    _status_real = mo.md(
+    mo.md(
         """
     ### Four Real Answers From Our Own API
 
     Not a lookup table. These are the actual replies `sw03_demo_api.py` gives, and the difference
-    between the three failures is the part worth learning.
+    between the three failures is the part worth learning. The mini-lab below sends each of them.
 
     | You send | You get | Why |
-    | --- | --- | --- |
+    | :--- | :--- | :--- |
     | `POST /sales` with a valid sale | **201 Created** | it worked, and a new thing now exists |
     | `GET /sales/999999` | **404 Not Found** | the address is fine, nothing lives there |
     | `POST /countries` with `region_id: 999` | **400 Bad Request** | the form is fine, what it asks for is impossible |
-    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable** | the form itself is malformed, the server never looked |
+    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable Content** | the form breaks a rule written in the model (1 to 5), so the endpoint's code never ran |
 
-    All three failures are **4xx**, and that first digit is the instruction: *you* must change the
-    request. Retrying it unchanged will fail identically forever. A **5xx** is the opposite
-    message: the request was fine and the server broke, so retrying may well work.
+    All three failures are **4xx**, and that first digit is the instruction: *you* must change
+    something; resending the same request gets the same answer. A **5xx** is the opposite
+    message: the server broke, so retrying may well work (blindly only for the lift-button verbs).
 
-    The distinction between 400 and 422 is the one students trip on. 422 means the request never
-    reached your logic, because Pydantic rejected the shape at the door, which is chapter 7 doing
-    its job. 400 means it got through the door and then broke a rule of the business, like
-    pointing at a region that does not exist.
+    The distinction between 400 and 422 is the one students trip on. 422 means the request broke
+    a rule written in the Pydantic model (missing field, wrong type, rating outside 1 to 5), so it
+    was turned away at the door before the endpoint's code ran: chapter 7. Our models are strict
+    on purpose, so a name of only spaces, or a field the model does not know (like `total_price`,
+    which the server computes itself), is a 422 too. 400 means the request passed the door, then
+    broke a rule only the data can check, like pointing at a region that does not exist.
         """
     ).callout(kind="neutral")
-    _status_real
     return
 
 
 @app.cell
 def _(mo):
-    method = mo.ui.dropdown(options=["GET", "POST", "PUT", "DELETE"], value="GET", label="HTTP method")
-    base_url = mo.ui.text(value="https://httpbin.org", label="Base URL")
-    path = mo.ui.text(value="/anything", label="Path")
-    payload = mo.ui.text_area(value='{"message": "hello"}', label="JSON payload (for POST/PUT)")
-    use_live_http = mo.ui.switch(value=False, label="Use live HTTP (requires internet)")
-    mock_latency = mo.ui.slider(0, 1500, step=100, value=200, label="Mock latency (ms)", show_value=True)
-    send = mo.ui.button(label="Send request", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-
-    _controls = mo.vstack(
+    ch6_base_url = mo.ui.text(value="http://127.0.0.1:8000", label="API base URL")
+    _sale = {"sale_date": "2026-09-01", "product_id": 1, "country_id": 3, "units_sold": 2, "customer_rating": 4}
+    ch6_preset = mo.ui.dropdown(
+        options={
+            "GET /sales/1": ("GET", "/sales/1", None),
+            "POST /sales with a valid sale": ("POST", "/sales", _sale),
+            "GET /sales/999999": ("GET", "/sales/999999", None),
+            "POST /countries with region_id 999": ("POST", "/countries", {"name": "Atlantis", "region_id": 999}),
+            "POST /sales with customer_rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
+            "POST /sales that sends total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
+            "POST /countries named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
+            "PUT /sales/1 with only a new rating": ("PUT", "/sales/1", {"customer_rating": 5}),
+            "DELETE /sales/1": ("DELETE", "/sales/1", None),
+        },
+        value="GET /sales/1",
+        label="Request",
+    )
+    mo.vstack(
         [
-            mo.hstack([method, base_url], widths="equal"),
-            path,
-            payload,
-            mo.hstack([use_live_http, mock_latency], widths="equal"),
-            send,
+            mo.md(
+                """
+    ### Mini-lab: Ask Our API
+
+    Start the API in a terminal first: `uvicorn sw03_demo_api:app`. Pick a request, **guess the
+    status code**, then press **Send request**. Send the POST, the PUT and the DELETE twice each:
+    which of them leave the server where the first press left it? The API restores `data/` from
+    `data/seed/` every time it starts, so nothing you change or delete here is permanent.
+                """
+            ),
+            mo.hstack([ch6_preset, ch6_base_url], widths="equal"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
+    return ch6_base_url, ch6_preset
 
-    _controls
-    return base_url, method, mock_latency, path, payload, send, use_live_http
+
+@app.cell
+def _(ch6_preset, json, mo):
+    _method, _path, _body = ch6_preset.value
+    ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Method")
+    ch6_path = mo.ui.text(value=_path, label="Path")
+    ch6_body = mo.ui.text_area(
+        value=json.dumps(_body, indent=2) if _body else "", rows=7, label="JSON body (sent with POST and PUT)", full_width=True
+    )
+    ch6_send = mo.ui.run_button(label="Send request", kind="success")
+    mo.vstack([mo.hstack([ch6_method, ch6_path], justify="start", gap=2), ch6_body, ch6_send], gap=0.6).callout(kind="neutral")
+    return ch6_body, ch6_method, ch6_path, ch6_send
 
 
 @app.cell
 def _(
-    base_url,
+    call_api,
+    ch6_base_url,
+    ch6_body,
+    ch6_method,
+    ch6_path,
+    ch6_send,
     json,
-    method,
     mo,
-    mock_latency,
-    path,
-    payload,
-    send,
-    time,
-    url_error,
-    url_request,
-    use_live_http,
+    requests,
 ):
-    if send.value == 0:
-        _output = mo.md("Click **Send request** to call the API.").callout(kind="neutral")
+    import http as _http
+
+    mo.stop(not ch6_send.value, mo.md("Pick a request, guess the status code, then click **Send request**.").callout(kind="neutral"))
+
+    _url = ch6_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
+    try:
+        _body = json.loads(ch6_body.value) if ch6_method.value in {"POST", "PUT"} else None
+    except json.JSONDecodeError as _exc:
+        mo.stop(True, mo.md(f"The body is not valid JSON: {_exc}").callout(kind="danger"))
+    try:
+        _status, _answer = call_api(ch6_method.value, _url, _body)
+    except requests.RequestException:
+        mo.stop(True, mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger"))
+
+    if isinstance(_answer, (dict, list)):
+        _shown = mo.json(_answer)
+    elif _answer:
+        _shown = mo.plain_text(str(_answer))  # not JSON, e.g. a 500 "Internal Server Error"
     else:
-        url = base_url.value.rstrip("/") + "/" + path.value.lstrip("/")
-        _meta = mo.md(f"**Request #{send.value}** · `{method.value}` `{url}`").callout(kind="info")
-
-        data_bytes = None
-        headers = {"Accept": "application/json"}
-        _response_panel = None
-
-        if method.value in {"POST", "PUT", "DELETE"}:
-            try:
-                payload_obj = json.loads(payload.value) if payload.value.strip() else {}
-                data_bytes = json.dumps(payload_obj).encode("utf-8")
-                headers["Content-Type"] = "application/json"
-            except json.JSONDecodeError as exc:
-                _response_panel = mo.md(f"Invalid JSON payload: `{exc}`").callout(kind="danger")
-
-        def _simulate_response():
-            if mock_latency.value:
-                time.sleep(mock_latency.value / 1000)
-
-            payload_obj = None
-            if payload.value.strip():
-                try:
-                    payload_obj = json.loads(payload.value)
-                except json.JSONDecodeError:
-                    payload_obj = {"raw": payload.value}
-
-            _now = time.strftime("%Y-%m-%d %H:%M:%S")
-            if method.value == "GET":
-                status = 200
-                body = {
-                    "source": "simulated",
-                    "resource": path.value,
-                    "timestamp": _now,
-                    "items": [
-                        {"id": 1, "name": "alpha"},
-                        {"id": 2, "name": "beta"},
-                    ],
-                }
-            elif method.value == "POST":
-                status = 201
-                body = {
-                    "source": "simulated",
-                    "created": True,
-                    "resource": path.value,
-                    "payload": payload_obj,
-                    "id": 100 + send.value,
-                    "timestamp": _now,
-                }
-            elif method.value == "PUT":
-                status = 200
-                body = {
-                    "source": "simulated",
-                    "updated": True,
-                    "resource": path.value,
-                    "payload": payload_obj,
-                    "timestamp": _now,
-                }
-            else:
-                status = 204
-                body = None
-            return status, body
-
-        if _response_panel is None:
-            if use_live_http.value:
-                try:
-                    req = url_request.Request(url, data=data_bytes, headers=headers, method=method.value)
-                    with url_request.urlopen(req, timeout=10) as _response:
-                        body = _response.read().decode("utf-8", errors="replace")
-                        status = _response.status
-                except url_error.HTTPError as http_error:
-                    # 404, 409, 500 ... are real answers from the server, not failures.
-                    body = http_error.read().decode("utf-8", errors="replace")
-                    status = http_error.code
-                except Exception as exc:
-                    _response_panel = mo.md(
-                        f"Could not reach `{url}`: `{exc}`. Check the base URL and that the server is running."
-                    ).callout(kind="danger")
-                if _response_panel is None:
-                    try:
-                        parsed = json.loads(body)
-                        preview = json.dumps(parsed, indent=2)[:1200]
-                    except json.JSONDecodeError:
-                        preview = body[:1200]
-
-                    _response_panel = mo.md(
-                        f"""
-    **Status:** `{status}` · **Source:** `live`
-
-    ```json
-    {preview}
-    ```
-            """
-                    )
-            else:
-                status, body = _simulate_response()
-                if body is None:
-                    preview = ""
-                else:
-                    preview = json.dumps(body, indent=2)[:1200]
-                _response_panel = mo.md(
-                    f"""
-    **Status:** `{status}` · **Source:** `simulated`
-
-    ```json
-    {preview}
-    ```
-            """
-                )
-
-        _output = mo.vstack([_meta, _response_panel], gap=0.5)
-
-    _output
+        _shown = mo.md("*No body: 204 means done, nothing to send back.*")
+    mo.vstack(
+        [mo.md(f"`{ch6_method.value} {_url}` → **{_status} {_http.HTTPStatus(_status).phrase}**"), _shown],
+        gap=0.5,
+    ).callout(kind={2: "success", 4: "warn"}.get(_status // 100, "danger"))
     return
 
 
 @app.cell
 def _(mo):
-    _qa_block_api = mo.md(
-        """
+    mo.md("""
     <div class="section-card">
-      <h3>Discussion — APIs & Validation</h3>
+      <h3>Discussion — APIs</h3>
       <details>
         <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
-        <p><strong>Answer:</strong> If repeating it produces the same result (e.g., client supplies a unique ID), then it’s idempotent.
-        This prevents duplicate records on retries.</p>
+        <p><strong>Answer:</strong> Only when the server can recognise the repeat: the client sends a unique key
+        (an idempotency key, or an id it chose) and the server refuses to create a second record with that key.
+        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the mini-lab above and chapter 8 show it).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> Where should validation happen: client, server, or both?</summary>
-        <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server‑side validation).</p>
-      </details>
-      <details>
-        <summary><strong>Q3:</strong> How can an API evolve without breaking clients?</summary>
+        <summary><strong>Q2:</strong> How can an API evolve without breaking clients?</summary>
         <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
       </details>
     </div>
-            """
-    )
-    _qa_block_api
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _conclusion_api = mo.md(
+    mo.md(
         """
     <div class="section-card">
       <h3>Chapter 6 Conclusion</h3>
       <ul>
-        <li>Use HTTP method semantics intentionally (GET/POST/PUT/DELETE) and design for retries.</li>
-        <li>Validation belongs on both client and server, with server validation as the final guard.</li>
-        <li>Backward-compatible evolution and explicit versioning reduce integration breakage.</li>
+        <li>The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.</li>
+        <li>404, 400 and 422 are three different client mistakes: nothing lives there, the request asks for the impossible, the request breaks a written rule.</li>
+        <li>GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.</li>
+        <li>Stateless: the server forgets the conversation, never the data.</li>
       </ul>
     </div>
             """
     ).callout(kind="success")
-    _conclusion_api
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md(
         """
     ### Bridge to Next Chapter
 
-    APIs fail when input data shape is wrong.
-    Pydantic acts as an input-validation checkpoint: required fields and types are checked before business logic runs.
+    Every 422 above was the request's *shape* failing a check. Pydantic is that checkpoint:
+    required fields, types and ranges are checked before any endpoint code runs.
 
     $$
-    \\text{valid request} \\Rightarrow \\text{schema checks pass}
+    \\text{valid request} \\Rightarrow \\text{schema checks pass} \\quad\\text{but}\\quad \\text{schema checks pass} \\nRightarrow \\text{valid request}
     $$
+
+    Chapter 7 shows why the second arrow fails.
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
 @app.cell
 def _(mo):
-    _section = mo.md("## 7. Pydantic Models")
-    _section
+    mo.md("""
+    ## 7. Pydantic Models
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    _chapter7_guide = mo.md(
+    mo.md(
         """
     ### Chapter 7 Introduction
 
@@ -3582,23 +3513,20 @@ def _(mo):
 
     *Still in the **logic tier**. Chapter 6 agreed on a contract; now we enforce it.*
 
-    Validation is the system's input acceptance policy (formal schema enforcement rules).
-    With early validation, downstream code becomes simpler and safer.
-
-    Formal model:
+    Validation decides which inputs may cross into the trusted part of the system. Check once at
+    the door, and every function behind it can stop re-checking.
 
     $$
-    \\text{trusted internal data} = \\text{untrusted input} + \\text{validation rules}
+    \\text{accepted input} = \\{\\, x \\in \\text{untrusted input} \\mid x \\text{ passes every rule you wrote} \\,\\}
     $$
             """
     ).callout(kind="neutral")
-    _chapter7_guide
     return
 
 
 @app.cell
 def _(mo):
-    _explanation = mo.md(
+    mo.md(
         """
     ### Pydantic = Validated Data Models
 
@@ -3615,203 +3543,166 @@ def _(mo):
     Plain Python does not enforce these; they are documentation. Pydantic reads the same
     hints and *does* enforce them, which is why one line of description becomes a real check.
 
-    Example constraint:
+    Example constraint: $0 \\le \\text{gpa} \\le 4$ (grade-point average).
 
-    $$
-    0 \\leq \\text{gpa} \\leq 4
-    $$
-
-    Where:
-    - $gpa$: grade-point average score constrained to the valid range
-
-    Try editing the JSON below to trigger validation errors and see the message structure.
-
+    In the mini-lab below, pick a preset or edit the JSON and watch the errors appear.
     **Then run the last two presets, which are the point of this chapter.**
 
     `garbage_that_passes` sends a negative id, a name of three spaces, a gpa of 0.0 and
     `"definitely not an email"`. Every field is the declared type and inside its declared range,
-    so pydantic **accepts all of it**.
+    so `Student` **accepts all of it**.
 
     `silently_coerced` sends `"42"` and `"3.5"` as text. Pydantic does not reject them; it
     converts them and hands you numbers.
 
     So validation checks **shape**, not **truth**. It is a bouncer with a list of rules, not a
     person who knows whether the answer makes sense. A negative id and a blank name are shaped
-    correctly and are still garbage, and the only way to stop them is to write the rule down:
-    `id: int = Field(gt=0)`, `name: str = Field(min_length=1)`, `email: EmailStr`. Validation is
-    exactly as good as the rules you thought to write.
+    correctly and are still garbage, and the only way to stop them is to write the rule down.
+    `StrictStudent` in the lab does:
+
+    - `id: int = Field(gt=0)` turns away the negative id.
+    - `name: str = Field(min_length=1)` alone does **not** stop `"   "`, because three spaces are
+      three characters. `str_strip_whitespace=True` trims first, then counts. Every request model
+      of our API inherits exactly this setting (plus `extra="forbid"`, which refuses unknown fields).
+    - `strict=True` refuses `"42"` where an int belongs instead of converting it. Our API leaves
+      this off, so a client that sends `"2"` for `units_sold` gets 2.
+    - `pattern=".+@.+"` is the cheap email check; `EmailStr` is the real one (it needs
+      `pip install "pydantic[email]"`).
+
+    Validation is exactly as good as the rules you thought to write.
             """
     ).callout(kind="neutral")
-    _explanation
     return
 
 
 @app.cell
 def _(mo):
-    payload_case = mo.ui.dropdown(
-        options=[
-            "valid",
-            "missing_email",
-            "gpa_out_of_range",
-            "wrong_type",
-            "garbage_that_passes",
-            "silently_coerced",
-        ],
-        value="valid",
-        label="Preset payload scenario",
+    ch7_preset = mo.ui.dropdown(
+        options={
+            "valid → should pass": {"id": 1, "name": "Ada", "gpa": 3.8, "email": "ada@example.com"},
+            "missing_email → should fail (missing field)": {"id": 2, "name": "Lin", "gpa": 3.4},
+            "gpa_out_of_range → should fail (gpa > 4.0)": {"id": 3, "name": "Mira", "gpa": 5.2, "email": "mira@example.com"},
+            "wrong_type → should fail (type mismatch)": {"id": "not-an-int", "name": "Sam", "gpa": "high", "email": "sam@example.com"},
+            # Every field is the declared type and inside its declared range. Every field is also nonsense.
+            "garbage_that_passes → ???": {"id": -7, "name": "   ", "gpa": 0.0, "email": "definitely not an email"},
+            # Two numbers arrive as text, and nothing is rejected either.
+            "silently_coerced → ???": {"id": "42", "name": "Ada", "gpa": "3.5", "email": "ada@example.com"},
+        },
+        value="valid → should pass",
+        label="Preset payload",
     )
-    payload_templates = {
-        "valid": {
-            "id": 1,
-            "name": "Ada",
-            "gpa": 3.8,
-            "email": "ada@example.com",
-        },
-        "missing_email": {
-            "id": 2,
-            "name": "Lin",
-            "gpa": 3.4,
-        },
-        "gpa_out_of_range": {
-            "id": 3,
-            "name": "Mira",
-            "gpa": 5.2,
-            "email": "mira@example.com",
-        },
-        "wrong_type": {
-            "id": "not-an-int",
-            "name": "Sam",
-            "gpa": "high",
-            "email": "sam@example.com",
-        },
-        # Every field is the declared type and inside its declared range.
-        # Every field is also nonsense. Pydantic accepts all of it.
-        "garbage_that_passes": {
-            "id": -7,
-            "name": "   ",
-            "gpa": 0.0,
-            "email": "definitely not an email",
-        },
-        # Nothing here is the declared type, and nothing is rejected either.
-        "silently_coerced": {
-            "id": "42",
-            "name": "Ada",
-            "gpa": "3.5",
-            "email": "ada@example.com",
-        },
-    }
-    _model_code = mo.md(
-        """
-    ### Pydantic model used in this mini-lab
-
+    mo.vstack(
+        [
+            mo.md("### Mini-lab: Interactive Payload Validation"),
+            ch7_preset,
+            mo.md(
+                """
     ```python
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, ConfigDict, Field
 
-    class Student(BaseModel):
+    class Student(BaseModel):            # types and one range
         id: int
         name: str
         gpa: float = Field(ge=0.0, le=4.0)
         email: str
+
+    class StrictStudent(Student):        # the same, plus the rules written down
+        model_config = ConfigDict(str_strip_whitespace=True, strict=True)
+        id: int = Field(gt=0)
+        name: str = Field(min_length=1)  # counted after the strip
+        email: str = Field(pattern=".+@.+")
     ```
-            """
-    ).callout(kind="neutral")
-    _panel = mo.vstack(
-        [
-            mo.md("### Mini-lab: Interactive Payload Validation"),
-            payload_case,
-            mo.md("Choose a preset scenario, then edit the JSON below and click **Validate with Pydantic**.").callout(kind="info"),
-            _model_code,
+
+    Guess what each model says, then click **Validate with Pydantic**. Each error line is one
+    entry of the list FastAPI sends back as the body of a 422.
+                """
+            ),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    _panel
-    return payload_case, payload_templates
+    return (ch7_preset,)
 
 
 @app.cell
-def _(json, mo, payload_case, payload_templates):
-    selected_payload = payload_templates[payload_case.value]
-    selected_payload_text = json.dumps(selected_payload, indent=2)
-    expected_result = {
-        "valid": "should pass",
-        "missing_email": "should fail (missing required field)",
-        "gpa_out_of_range": "should fail (gpa > 4.0)",
-        "wrong_type": "should fail (type mismatch)",
-    }[payload_case.value]
-
-    _preview = mo.md(
-        f"""
-    Selected preset expectation: **{expected_result}**
-
-    ```json
-    {selected_payload_text}
-    ```
-            """
-    ).callout(kind="info")
-    _preview
-    return (selected_payload_text,)
+def _(ch7_preset, json, mo):
+    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="Student JSON", full_width=True)
+    ch7_validate = mo.ui.run_button(label="Validate with Pydantic", kind="success")
+    mo.vstack([ch7_json, ch7_validate], gap=0.6).callout(kind="neutral")
+    return ch7_json, ch7_validate
 
 
 @app.cell
-def _(mo, selected_payload_text):
-    input_data = mo.ui.text_area(
-        value=selected_payload_text,
-        label="Student JSON",
-    )
-    validate = mo.ui.button(label="Validate with Pydantic", value=0, on_click=lambda clicks: clicks + 1, kind="success")
-    _controls = mo.vstack([input_data, validate], gap=0.6).callout(kind="neutral")
-    _controls
-    return input_data, validate
+def _(ch7_json, ch7_validate, mo, pydantic):
+    mo.stop(not ch7_validate.value, mo.md("Guess the verdict, then click **Validate with Pydantic**.").callout(kind="neutral"))
 
+    class _Student(pydantic.BaseModel):
+        id: int
+        name: str
+        gpa: float = pydantic.Field(ge=0.0, le=4.0)
+        email: str
 
-@app.cell
-def _(input_data, json, mo, pydantic, validate):
-    if validate.value == 0:
-        _output = mo.md("Click **Validate with Pydantic** to parse.").callout(kind="neutral")
-    else:
-        _BaseModel = pydantic.BaseModel
-        _Field = pydantic.Field
-        _ValidationError = pydantic.ValidationError
+    class _StrictStudent(_Student):
+        model_config = pydantic.ConfigDict(str_strip_whitespace=True, strict=True)
+        id: int = pydantic.Field(gt=0)
+        name: str = pydantic.Field(min_length=1)
+        email: str = pydantic.Field(pattern=".+@.+")
 
-        class Student(_BaseModel):
-            id: int
-            name: str
-            gpa: float = _Field(ge=0.0, le=4.0)
-            email: str
-
+    def _verdict(title, model):
         try:
-            raw = json.loads(input_data.value)
-            obj = Student.model_validate(raw)   # raises if the data breaks a rule
-            data = obj.model_dump()             # back to a plain dictionary
-            _output = mo.md(
-                f"""
-    **Validated object:**
+            student = model.model_validate_json(ch7_json.value)  # parse + validate in one step
+        except pydantic.ValidationError as exc:
+            lines = [
+                f"- `{'.'.join(map(str, e['loc'])) or 'JSON'}`: {e['msg']}"
+                + ("" if e["type"] in {"missing", "json_invalid"} else f" (you sent `{e['input']!r}`)")
+                for e in exc.errors()
+            ]
+            return mo.md(f"**{title}: rejected**\n\n" + "\n".join(lines)).callout(kind="danger")
+        return mo.vstack([mo.md(f"**{title}: accepted**"), mo.json(student.model_dump())]).callout(kind="success")
 
-    ```json
-    {json.dumps(data, indent=2)}
-    ```
-                        """
-            ).callout(kind="success")
-        except _ValidationError as exc:
-            _output = mo.md(
-                f"""
-    Validation error:
-
-    ```
-    {exc}
-    ```
-                        """
-            ).callout(kind="danger")
-        except json.JSONDecodeError as exc:
-            _output = mo.md(f"Invalid JSON: `{exc}`").callout(kind="danger")
-
-    _output
+    mo.hstack([_verdict("Student", _Student), _verdict("StrictStudent", _StrictStudent)], widths="equal")
     return
 
 
 @app.cell
 def _(mo):
-    _transition = mo.md(
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Validation</h3>
+      <details>
+        <summary><strong>Q1:</strong> Where should validation happen: client, server, or both?</summary>
+        <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server-side validation):
+        anyone can skip your client and call the API directly, as chapter 6 just did.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> Should <code>"42"</code> count as a valid <code>int</code>?</summary>
+        <p><strong>Answer:</strong> It depends on who sends it. Lax mode (the default) is kind to forms and CSV files, where
+        everything arrives as text; strict mode catches a client that sends the wrong type by mistake. Choose deliberately.</p>
+      </details>
+    </div>
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
+    <div class="section-card">
+      <h3>Chapter 7 Conclusion</h3>
+      <ul>
+        <li>A model checks shape (fields, types, ranges), not truth: it is only as good as the rules you wrote.</li>
+        <li>Pydantic converts <code>"42"</code> to 42 and keeps <code>"   "</code> as a name unless you say otherwise (<code>strict</code>, <code>str_strip_whitespace</code>).</li>
+        <li>A rejection is a precise list of errors, and FastAPI sends that list back as a 422.</li>
+      </ul>
+    </div>
+            """
+    ).callout(kind="success")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
         """
     ### Bridge to Next Chapter
 
@@ -3825,7 +3716,6 @@ def _(mo):
     $$
             """
     ).callout(kind="neutral")
-    _transition
     return
 
 
