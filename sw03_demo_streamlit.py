@@ -22,6 +22,7 @@ DEFAULT_API_URL = "http://127.0.0.1:8000"
 API_COMMAND = "uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000"
 
 # What the dashboard can group by (label -> column) and measure (label -> column, aggregation, d3 number format).
+# Money is in francs: "$" in a d3 format prints the currency the chart theme below sets, "CHF ".
 DIMENSIONS = {
     "Sales Region": "region_name",
     "Country": "country_name",
@@ -55,14 +56,14 @@ COLUMNS = {
     "product_id": st.column_config.NumberColumn("Product #"),
     "name": "Name",
     "description": "Description",
-    "price": st.column_config.NumberColumn("Unit price", format="dollar"),
+    "price": st.column_config.NumberColumn("Unit price", format="CHF %,.2f"),
     "sale_date": st.column_config.DateColumn("Date", format="D MMM YYYY"),
     "region_name": "Region",
     "country_name": "Country",
     "category_name": "Category",
     "product_name": "Product",
     "units_sold": st.column_config.NumberColumn("Units", format="%,d"),
-    "total_price": st.column_config.NumberColumn("Total", format="dollar"),
+    "total_price": st.column_config.NumberColumn("Total", format="CHF %,.2f"),
     "customer_rating": st.column_config.NumberColumn("Rating", format="%d ★"),
 }
 # Sales tables show the names the API joined in, not the ids behind them.
@@ -80,9 +81,10 @@ SALE_COLUMNS = [
 
 @alt.theme.register("projector", enable=True)
 def projector_theme() -> alt.theme.ThemeConfig:
-    """On top of Streamlit's chart theme: darker, larger axis and legend text, and no chart background."""
+    """On top of Streamlit's chart theme: darker, larger axis and legend text, no chart background, francs."""
     text = {"labelColor": "#3f5b5f", "titleColor": "#3f5b5f", "labelFontSize": 13, "titleFontSize": 14}
-    return {"config": {"background": "transparent", "axis": text, "legend": text}}
+    francs = {"number": {"decimal": ".", "thousands": ",", "grouping": [3], "currency": ["CHF ", ""]}}
+    return {"config": {"background": "transparent", "axis": text, "legend": text, "locale": francs}}
 
 
 def error_text(response: requests.Response) -> str:
@@ -240,7 +242,7 @@ def dashboard(api_url: str) -> None:
     total = sales["total_price"].sum()
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Transactions", len(sales), format="%,d", border=True)
-    k2.metric("Total Sales", f"${total / 1e6:,.1f}M" if total >= 1e6 else f"${total:,.0f}", border=True)
+    k2.metric("Total Sales", f"CHF {total / 1e6:,.1f}M" if total >= 1e6 else f"CHF {total:,.0f}", border=True)
     k3.metric("Units Sold", int(sales["units_sold"].sum()), format="%,d", border=True)
     k4.metric("Average Rating", f"{sales['customer_rating'].mean():.2f} / 5", border=True)
 
@@ -350,7 +352,7 @@ def records(api_url: str) -> None:
         return f"{row['name']} ({row['region_name']})"
 
     def product_name(row: dict[str, Any]) -> str:
-        return f"{row['name']} · ${row['price']:,.2f}"
+        return f"{row['name']} · CHF {row['price']:,.2f}"
 
     def sale_name(row: dict[str, Any]) -> str:
         return f"#{row['sale_id']} · {row['sale_date']:%d %b %Y} · {row['product_name']} · {row['country_name']}"
@@ -371,7 +373,7 @@ def records(api_url: str) -> None:
         return {
             "name": st.text_input("Name", row.get("name", "")),
             "price": st.number_input(
-                "Unit price ($)", min_value=0.01, value=row.get("price", 100.0), step=1.0, format="%.2f"
+                "Unit price (CHF)", min_value=0.01, value=row.get("price", 100.0), step=1.0, format="%.2f"
             ),
             "description": st.text_area("Description", row.get("description", "")),
             "category_id": choose("Category", categories, "category_id", row, name),
@@ -389,7 +391,7 @@ def records(api_url: str) -> None:
         }
         if row:
             st.caption(
-                f"Stored total: ${row['total_price']:,.2f}. The API recomputes it when units or product change."
+                f"Stored total: CHF {row['total_price']:,.2f}. The API recomputes it when units or product change."
             )
         else:
             st.caption("No total to type: the API computes units × unit price.")
