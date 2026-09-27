@@ -23,42 +23,19 @@ def _():
     import urllib.request as url_request
     from pathlib import Path
 
-    import altair as alt
-    import duckdb
-    import fastavro
     import marimo as mo
-    import numpy as np
-    import pandas as pd
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-    import pydantic
-    import requests
-    from PIL import Image, ImageDraw
-    from pyarrow import feather
 
     return (
-        Image,
-        ImageDraw,
         Path,
-        alt,
         csv,
-        duckdb,
-        fastavro,
-        feather,
         gzip,
         io,
         json,
         math,
         mo,
-        np,
         os,
-        pa,
-        pd,
         pickle,
-        pq,
-        pydantic,
         random,
-        requests,
         sqlite3,
         statistics,
         tempfile,
@@ -67,42 +44,6 @@ def _():
         url_error,
         url_request,
     )
-
-
-@app.cell
-def _(Path, mo):
-    # Real sales rows (data/seed/) that several labs below read.
-    SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
-    SALES_SEED = SEED_DIR / "sales.parquet"
-    return SALES_SEED, SEED_DIR
-
-
-@app.cell
-def _(requests):
-    def format_bytes(num_bytes):
-        """Human-friendly byte counts."""
-        value = float(num_bytes)
-        for unit in ("B", "KB", "MB", "GB"):
-            if value < 1024:
-                return f"{value:,.2f} {unit}"
-            value /= 1024
-        return f"{value:,.2f} TB"
-
-    def format_ms(seconds):
-        return f"{seconds * 1000:,.2f} ms"
-
-    def call_api(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
-        """One HTTP request -> (status code, parsed JSON or raw text).
-
-        Network failures raise requests.RequestException, so a caller can say "start the API".
-        """
-        response = requests.request(method, url, json=body, timeout=5)
-        try:
-            return response.status_code, response.json()
-        except requests.JSONDecodeError:
-            return response.status_code, response.text
-
-    return call_api, format_bytes, format_ms
 
 
 @app.cell
@@ -515,6 +456,74 @@ def _(mo):
     )
     _legend
     return
+
+
+@app.cell
+def _():
+    # Kept out of the first cell: the title cells above only need `mo`, so they paint
+    # before these heavier libraries finish importing.
+    import altair as alt
+    import duckdb
+    import fastavro
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import pydantic
+    import requests
+    from PIL import Image, ImageDraw
+    from pyarrow import feather
+
+    return (
+        Image,
+        ImageDraw,
+        alt,
+        duckdb,
+        fastavro,
+        feather,
+        np,
+        pa,
+        pd,
+        pq,
+        pydantic,
+        requests,
+    )
+
+
+@app.cell
+def _(Path, mo):
+    # Real sales rows (data/seed/) that several labs below read.
+    SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
+    SALES_SEED = SEED_DIR / "sales.parquet"
+    return SALES_SEED, SEED_DIR
+
+
+@app.cell
+def _(requests):
+    def format_bytes(num_bytes):
+        """Human-friendly byte counts."""
+        value = float(num_bytes)
+        for unit in ("B", "KB", "MB", "GB"):
+            if value < 1024:
+                return f"{value:,.2f} {unit}"
+            value /= 1024
+        return f"{value:,.2f} TB"
+
+    def format_ms(seconds):
+        return f"{seconds * 1000:,.2f} ms"
+
+    def call_api(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
+        """One HTTP request -> (status code, parsed JSON or raw text).
+
+        Network failures raise requests.RequestException, so a caller can say "start the API".
+        """
+        response = requests.request(method, url, json=body, timeout=5)
+        try:
+            return response.status_code, response.json()
+        except requests.JSONDecodeError:
+            return response.status_code, response.text
+
+    return call_api, format_bytes, format_ms
 
 
 @app.cell
