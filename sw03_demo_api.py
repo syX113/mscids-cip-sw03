@@ -55,7 +55,7 @@ Price = Annotated[float, Field(gt=0)]
 Ref = Annotated[int, Field(ge=1)]  # an id that points at a row in another table
 Units = Annotated[int, Field(ge=1, le=100_000)]
 Rating = Annotated[int, Field(ge=1, le=5)]
-SaleDate = Annotated[date, Field(ge=date(2000, 1, 1), le=date(2100, 12, 31))]
+SaleDate = Annotated[date, Field(ge=date(2000, 1, 1), le=date(2100, 12, 31), description="Between 2000-01-01 and 2100-12-31.")]
 
 
 class Input(BaseModel):
@@ -321,7 +321,7 @@ def add_lookup_endpoints(table: str, model: type[BaseModel], create: type[BaseMo
 
     @app.post(f"/{table}", response_model=model, status_code=201, tags=[tag], responses=BAD_REQUEST,
               name=f"create_{t.noun}", description=f"Create a {t.noun}. The name must be new{points}.")
-    def create_row(payload: create) -> dict[str, Any]:  # type: ignore[valid-type]
+    def create_row(payload: create) -> dict[str, Any]:
         with lock:
             df = read(table)
             new = payload.model_dump()
@@ -332,7 +332,7 @@ def add_lookup_endpoints(table: str, model: type[BaseModel], create: type[BaseMo
 
     @app.put(one, response_model=model, tags=[tag], responses=NOT_FOUND | BAD_REQUEST,
              name=f"update_{t.noun}", description=f"Update a {t.noun}. {PARTIAL_PUT}")
-    def update_row(row_id: RowId, payload: update) -> dict[str, Any]:  # type: ignore[valid-type]
+    def update_row(row_id: RowId, payload: update) -> dict[str, Any]:
         with lock:
             df = read(table)
             i = row_index(df, table, row_id)

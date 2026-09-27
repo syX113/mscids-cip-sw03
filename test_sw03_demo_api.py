@@ -21,8 +21,8 @@ def check(name: str, actual: object, expected: object) -> None:
 
 slip = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
 
-# Entering the block starts the API, which resets data/. A server crash comes back as a 500, not a traceback.
-with TestClient(api.app, raise_server_exceptions=False) as client:
+# Entering the block starts the API, which resets data/.
+with TestClient(api.app) as client:
     # --- the endpoints answer at all -------------------------------------------
     for path in ("/", "/health", "/meta/options", "/regions", "/countries", "/categories", "/products"):
         check(f"GET {path}", client.get(path).status_code, 200)
