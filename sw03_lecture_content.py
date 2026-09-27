@@ -3742,7 +3742,7 @@ def _(mo):
     *Last stop in the **logic tier**. We turn the rules from chapter 7 into a running server.*
 
     FastAPI turns validated models into running endpoints *and* the documentation for them, so
-    the two cannot drift apart.
+    the two drift apart far less.
 
     Lifecycle:
 
@@ -4014,7 +4014,7 @@ def _(ch8_api, mo, pydantic, run_gates):
         "its own total_price of 0.01": {**_ok, "total_price": 0.01},
         "product 9999": {**_ok, "product_id": 9999},
     }
-    _rows = []
+    _rows, _good = [], None
     for _name, _slip in _slips.items():
         try:
             _SaleCreate.model_validate(_slip)
@@ -4023,6 +4023,10 @@ def _(ch8_api, mo, pydantic, run_gates):
             _err = _exc.errors()[0]
             _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
         _status, _answer = ch8_api("POST", "/sales", _slip)
+        mo.stop(
+            not (isinstance(_answer, dict) and ("detail" in _answer or "sale_id" in _answer)),
+            mo.md(f"`POST /sales` answered `{_status}`: `{_answer}`. Is that the sales API?").callout(kind="danger"),
+        )
         if _status == 201:
             _good = _answer
             ch8_api("DELETE", f"/sales/{_good['sale_id']}")  # leave the file as we found it
@@ -4031,6 +4035,7 @@ def _(ch8_api, mo, pydantic, run_gates):
             _detail = _answer["detail"]
             _gate2 = f"{_status} — {_detail if isinstance(_detail, str) else _detail[0]['msg']}"
         _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+    mo.stop(_good is None, mo.md("Even the good sale was refused. Restart the API to reseed its data.").callout(kind="danger"))
 
     _note = mo.md(
         f"""
@@ -4094,6 +4099,7 @@ def _(ch8_api, mo, run_twice, static_table):
     _sale = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
 
     _post1, _first = ch8_api("POST", "/sales", _sale)
+    mo.stop(_post1 != 201, mo.md(f"`POST /sales` answered `{_post1}`: `{_first}`").callout(kind="danger"))
     _post2, _second = ch8_api("POST", "/sales", _sale)
     _one = f"/sales/{_first['sale_id']}"
     _put1, _ = ch8_api("PUT", _one, {"units_sold": 25})
