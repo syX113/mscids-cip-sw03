@@ -8,6 +8,7 @@ app = marimo.App(width="medium")
 def _():
     import csv
     import gzip
+    import html
     import io
     import json
     import math
@@ -28,6 +29,7 @@ def _():
         Path,
         csv,
         gzip,
+        html,
         io,
         json,
         math,
@@ -48,7 +50,10 @@ def _():
 def _(mo):
     mo.Html(
         """
-        <style>
+        <style title="marimo-sw03-deck">
+          /* The title must start with "marimo": marimo then copies this sheet into the shadow
+             DOM of callouts, tabs, accordions and carousels, so these classes work in them too.
+             Give no other <style> a title: a second title would switch one of them off. */
           /* One palette for both marimo themes: marimo sets color-scheme: dark on its dark
              theme, and light-dark() picks the matching value. Names avoid marimo's own
              variables (--accent, --border, --muted, ...), which its UI depends on. */
@@ -319,10 +324,106 @@ def _(mo):
             color: var(--red);
             font-weight: 600;
           }
+
+          /* Tiers: one hue each, the same in both themes (colour-blind safe, 3:1 on white
+             and on marimo's dark page). Every chapter's visuals carry their tier's hue. */
+          :root {
+            --tier-data: #2f7fe0;
+            --tier-logic: #c9479f;
+            --tier-presentation: #dd6325;
+          }
+
+          .tier-data { --tier: var(--tier-data); }
+          .tier-logic { --tier: var(--tier-logic); }
+          .tier-presentation { --tier: var(--tier-presentation); }
+
+          .tier-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            border: 1px solid var(--tier, var(--line));
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--tier, transparent) 14%, transparent);
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+          }
+
+          .tier-badge::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--tier, var(--ink-muted));
+          }
+
+          /* SVG diagrams drawn with diagram(): 1 viewBox unit is 1 px at full size */
+          .dg { display: block; width: 100%; height: auto; margin: 0 auto; font-size: 17px; }
+          .dg text { fill: var(--ink); }
+          .dg .dg-muted { fill: var(--ink-muted); font-size: 15px; }
+          .dg-box { fill: var(--surface-2); stroke: color-mix(in srgb, var(--ink) 30%, transparent); stroke-width: 1.5; }
+          .dg-tier { fill: color-mix(in srgb, var(--tier, var(--ink-muted)) 16%, transparent); stroke: var(--tier, var(--ink-muted)); stroke-width: 2; }
+          .dg-edge { fill: none; stroke: var(--ink-muted); stroke-width: 2.5; marker-end: url(#dg-arrow); }
+          .dg-head { fill: var(--ink-muted); fill: context-stroke; }
+          .dg .dg-hot { stroke: var(--red); fill: color-mix(in srgb, var(--red) 14%, transparent); }
+          .dg .dg-edge.dg-hot { fill: none; }
+          .dg text.dg-hot, .dg tspan.dg-hot { stroke: none; fill: var(--red); font-weight: 700; }
+          .dg-dot { fill: var(--tier, var(--ink)); stroke: var(--surface); stroke-width: 2; }
+          .dg-flow { stroke-dasharray: 10 8; }
+
+          @media (prefers-reduced-motion: no-preference) {
+            .dg-flow { animation: dg-flow 0.9s linear infinite; }
+            .dg-pulse { animation: dg-pulse 1.6s ease-in-out infinite; }
+          }
+
+          /* the travelling token moves by SMIL, which ignores the media query above */
+          @media (prefers-reduced-motion: reduce) {
+            .dg-dot { display: none; }
+          }
+
+          @keyframes dg-flow { to { stroke-dashoffset: -18; } }
+          @keyframes dg-pulse { 50% { opacity: 0.3; } }
+
+          /* A visual with its two or three short lines beside it */
+          .vis-split {
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+            gap: 28px;
+            align-items: center;
+          }
+
+          .vis-caption {
+            color: var(--ink-soft);
+            font-size: 1.1rem;
+            line-height: 1.5;
+          }
         </style>
         """
     )
     return
+
+
+@app.cell
+def _(html, mo):
+    def diagram(body: str, *, width: int, height: int, label: str, tier: str | None = None):
+        """An inline SVG drawn with the dg-* classes of the CSS cell; `label` is what a screen reader says.
+
+        1 viewBox unit is 1 px at full size: never wider than `width` px, narrower when its column is.
+        `tier` ("data", "logic" or "presentation") colours every dg-tier and dg-dot inside.
+        """
+        tier_class = f" tier-{tier}" if tier else ""
+        return mo.Html(
+            f'<svg class="dg{tier_class}" viewBox="0 0 {width} {height}" style="max-width: {width}px"'
+            f' role="img" aria-label="{html.escape(label)}">'
+            '<defs><marker id="dg-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5"'
+            ' orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>'
+            f"{body}</svg>"
+        )
+
+    return (diagram,)
 
 
 @app.cell
@@ -380,43 +481,48 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card flow-card">
+def _(diagram, mo):
+    def _tier(y, tier, name, role, chapters):
+        """One tier band: name and role on the left, then one chip per chapter."""
+        parts = [
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="0" y="{y}" width="1100" height="96" rx="16"/>',
+            f'<text x="24" y="{y + 40}" font-size="21" font-weight="700">{name}</text>',
+            f'<text class="dg-muted" x="24" y="{y + 68}">{role}</text>',
+        ]
+        x = 230
+        for number, topic in chapters:
+            w = 30 + 9.4 * len(f"{number} {topic}")  # about 9.4 px per character at 17 px
+            parts.append(f'<rect class="dg-box" x="{x}" y="{y + 26}" width="{w:.0f}" height="44" rx="12" style="stroke: var(--tier)"/>')
+            parts.append(
+                f'<text x="{x + w / 2:.0f}" y="{y + 48}" text-anchor="middle" dominant-baseline="central">'
+                f'<tspan font-weight="700">{number}</tspan> {topic}</text>'
+            )
+            x += w + 12
+        return "".join(parts) + "</g>"
+
+    # Returned too, so the wrap-up can show the same map again.
+    tier_map = diagram(
+        '<text x="960" y="22" text-anchor="middle" font-weight="700">request</text>'
+        '<text x="1045" y="22" text-anchor="middle" font-weight="700">answer</text>'
+        + _tier(40, "presentation", "Presentation tier", "what a person sees", [("9", "frontend"), ("10", "honest charts")])
+        + _tier(172, "logic", "Logic tier", "rules and the API", [("6", "contract"), ("7", "validate input"), ("8", "serve over HTTP")])
+        + _tier(304, "data", "Data tier", "where bytes rest", [("1", "correct writes"), ("2", "format"), ("3", "layout"), ("4", "compression"), ("5", "query")])
+        + '<path class="dg-edge" d="M960 88 V 340"/><path class="dg-edge" d="M1045 352 V 100"/>'
+        + '<circle class="dg-dot" r="9"><animateMotion dur="5s" repeatCount="indefinite" path="M960 88 V 352 H 1045 V 88 Z"/></circle>',
+        width=1100,
+        height=420,
+        label="Three tiers, stacked: presentation (chapters 9 and 10) on logic (6 to 8) on data (1 to 5). "
+        "A request travels down through each tier and the answer comes back up.",
+    )
+    mo.md(f"""
+    <div class="section-card">
       <h3>The Map: One Product, Three Tiers</h3>
-      <p>
-        Almost every data application is split into three layers, called <strong>tiers</strong>.
-        Each tier only talks to its neighbour, so any one of them can be replaced without
-        rewriting the others.
-      </p>
-      <div class="flow-diagram">
-        <div class="flow-box"><strong>Presentation tier</strong><br/>what a person sees<br/><em>chapters 9&ndash;10</em></div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box"><strong>Logic tier</strong><br/>rules and the API<br/><em>chapters 6&ndash;8</em></div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box"><strong>Data tier</strong><br/>where bytes rest<br/><em>chapters 1&ndash;5</em></div>
-      </div>
-      <div class="grid-2">
-        <div>
-          <ul>
-            <li><strong>Data tier</strong> &mdash; keep writes correct (ch. 1), pick a format (ch. 2),
-                choose a layout (ch. 3), shrink it (ch. 4), query it (ch. 5).</li>
-            <li><strong>Logic tier</strong> &mdash; agree on a contract (ch. 6), check what comes in
-                (ch. 7), serve it over HTTP (ch. 8).</li>
-          </ul>
-        </div>
-        <div>
-          <ul>
-            <li><strong>Presentation tier</strong> &mdash; choose a frontend (ch. 9),
-                show the numbers honestly (ch. 10).</li>
-            <li>The arrows point the way a <em>request</em> travels. The answer travels back
-                the other way.</li>
-          </ul>
-        </div>
-      </div>
+      {tier_map}
+      <p class="vis-caption">Almost every data application has these three tiers. Each talks only to its
+      neighbour, so any one can be replaced without rewriting the others.</p>
     </div>
     """)
-    return
+    return (tier_map,)
 
 
 @app.cell
@@ -510,7 +616,22 @@ def _(mo, requests, timeit):
         except requests.JSONDecodeError:
             return response.status_code, response.text
 
-    return best_seconds, call_api, format_bytes, format_ms, static_table
+    TIER = {"data": "#2f7fe0", "logic": "#c9479f", "presentation": "#dd6325"}  # the --tier-* hues of the CSS cell
+
+    def tier_chart(chart, tier: str):
+        """Finish an altair chart: marks in the tier's hue, no background, labels sized for the projector.
+
+        marimo themes the axes for light and dark itself; text marks (value labels) get a grey that reads on both.
+        """
+        return (
+            chart.configure(background="transparent")
+            .configure_mark(color=TIER[tier])
+            .configure_axis(labelFontSize=14, titleFontSize=14, tickCount=5)
+            .configure_legend(labelFontSize=14, titleFontSize=14)
+            .configure_text(color="#7c8593", fontSize=15, fontWeight="bold")
+        )
+
+    return TIER, best_seconds, call_api, format_bytes, format_ms, static_table, tier_chart
 
 
 @app.cell
