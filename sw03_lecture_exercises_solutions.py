@@ -264,14 +264,14 @@ def exercise4_solution(Path, sample_rows_bulk, tempfile, write_and_read_csv):
         }
 
     with tempfile.TemporaryDirectory() as temp_dir_ex4:
+        csv_path_ex4 = Path(temp_dir_ex4) / "exercise4.csv"
         result_ex4 = write_parquet_and_compare(
-            sample_rows_bulk,
-            Path(temp_dir_ex4) / "exercise4.parquet",
-            Path(temp_dir_ex4) / "exercise4.csv",
+            sample_rows_bulk, Path(temp_dir_ex4) / "exercise4.parquet", csv_path_ex4
         )
+        csv_size_ex4 = csv_path_ex4.stat().st_size
 
     check_passed_ex4 = (
-        result_ex4["csv_bytes"] > 0
+        result_ex4["csv_bytes"] == csv_size_ex4
         and result_ex4["row_count"] == len(sample_rows_bulk)
         and result_ex4["size_ratio_parquet_to_csv"] is not None
         # really parquet / csv, not the other way round
@@ -384,8 +384,9 @@ def exercise7_prompt(mo):
     - `GET /hello` returns `{"message": "hello from api"}`
     - `GET /status` returns `{"status": "ok"}`
 
-    Hint: an endpoint just returns a dictionary; FastAPI turns it into JSON. The check sends
-    real HTTP requests through FastAPI's `TestClient`, so path, verb and JSON must all match.
+    Hint: an endpoint just returns a dictionary; FastAPI turns it into JSON. The check calls
+    your app through FastAPI's `TestClient`, which sends HTTP requests to it in-process (no
+    server needed), so path, verb and JSON must all match.
     """)
     return
 
@@ -438,6 +439,8 @@ def exercise8_prompt(mo):
 
 @app.cell
 def exercise8_solution(json):
+    from functools import partial
+
     def call_json_endpoint(base_url, path, opener):
         normalized_base = base_url.rstrip("/")
         normalized_path = "/" + path.lstrip("/")
@@ -456,24 +459,32 @@ def exercise8_solution(json):
     # Stands in for urllib.request.urlopen, so the check needs no running server:
     # anything with .read() and .status works as a response.
     class FakeResponse:
-        def __init__(self, payload_bytes, status=200):
+        def __init__(self, payload_bytes, status):
             self.payload_bytes = payload_bytes
             self.status = status
 
         def read(self):
             return self.payload_bytes
 
-    def fake_opener(url, timeout=2):
+    def fake_opener(url, timeout=2, status=200):
         payload = json.dumps({"message": "hello from api"}).encode("utf-8")
-        return FakeResponse(payload, status=200)
+        return FakeResponse(payload, status)
 
-    result_ex8 = call_json_endpoint("http://127.0.0.1:8000", "/hello", fake_opener)
+    # the stray "/" after the port must not end up in the url
+    result_ex8 = call_json_endpoint("http://127.0.0.1:8000/", "/hello", fake_opener)
+    # ok follows the status: 201 Created is a success too, 404 Not Found is not
+    ok_by_status_ex8 = {
+        code: call_json_endpoint(
+            "http://127.0.0.1:8000", "/hello", partial(fake_opener, status=code)
+        )["ok"]
+        for code in (201, 404)
+    }
     check_passed_ex8 = result_ex8 == {
         "ok": True,
         "url": "http://127.0.0.1:8000/hello",
         "status": 200,
         "payload": {"message": "hello from api"},
-    }
+    } and ok_by_status_ex8 == {201: True, 404: False}
     print("pass" if check_passed_ex8 else "fail")
     return
 
