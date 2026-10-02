@@ -5713,8 +5713,9 @@ def _(chapter_intro, mo):
             mo.md("## 10. Honest Charts (Signal vs Noise)"),
             chapter_intro(
                 "presentation",
-                "Which pattern is signal, and which is noise?",
-                "The last decision of the whole stack: what a chart claims is what people believe.",
+                "Does spending more make customers happier? Mia wants a chart for the board.",
+                "A chart can show a pattern that is not there. First we learn to read how sure a trend line is, "
+                "then we see three ways the same sales can tell three different stories.",
             ),
         ],
         gap=1,
@@ -5723,35 +5724,181 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(mo):
+def _(in_plain, mo, shop_sales, statistics):
+    def ch10_fit(xs, ys):
+        """The least-squares line through (xs, ys): slope beta, intercept alpha, the slope's standard error, R²."""
+        beta, alpha = statistics.linear_regression(xs, ys)
+        r2 = statistics.correlation(xs, ys) ** 2
+        # Standard error of the slope: how far beta would wander if we drew other sales.
+        se = ((1 - r2) / (len(xs) - 2)) ** 0.5 * statistics.stdev(ys) / statistics.stdev(xs)
+        return beta, alpha, se, r2
+
+    # Every real sale: CHF spent (in CHF 10,000s) against the customer's rating.
+    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
+    _clear = abs(_beta) > 2 * _se
     _more = mo.md(
-        """
-    - $\\alpha$ is the baseline level, the value of y where x is 0; $\\beta$ is the change in y for one
-      unit of x. The margin of error is two standard errors, about 95% confidence.
-    - **Slope 0, noise high:** the equation still prints confidently, and the ± tells you not to
-      believe it. About 1 seed in 20 still clears the bar at slope 0: that is what 95% means.
-    - **Noise 1.4, slope 0.4:** $R^2$ calls the line nearly useless, yet the slope is clearly real.
-    - **More rows** shrink the ±, but they do not push $R^2$ up. $R^2$ measures how predictable single
-      points are, not whether a trend exists.
+        f"""
+    - The line is $\\text{{rating}} = \\alpha + \\beta \\times \\text{{CHF spent}}$. Here
+      $\\alpha = {_alpha:.2f}$, the rating the line gives a sale of CHF 0, and $\\beta = {_beta:+.3f}$, the
+      change in rating per CHF 10,000.
+    - The **standard error** (SE) of $\\beta$ is how much it would wobble if we had drawn other sales.
+      $\\beta \\pm 2\\,\\text{{SE}}$ is the range we are about 95% sure of.
+    - $R^2$ is the share of the spread in ratings the line explains: 0 is none, 1 is every dot on the line.
         """
     )
     mo.vstack(
         [
+            mo.md("### Two Questions Every Trend Line Answers"),
+            in_plain(
+                "Put one dot per sale, CHF spent across and the customer's rating up, and draw the straight line "
+                "that fits best. That line answers two different questions. **Is there a trend?** Does the rating "
+                "really rise with spending, or could the slope be luck? **Does it predict one sale?** Do single "
+                "sales sit close to the line?"
+            ),
             mo.md(
-                """
-    ### Lab: Signal or Noise?
-
-    The regression $y = \\alpha + \\beta x$ gives two separate answers:
-
+                f"""
     <div class="tiles tier-presentation">
-      <div class="tile"><div class="tile-key">&beta; &plusmn; 2 SE</div><div class="tile-title">Trend: is there a slope?</div>
-        <p>If the range includes 0, the data cannot tell the slope from zero.</p></div>
-      <div class="tile"><div class="tile-key">R&sup2;</div><div class="tile-title">Fit: how close are the points?</div>
-        <p>How well the line predicts a <em>single</em> point: the share of the spread it explains.</p></div>
+      <div class="tile"><div class="tile-key">{_beta:+.3f} &plusmn; {2 * _se:.3f}</div>
+        <div class="tile-title">Trend: is there a slope? (&beta; &plusmn; 2 SE)</div>
+        <p>Per CHF 10,000 spent, the rating rises {_beta:.3f} points, give or take {2 * _se:.3f}.
+        {"The range stays clear of 0: the trend is real, if small." if _clear else "The range includes 0: no trend we can tell from luck."}</p></div>
+      <div class="tile"><div class="tile-key">R&sup2; = {_r2:.2f}</div>
+        <div class="tile-title">Fit: how close are the dots?</div>
+        <p>Spending accounts for {_r2:.0%} of the differences in rating between sales. The other
+        {1 - _r2:.0%} is everything else.</p></div>
     </div>
-
-    **Try:** slope 0 with noise 5 · slope 0.4 with noise 1.4 · then more rows.
                 """
+            ),
+            mo.Html(f'<p class="vis-caption">All {len(shop_sales):,} EdgeWorks sales, one dot each.</p>'),
+            mo.md(
+                "**What to notice:** a trend can be real and still predict single sales badly. They are two "
+                "questions: read both numbers, never one."
+            ),
+            mo.accordion({"What α, β, SE and R² mean": _more}),
+        ],
+        gap=0.6,
+    )
+    return (ch10_fit,)
+
+
+@app.cell
+def _(mo):
+    # The signal-or-noise lab's controls, shown by the slide below.
+    ch10_effect = mo.ui.slider(
+        -0.06, 0.06, step=0.01, value=0.05, label="True effect: rating points per CHF 10,000", show_value=True, debounce=True
+    )
+    ch10_sales = mo.ui.slider(
+        steps=[50, 100, 200, 500, 1000, 2000, 3360], value=500, label="Sales we look at", show_value=True, debounce=True
+    )
+    ch10_draw = mo.ui.button(value=0, on_click=lambda n: n + 1, label="Draw other sales")
+    return ch10_draw, ch10_effect, ch10_sales
+
+
+@app.cell
+def _(
+    TIER,
+    alt,
+    ch10_draw,
+    ch10_effect,
+    ch10_fit,
+    ch10_sales,
+    chart_or_table,
+    in_plain,
+    mo,
+    pd,
+    random,
+    shop_sales,
+    statistics,
+    tier_chart,
+):
+    _effect = round(ch10_effect.value, 2)
+    _rng = random.Random(ch10_draw.value)
+    _picked = _rng.sample(range(len(shop_sales)), ch10_sales.value)
+    _xs = [shop_sales["total_price"].iat[_i] / 1e4 for _i in _picked]  # CHF 10,000s
+    # Real ratings, drawn apart from the spend so spending says nothing, plus the effect set above.
+    _base = _rng.sample(list(shop_sales["customer_rating"]), ch10_sales.value)
+    _xbar = statistics.fmean(_xs)
+    _ys = [_r + _effect * (_x - _xbar) for _r, _x in zip(_base, _xs, strict=True)]
+    _beta, _alpha, _se, _r2 = ch10_fit(_xs, _ys)
+    _clear = abs(_beta) > 2 * _se  # the ± range below excludes 0
+
+    _trend = (
+        "The range stays clear of 0: these sales rule out *spending changes nothing*."
+        if _clear
+        else "The range includes 0: these sales cannot tell this effect from no effect at all."
+    )
+    _fit = (
+        "single sales sit close to the line"
+        if _r2 >= 0.5
+        else "a trend with plenty of scatter around it"
+        if _r2 >= 0.15
+        else "single sales sit far from the line"
+    )
+    _verdict = mo.md(
+        f"**Trend:** $\\beta = {_beta:+.3f} \\pm {2 * _se:.3f}$ rating points per CHF 10,000 (you set {_effect:+.2f}). "
+        f"{_trend}  \n"
+        f"**Fit:** $R^2 = {_r2:.2f}$: spending explains {_r2:.0%} of the differences in rating between these "
+        f"sales; {_fit}."
+    ).callout(kind="success" if _clear else "warn")
+
+    # The fan: every line whose slope lies in beta ± 2 SE, pivoting on the centre of the data.
+    _ybar = statistics.fmean(_ys)
+    _grid = [min(_xs) + (max(_xs) - min(_xs)) * _i / 40 for _i in range(41)]
+    _ends = [((_beta - 2 * _se) * (_g - _xbar), (_beta + 2 * _se) * (_g - _xbar)) for _g in _grid]
+    _fan = pd.DataFrame(
+        {
+            "x": [_g * 1e4 for _g in _grid],
+            "low": [_ybar + min(_e) for _e in _ends],
+            "high": [_ybar + max(_e) for _e in _ends],
+            "flat": _ybar,
+        }
+    )
+    _x = alt.X("x:Q", title="CHF spent on the sale", axis=alt.Axis(format="~s", tickCount=8))
+    _y = alt.Y("y:Q", title="rating (simulated)", scale=alt.Scale(zero=False))
+    _points = (
+        alt.Chart(pd.DataFrame({"x": [_v * 1e4 for _v in _xs], "y": _ys}))
+        .mark_circle(size=30, opacity=0.35, color=TIER["muted"])
+        .encode(x=_x, y=_y)
+    )
+    _band = alt.Chart(_fan).mark_area(opacity=0.25, color=TIER["presentation"]).encode(x=_x, y=alt.Y("low:Q", title="rating (simulated)"), y2="high:Q")
+    _flat = alt.Chart(_fan).mark_line(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x=_x, y=alt.Y("flat:Q", title="rating (simulated)"))
+    _line = _points.transform_regression("x", "y").mark_line(color=TIER["presentation"], strokeWidth=4)
+    _chart = (_band + _points + _flat + _line).properties(width="container", height=270)
+    _summary = [
+        {"quantity": "effect you set (rating per CHF 10,000)", "value": _effect},
+        {"quantity": "fitted slope β", "value": round(_beta, 3)},
+        {"quantity": "margin of error (2 SE)", "value": round(2 * _se, 3)},
+        {"quantity": "intercept α", "value": round(_alpha, 3)},
+        {"quantity": "R²", "value": round(_r2, 3)},
+        {"quantity": "sales (n)", "value": len(_xs)},
+    ]
+    _more = mo.md(
+        """
+    - **Effect 0:** the equation still prints a slope, and the ± range includes 0, which tells you not to
+      believe it. About 1 draw in 20 still clears the bar at effect 0: that is what 95% means.
+    - **Effect 0.05**, about the size of the real slope on the previous slide: $R^2$ calls the line
+      nearly useless, yet with 500 sales the slope is clearly real.
+    - **More sales** shrink the ±, but they do not push $R^2$ up. $R^2$ measures how predictable single
+      sales are, not whether a trend exists.
+    - The ratings are simulated so that we know the truth: each sale keeps its real price, gets a real
+      rating drawn from another sale, and then the effect you set is added.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md("### Try it: If Spending Really Moved Ratings, Would We See It?"),
+            in_plain(
+                "Here **you** set the truth. We take real EdgeWorks sales, give each one a real rating drawn from "
+                "another sale, so spending says nothing, then add the effect you choose. The fitted line has to "
+                "find that effect again among the real spread of ratings."
+            ),
+            mo.hstack([ch10_effect, ch10_sales, ch10_draw], widths=[3, 3, 1], align="center", gap=2),
+            _verdict,
+            chart_or_table(tier_chart(_chart, "presentation"), _summary, label="Regression summary"),
+            mo.md(
+                "**What to notice:** the orange fan holds every slope inside β ± 2 SE. Set the effect to 0: the "
+                "dashed flat line fits inside the fan. Set 0.01 with 500 sales, then 3,360: the fan narrows until "
+                "the effect shows, while R² stays near 0."
             ),
             mo.accordion({"What each experiment shows": _more}),
         ],
@@ -5762,138 +5909,33 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    chart_slope = mo.ui.slider(-3.0, 3.0, step=0.2, value=1.2, label="True slope", show_value=True, debounce=True)
-    chart_noise = mo.ui.slider(0.2, 5.0, step=0.2, value=1.4, label="Noise level", show_value=True, debounce=True)
-    chart_rows = mo.ui.slider(100, 1000, step=100, value=600, label="Rows", show_value=True, debounce=True)
-    chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md("### Signal or Noise: Set the Truth, Then Read the Fit"),
-            mo.hstack([chart_slope, chart_noise], widths="equal"),
-            mo.hstack([chart_rows, chart_seed], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return chart_noise, chart_rows, chart_seed, chart_slope
-
-
-@app.cell
-def _(
-    TIER,
-    alt,
-    chart_noise,
-    chart_or_table,
-    chart_rows,
-    chart_seed,
-    chart_slope,
-    mo,
-    pd,
-    random,
-    statistics,
-    tier_chart,
-):
-    _rng = random.Random(chart_seed.value)
-    _xs = [_rng.gauss(0, 1) for _ in range(chart_rows.value)]
-    _ys = [chart_slope.value * _x + _rng.gauss(0, chart_noise.value) for _x in _xs]
-    _beta, _alpha = statistics.linear_regression(_xs, _ys)
-    _r2 = statistics.correlation(_xs, _ys) ** 2
-    # Standard error of the slope: how far beta would wander if you drew the sample again.
-    _se = ((1 - _r2) / (len(_xs) - 2)) ** 0.5 * statistics.stdev(_ys) / statistics.stdev(_xs)
-    _nonzero = abs(_beta) > 2 * _se  # the ± range below excludes 0
-
-    _trend = (
-        "clearly **not zero**: the data rule out a flat line."
-        if _nonzero
-        else "**indistinguishable from zero**: this is noise, however confident the equation looks."
-    )
-    _fit = (
-        "most of the spread: single points sit close to the line"
-        if _r2 >= 0.5
-        else "part of the spread: a trend with plenty of scatter around it"
-        if _r2 >= 0.15
-        else "almost none of the spread: single points are hard to predict"
-    )
-    _verdict = mo.md(
-        f"$y = {_alpha:.2f} {_beta:+.2f}\\,x$ &nbsp; (you set the slope to {chart_slope.value:g})  \n"
-        f"**Trend:** $\\beta = {_beta:.2f} \\pm {2 * _se:.2f}$, {_trend}  \n"
-        f"**Fit:** $R^2 = {_r2:.2f}$, the line explains {_fit}."
-    ).callout(kind="success" if _nonzero else "warn")
-
-    # The fan: every line whose slope lies in beta ± 2 SE, pivoting on the centre of the data.
-    _xbar, _ybar = statistics.fmean(_xs), statistics.fmean(_ys)
-    _grid = [min(_xs) + (max(_xs) - min(_xs)) * _i / 40 for _i in range(41)]
-    _ends = [((_beta - 2 * _se) * (_g - _xbar), (_beta + 2 * _se) * (_g - _xbar)) for _g in _grid]
-    _fan = pd.DataFrame(
-        {
-            "x": _grid,
-            "low": [_ybar + min(_e) for _e in _ends],
-            "high": [_ybar + max(_e) for _e in _ends],
-            "flat": _ybar,
-        }
-    )
-    _x = alt.X("x:Q").axis(tickCount=8)
-    _points = (
-        alt.Chart(pd.DataFrame({"x": _xs, "y": _ys}))
-        .mark_circle(size=36, opacity=0.45, color=TIER["muted"])
-        .encode(x=_x, y="y:Q")
-    )
-    _band = alt.Chart(_fan).mark_area(opacity=0.25, color=TIER["presentation"]).encode(x=_x, y=alt.Y("low:Q", title="y"), y2="high:Q")
-    _flat = alt.Chart(_fan).mark_line(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x=_x, y=alt.Y("flat:Q", title="y"))
-    _line = _points.transform_regression("x", "y").mark_line(color=TIER["presentation"], strokeWidth=4)
-    _chart = (_band + _points + _flat + _line).properties(width="container", height=320)
-    _summary = [
-        {"quantity": "slope you set", "value": chart_slope.value},
-        {"quantity": "fitted slope β", "value": round(_beta, 3)},
-        {"quantity": "margin of error (2 SE)", "value": round(2 * _se, 3)},
-        {"quantity": "intercept α", "value": round(_alpha, 3)},
-        {"quantity": "R²", "value": round(_r2, 3)},
-        {"quantity": "rows (n)", "value": len(_xs)},
-    ]
-    mo.vstack(
-        [
-            _verdict,
-            chart_or_table(tier_chart(_chart, "presentation"), _summary, label="Regression summary"),
-            mo.md(
-                '<p class="vis-caption">Orange fan: every slope inside &beta; &plusmn; 2 SE. If the dashed flat '
-                "line fits inside it, the data cannot rule out zero.</p>"
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
+    # The three-ways lab's control, shown by the slide below.
     honest_view = mo.ui.radio(
         options=[
-            "A - aggregate the dots",
+            "A - average the sales into fewer dots",
             "B - split by category",
             "C - drop one category",
         ],
-        value="A - aggregate the dots",
+        value="A - average the sales into fewer dots",
         label="Ask the same question a different way",
         inline=True,
     )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Mini-lab: Three Ways to Change the Finding Without Changing the Data
-
-    One question of the repo's real 3,360 sales: **does spending more make customers happier?**
-    Every view uses every sale; only the way we look changes.
-                """
-            ),
-            honest_view,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
     return (honest_view,)
 
 
 @app.cell
-def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
+def _(
+    SEED_DIR,
+    TIER,
+    alt,
+    chart_or_table,
+    duckdb,
+    honest_view,
+    in_plain,
+    mia_asks,
+    mo,
+    tier_chart,
+):
     _con = duckdb.connect()
     _con.execute(
         f"""
@@ -5917,6 +5959,10 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
         return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
 
     if honest_view.value.startswith("A"):
+        _trick = (
+            "**The trick:** average many sales into one dot. Fewer dots means less disagreement between them, "
+            "so the line looks tight."
+        )
         _views = [
             ("one dot per sale", "sales", ()),
             ("per product per month", _averaged("product, month"), ()),
@@ -5924,9 +5970,14 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
             ("per category", _averaged("category"), ()),
         ]
     elif honest_view.value.startswith("B"):
+        _trick = (
+            "**The trick:** one line through all sales, or one line per category. The all-sales line mostly "
+            "measures the gap between the categories."
+        )
         _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
         _views = [("all sales pooled", "sales", ())] + [(f"only {_c}", "sales WHERE category = ?", (_c,)) for _c in _cats]
     else:
+        _trick = "**The trick:** leave one category out, and the slope can change sign."
         _views = [("all sales", "sales", ()), ("every sale except Services", "sales WHERE category <> 'Services'", ())]
     _rows = [_measure(_label, _source, *_params) for _label, _source, _params in _views]
 
@@ -5947,7 +5998,7 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
         )
         return (dots + line).properties(
             width="container",
-            height=230,
+            height=220,
             title=alt.TitleParams(
                 row["what we plotted"],
                 subtitle=f"n {row['dots (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
@@ -6012,9 +6063,16 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
 
     mo.vstack(
         [
-            chart_or_table(
-                _panels, _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"
+            mo.md("### Try it: Three Ways to Change the Answer Without Changing the Data"),
+            mia_asks("Does spending more make customers happier? I need one chart for the board."),
+            in_plain(
+                f"Every view below uses the same {_rows[0]['dots (n)']:,} real sales and the same question: rating "
+                "against CHF spent. Only the way we look changes. Each panel prints its number of dots (n), its R² "
+                "and its slope."
             ),
+            honest_view,
+            mo.md(_trick),
+            chart_or_table(_panels, _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"),
             mo.md(_lesson).callout(kind="warn"),
             mo.accordion(
                 {
@@ -6057,16 +6115,74 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(ch10_fit, mo, shop_sales):
+    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
+    mo.vstack(
+        [
+            mo.md(
+                f"""
     ### Chapter 10 Conclusion
 
     - Read a slope with its ± range, and $R^2$ with its $n$.
-    - $R^2$ says how close single points sit, not whether a trend exists.
+    - $R^2$ says how close single sales sit to the line, not whether a trend exists.
     - Averaging, splitting or dropping a group can reverse a finding without changing one row: say which you did.
-            """
-    ).callout(kind="success")
+    - For Mia's board: one dot per sale, the slope with its ±, and $n$. The rating rises
+      {_beta:.3f} ± {2 * _se:.3f} per CHF 10,000 ($R^2$ {_r2:.2f}), and most of that is Services being both
+      dear and well rated.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
+    ### Next: the Wrap-up
+
+    Mia asked ten questions today. One slide answers all ten, and one more puts them back on the map.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=1,
+    )
+    return
+
+
+@app.cell
+def _(ch10_fit, mo, shop_sales):
+    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
+    _hardware = shop_sales[shop_sales["category"] == "Hardware"]
+    _hw_beta = ch10_fit(list(_hardware["total_price"] / 1e4), list(_hardware["customer_rating"]))[0]
+    _answers = [
+        ("data", "Locks", "Both reps read the same count and each saved it + 1: 9 orders booked, 8 counted. A lock or "
+         "one transaction makes read-and-save one step."),
+        ("data", "Formats", "Parquet: it carries the types, so store code 007 stays text. CSV keeps characters only, and "
+         "the reader guessed a number."),
+        ("data", "Layout", "Because the file stores sales row by row. Stored by column, as Parquet does, the total reads "
+         "only <code>total_price</code>."),
+        ("data", "Compression", "Yes: lossless compression gives back every cent. It feeds on repetition, and sales "
+         "columns repeat a lot."),
+        ("data", "DuckDB", "Yes: DuckDB runs SQL straight on the Parquet files and reads only the columns and rows the "
+         "query needs."),
+        ("logic", "REST", "Over HTTP: a verb and a path (<code>GET /sales</code>), and a status code that says who "
+         "must act."),
+        ("logic", "Pydantic", "A model at the door (<code>SaleCreate</code>): rating 9 and 0 units come back as one 422 "
+         "that lists both."),
+        ("logic", "FastAPI", "They open <code>/docs</code>: FastAPI writes it from the same models that check every "
+         "request."),
+        ("presentation", "Frontends", "Streamlit: our Python team ships it fast, and the API keeps every rule."),
+        ("presentation", "Honest charts", f"Barely: {_beta:+.3f} rating per CHF 10,000 (R² {_r2:.2f}), and inside "
+         f"Hardware it {'falls' if _hw_beta < 0 else 'rises'}. Show the board each sale, the ± and n."),
+    ]
+    _items = "".join(
+        f'<li class="tier-{_tier}"><strong>{_topic}</strong>: {_text}</li>' for _tier, _topic, _text in _answers
+    )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Wrap-up: Mia's Ten Questions, Answered</h3>
+      <ol class="mia-list" style="font-size: 1.2rem; gap: 12px">{_items}</ol>
+      <p class="vis-caption">Blue: the sales files (data tier). Pink: the sales API (logic tier). Orange: Mia's
+      dashboard (presentation tier).</p>
+    </div>
+        """
+    )
     return
 
 
