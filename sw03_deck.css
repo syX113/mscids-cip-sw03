@@ -5,9 +5,9 @@
    theme, and light-dark() picks the matching value. Names avoid marimo's own
    variables (--accent, --border, --muted, ...), which its UI depends on. */
 :root {
-  /* marimo's layout width: fixed, because sw03_deck_head.html zooms the whole page to the window */
-  --content-width: 1056px;
-  --content-width-medium: 1056px;
+  /* marimo's widest column, in zoomed px: wide enough to fill a 4K window at sw03_deck_head.html's zoom */
+  --content-width: 1700px;
+  --content-width-medium: 1700px;
 
   --ink: light-dark(#0b1220, #e8edf4);
   --ink-soft: light-dark(#2b3a55, #c5cfdc);
@@ -24,7 +24,7 @@
     0 4px 10px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.2));
 }
 
-/* --deck-zoom: window width / 1120, set by sw03_deck_head.html (marimo run only). The side
+/* --deck-zoom: set by sw03_deck_head.html from the window width (marimo run only). The side
    padding replaces marimo's, which grows with the real window and would eat the zoomed page. */
 #App > div {
   zoom: var(--deck-zoom, 1);
@@ -322,7 +322,7 @@
   background: var(--tier, var(--ink-muted));
 }
 
-/* SVG diagrams drawn with diagram(): 1 viewBox unit is 1 px at full size */
+/* SVG diagrams drawn with diagram(): 1 viewBox unit is 1 px at the drawing's own width, up to 1.3x in a wide column */
 .dg { display: block; width: 100%; height: auto; margin: 0 auto; font-size: 17px; }
 .dg text { fill: var(--ink); }
 .dg .dg-muted { fill: var(--ink-muted); font-size: 15px; }

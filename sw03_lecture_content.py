@@ -69,7 +69,8 @@ def _(html, mo, re):
     def diagram(body: str, *, width: int, height: int, label: str, tier: str | None = None):
         """An inline SVG drawn with the dg-* classes of sw03_deck.css; `label` is what a screen reader says.
 
-        1 viewBox unit is 1 px at full size: never wider than `width` px, narrower when its column is.
+        1 viewBox unit is 1 px at `width`: it grows to 1.3x that in a wide column (a 4K window), so it fills
+        more of the screen without its labels outgrowing the text; narrower when its column is.
         `tier` ("data", "logic" or "presentation") colours every dg-tier and dg-dot inside.
         """
         tier_class = f" tier-{tier}" if tier else ""
@@ -78,7 +79,7 @@ def _(html, mo, re):
         arrow = f"dg-arrow-{abs(hash(body))}"
         return mo.Html(
             f'<svg class="dg{tier_class}" viewBox="0 0 {width} {height}"'
-            f' style="max-width: {width}px; --dg-arrow: url(#{arrow})" role="img" aria-label="{html.escape(label)}">'
+            f' style="max-width: {width * 1.3:.0f}px; --dg-arrow: url(#{arrow})" role="img" aria-label="{html.escape(label)}">'
             f'<defs><marker id="{arrow}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5"'
             ' orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>'
             f"{body}</svg>"
@@ -728,7 +729,7 @@ def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, rand
         + _lane.mark_text().encode(
             text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
         )
-    ).properties(width=940, height=110)
+    ).properties(width="container", height=110)
     _counter = (
         alt.Chart(_df)
         .transform_fold(["shared counter", "if no update were lost"], as_=["series", "value"])
@@ -747,7 +748,7 @@ def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, rand
                 scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[[1, 0], [6, 4]]),
             ),
         )
-        .properties(width=940, height=170)
+        .properties(width="container", height=170)
     )
 
     mo.vstack(
@@ -761,7 +762,7 @@ def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, rand
                 widths="equal",
             ),
             chart_or_table(
-                tier_chart(alt.vconcat(_lanes, _counter).resolve_scale(color="independent"), "data"),
+                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
                 _log,
                 label="Interleaving trace",
             ),
@@ -1413,7 +1414,7 @@ def _(
         _base.mark_circle(size=260, opacity=1).encode(color=_color)
         + _base.transform_filter("!datum.left").mark_text(align="left", dx=14).encode(text="format:N")
         + _base.transform_filter("datum.left").mark_text(align="right", dx=-14).encode(text="format:N")
-    ).properties(width=470, height=300, title="Size vs latency: the bottom-left corner wins")
+    ).properties(width="container", height=300, title="Size vs latency: the bottom-left corner wins")
     _speed = alt.Chart(_df).encode(
         y=alt.Y("format:N", sort="-x", title=None),
         x=alt.X(
@@ -1426,12 +1427,12 @@ def _(
     _throughput = (
         _speed.mark_bar(cornerRadiusEnd=4).encode(color=_color)
         + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("rows/s written:Q", format=".2s"))
-    ).properties(width=250, height=300, title="Throughput: rows written per second")
+    ).properties(width="container", height=300, title="Throughput: rows written per second")
 
     mo.vstack(
         [
             chart_or_table(
-                tier_chart(alt.hconcat(_scatter, _throughput, spacing=40), "data"),
+                mo.hstack([tier_chart(_scatter, "data"), tier_chart(_throughput, "data")], widths=[3, 2], gap=2),
                 _rows,
                 label="Serialization benchmark (best of 3)",
             ),
@@ -1907,7 +1908,7 @@ def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, 
             .mark_text(align="right", dx=-8, dy=-12)
             .encode(x=_x, y="row layout (ms):Q", text="column is faster by:N")
         )
-        _charts.append((_lines + _speedup).properties(width=400, height=260, title=_operation))
+        _charts.append((_lines + _speedup).properties(width="container", height=260, title=_operation))
 
     _why = mo.md(
         """
@@ -1920,7 +1921,7 @@ def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, 
     )
     mo.vstack(
         [
-            chart_or_table(tier_chart(alt.hconcat(*_charts, spacing=40), "data"), _results, label="Row vs column layout, same numbers"),
+            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _results, label="Row vs column layout, same numbers"),
             mo.md(
                 "Labels: how many times faster the column layout was. As $C$ grows the row layout slows and the "
                 "column layout stays put: $\\text{IO}_{\\text{row}} / \\text{IO}_{\\text{col}} = C/k$ with $k = 1$, "
@@ -2100,7 +2101,7 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
                     color=alt.condition("datum['nothing skipped']", alt.value(TIER["hot"]), alt.value(TIER["data"]))
                 )
                 + _base.mark_text(align="left", dx=6).encode(text="label:N")
-            ).properties(width=300, height=150, title=f"{_file} file: bytes the query must read")
+            ).properties(width="container", height=150, title=f"{_file} file: bytes the query must read")
         )
     _sorted, _mixed = _rows
     _notes = mo.md(
@@ -2123,7 +2124,7 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
                 """
             ),
             _strip_svg,
-            chart_or_table(tier_chart(alt.hconcat(*_charts, spacing=30), "data"), _rows, label="Bytes the query must read"),
+            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _rows, label="Bytes the query must read"),
             mo.md(
                 f"Choosing columns took the date-ordered read from **{_sorted[_steps[0]]:,}** to "
                 f"**{_sorted[_steps[1]]:,}** bytes; the index card took it to **{_sorted[_steps[2]]:,}**, and nobody "
@@ -2453,16 +2454,19 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
         line = alt.Chart(_curve).mark_line(strokeWidth=3).encode(x=_x, y=alt.Y(f"{field}:Q", title=None), tooltip=["k:Q", f"{field}:Q"])
         dot = alt.Chart(_here).mark_circle(size=220, opacity=1).encode(x=_x, y=f"{field}:Q")
         label = alt.Chart(_here).mark_text(align="left", dx=12, dy=dy).encode(x=_x, y=f"{field}:Q", text=alt.value(f"k = {_k}"))
-        return alt.layer(line, dot, label, *extra).properties(width=400, height=220, title=title)
+        return alt.layer(line, dot, label, *extra).properties(width="container", height=220, title=title)
 
     _gzip_line = alt.Chart(pd.DataFrame({"bytes": [len(_gz)], "text": [f"gzip, lossless: {len(_gz):,} bytes"]}))
     _gzip_rule = _gzip_line.mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(y="bytes:Q") + _gzip_line.mark_text(
         align="right", x="width", dy=-8
     ).encode(y="bytes:Q", text="text:N")
-    _charts = alt.hconcat(
-        _panel("PCA bytes", "Bytes PCA has to store", 16, _gzip_rule),
-        _panel("average pixel off by", "Average pixel off by (of 255)", -14),
-        spacing=40,
+    _charts = mo.hstack(
+        [
+            tier_chart(_panel("PCA bytes", "Bytes PCA has to store", 16, _gzip_rule), "data"),
+            tier_chart(_panel("average pixel off by", "Average pixel off by (of 255)", -14), "data"),
+        ],
+        widths="equal",
+        gap=2,
     )
 
     _pipeline = diagram(
@@ -2498,7 +2502,7 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
     </div>
                 """
             ),
-            chart_or_table(tier_chart(_charts, "data"), _rows, label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression"),
+            chart_or_table(_charts, _rows, label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression"),
             mo.md(
                 f"**At k = {_k} the {'PCA' if _pca_wins else 'gzip'} file is smaller**"
                 + (
@@ -2737,7 +2741,7 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
         _query.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.slower", alt.value(TIER["hot"]), alt.value(TIER["data"])))
         + _query.mark_text(align="left", dx=6).encode(text="vs plain:N")
         + alt.Chart(pd.DataFrame({"ms": [_plain]})).mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x="ms:Q")
-    ).properties(width=430, height=200, title="Time to answer (vs plain CSV)")
+    ).properties(width="container", height=200, title="Time to answer (vs plain CSV)")
     _levels = pd.DataFrame(_rows[1:])
     _write = alt.Chart(_levels).encode(
         y=alt.Y("variant:N", sort=None, title=None),
@@ -2746,7 +2750,7 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
     )
     _write_chart = (
         _write.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _write.mark_text(align="left", dx=6).encode(text=alt.Text("compress (ms):Q", format=".1f"))
-    ).properties(width=260, height=150, title="Compress once (ms)")
+    ).properties(width="container", height=150, title="Compress once (ms)")
 
     _note = mo.md(
         f"""
@@ -2759,7 +2763,7 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
     )
     mo.vstack(
         [
-            chart_or_table(tier_chart(alt.hconcat(_answer_chart, _write_chart, spacing=50), "data"), _rows, label="Same question, four files"),
+            chart_or_table(mo.hstack([tier_chart(_answer_chart, "data"), tier_chart(_write_chart, "data")], widths=[3, 2], gap=2), _rows, label="Same question, four files"),
             mo.md(
                 f"{_verdict} Unpacking costs about the same at every level: **the level is a decision about writing, not reading.**"
             ).callout(kind="warn"),
@@ -3163,7 +3167,7 @@ def _(
             color=alt.Color("cost:N", title=None, sort=_order, scale=alt.Scale(domain=_order, range=[TIER["data"], TIER["muted"]]))
         )
         + _timed.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width=500, height=250, title="Time (best of 3 runs)")
+    ).properties(width="container", height=250, title="Time (best of 3 runs)")
     _sized = alt.Chart(
         pd.DataFrame({"source": _names, "bytes": [_s[2] for _s in _sources], "label": [format_bytes(_s[2]) for _s in _sources]})
     ).encode(
@@ -3172,14 +3176,14 @@ def _(
     )
     _size = (
         _sized.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _sized.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width=240, height=250, title="File size")
+    ).properties(width="container", height=250, title="File size")
 
     _size_note = (
         "Push Rows up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
     )
     mo.vstack(
         [
-            chart_or_table(tier_chart(alt.hconcat(_time, _size, spacing=40), "data"), _rows, label="One query, three sources (best of 3 runs)"),
+            chart_or_table(mo.hstack([tier_chart(_time, "data"), tier_chart(_size, "data")], widths=[2, 1], gap=2), _rows, label="One query, three sources (best of 3 runs)"),
             mo.md(
                 f"**Here the gap is mostly parsing:** CSV is text, re-converted on every query; Parquet and the "
                 f"table are typed columns. Loading the CSV once cost {_load_csv / _query_csv:.1f} CSV queries' worth."
@@ -3313,7 +3317,7 @@ def _(
             )
         )
         + _timed.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width=480, height=180, title="Query time (ms), best of 5")
+    ).properties(width="container", height=180, title="Query time (ms), best of 5")
     _built = alt.Chart(_df).encode(
         y=alt.Y("state:N", sort=None, title=None, axis=None),
         x=alt.X("build (ms):Q", title=None, scale=alt.Scale(domain=[0, max(_df["build (ms)"].max(), 1) * 1.5])),
@@ -3321,7 +3325,7 @@ def _(
     _build_chart = (
         _built.mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
         + _built.mark_text(align="left", dx=6).encode(text=alt.Text("build (ms):Q", format=".1f"))
-    ).properties(width=200, height=180, title="Build, once (ms)")
+    ).properties(width="container", height=180, title="Build, once (ms)")
 
     if round(_narrow, 1) < 1:
         _planner = f"Here <code>(category)</code> ran at {_narrow:.1f}x, slower than the scan, and still USING INDEX."
@@ -3348,7 +3352,7 @@ def _(
     mo.vstack(
         [
             chart_or_table(
-                tier_chart(alt.hconcat(_query_chart, _build_chart, spacing=40), "data"),
+                mo.hstack([tier_chart(_query_chart, "data"), tier_chart(_build_chart, "data")], widths=[5, 2], gap=2),
                 _rows,
                 label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
             ),
@@ -5724,7 +5728,7 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
             strokeWidth=4, color=TIER["hot"] if slope < 0 else TIER["presentation"]
         )
         return (dots + line).properties(
-            width=190 if len(_views) > 2 else 430,
+            width="container",
             height=230,
             title=alt.TitleParams(
                 row["what we plotted"],
@@ -5734,7 +5738,14 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
             ),
         )
 
-    _panels = alt.hconcat(*[_panel(_i, _row, _view[1], _view[2]) for _i, (_row, _view) in enumerate(zip(_rows, _views, strict=True))])
+    _panels = mo.hstack(
+        [
+            tier_chart(_panel(_i, _row, _view[1], _view[2]), "presentation")
+            for _i, (_row, _view) in enumerate(zip(_rows, _views, strict=True))
+        ],
+        widths="equal",
+        gap=1,
+    )
 
     if honest_view.value.startswith("A"):
         _lesson = (
@@ -5784,7 +5795,7 @@ def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
     mo.vstack(
         [
             chart_or_table(
-                tier_chart(_panels, "presentation"), _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"
+                _panels, _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"
             ),
             mo.md(_lesson).callout(kind="warn"),
             mo.accordion(
