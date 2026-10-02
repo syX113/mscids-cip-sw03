@@ -1,7 +1,11 @@
+# /// script
+# [tool.marimo.display]
+# theme = "light"
+# ///
 import marimo
 
 __generated_with = "0.25.0"
-app = marimo.App(width="medium", css_file="sw03_deck.css")
+app = marimo.App(width="medium", css_file="sw03_deck.css", html_head_file="sw03_deck_head.html")
 
 
 @app.cell
@@ -112,32 +116,6 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h2>Discussed Topics</h2>
-      <div class="grid-2">
-        <ol>
-          <li>File locks vs databases: lost updates, locks, ACID, an atomic transfer</li>
-          <li>Serialization benchmarks: JSON, CSV, Pickle, Arrow, Parquet, Avro</li>
-          <li>Row-based vs column-based storage</li>
-          <li>Compression & encoding: lossless vs lossy, Parquet codecs, dictionaries</li>
-          <li>DuckDB: SQL on files, indexes & query plans, schema-on-read vs -write</li>
-        </ol>
-        <ol start="6">
-          <li>REST: the API contract, four verbs, status codes</li>
-          <li>Pydantic models: validation at the trust boundary</li>
-          <li>FastAPI live: the demo API and its automatic <code>/docs</code></li>
-          <li>Frontends: Streamlit, Dash, Flask, React, Marimo</li>
-          <li>Honest charts: a regression lab, one question asked three ways</li>
-        </ol>
-      </div>
-    </div>
-    """)
-    return
-
-
-@app.cell
 def _(box, diagram, label_w, mo):
     def _tier(y, tier, name, role, chapters):
         """One tier band: name and role on the left, then one chip per chapter."""
@@ -169,14 +147,32 @@ def _(box, diagram, label_w, mo):
         label="Three tiers, stacked: presentation (chapters 9 and 10) on logic (6 to 8) on data (1 to 5). "
         "A request travels down one tier at a time and the answer comes back up the same way.",
     )
-    mo.md(f"""
+    _chapters = mo.md("""
+    1. **File locks vs databases**: lost updates, locks, ACID, an atomic transfer
+    2. **Serialization**: JSON, CSV, Pickle, Arrow, Parquet, Avro
+    3. **Row vs column storage**
+    4. **Compression & encoding**: lossless vs lossy, Parquet codecs, dictionaries
+    5. **DuckDB**: SQL on files, indexes & query plans, schema-on-read vs -write
+    6. **REST**: the API contract, four verbs, status codes
+    7. **Pydantic**: validation at the trust boundary
+    8. **FastAPI live**: the demo API and its automatic `/docs`
+    9. **Frontends**: Streamlit, Dash, Flask, React, Marimo
+    10. **Honest charts**: a regression lab, one question asked three ways
+    """)
+    mo.vstack(
+        [
+            mo.md(f"""
     <div class="section-card">
       <h3>The Map: One Product, Three Tiers</h3>
       {tier_map}
       <p class="vis-caption">Almost every data application has these three tiers. Each talks only to its
       neighbour, so any one can be replaced without rewriting the others.</p>
     </div>
-    """)
+    """),
+            mo.accordion({"Every chapter in one line": _chapters}),
+        ],
+        gap=0.6,
+    )
     return (tier_map,)
 
 
@@ -185,11 +181,15 @@ def _(mo):
     mo.md("""
     <div class="section-card">
       <h3>How to Read This Notebook</h3>
-      <div class="focus-grid">
-        <div class="focus-item"><strong>Chapters</strong>: each opens with a Key Question and the tier we are in.</div>
-        <div class="focus-item"><strong>Formulas</strong>: a quick quantitative model of the idea.</div>
-        <div class="focus-item"><strong>Mini-labs</strong>: controls to test that model. Heavy ones wait for their Run button.</div>
-        <div class="focus-item"><strong>Discussion</strong>: in most chapters, questions for the room. Click one to reveal the answer.</div>
+      <div class="tiles">
+        <div class="tile"><div class="tile-key">?</div><div class="tile-title">Key Question</div>
+          <p>Every chapter opens with one, and the tier it lives in.</p></div>
+        <div class="tile"><div class="tile-key">&sum;</div><div class="tile-title">Formula</div>
+          <p>A quick model of the idea.</p></div>
+        <div class="tile"><div class="tile-key">&#9654;</div><div class="tile-title">Mini-lab</div>
+          <p>Controls to test the model. Heavy ones wait for their Run button.</p></div>
+        <div class="tile"><div class="tile-key">&#8230;</div><div class="tile-title">Discussion</div>
+          <p>Questions for the room: click one to reveal the answer.</p></div>
       </div>
     </div>
     """)
@@ -273,58 +273,78 @@ def _(mo, requests, timeit):
 
     # ponytail: marimo 0.25 reports theme "system" as light, so on a dark OS those users get light-theme label ink
     _dark = mo.app_meta().theme == "dark"
-    # the --tier-* hues of sw03_deck.css, plus a grey for the bars that are not the point (darker than a hue on dark)
-    TIER = {"data": "#2f7fe0", "logic": "#c9479f", "presentation": "#dd6325", "muted": "#626b78" if _dark else "#9aa4b2"}
+    # the --tier-* hues of sw03_deck.css, a grey for the bars that are not the point (darker than a hue on dark),
+    # and the --red of sw03_deck.css for what broke (the dg-hot of the diagrams)
+    TIER = {
+        "data": "#2f7fe0",
+        "logic": "#c9479f",
+        "presentation": "#dd6325",
+        "muted": "#626b78" if _dark else "#9aa4b2",
+        "hot": "#ff9b8f" if _dark else "#b42318",
+    }
 
     def tier_chart(chart, tier: str):
         """Finish an altair chart: marks in the tier's hue, no background, labels sized for the projector.
 
         marimo themes the axes for light and dark itself; text marks (value labels) get the page's ink.
+        An encoded color (red for "lost", say) still wins over the tier hue.
         """
         ink = "#e8edf4" if _dark else "#0b1220"  # --ink of sw03_deck.css
         return (
             chart.configure(background="transparent")
             .configure_mark(color=TIER[tier])
-            .configure_axis(labelFontSize=14, titleFontSize=14, tickCount=5)
-            .configure_legend(labelFontSize=14, titleFontSize=14)
+            .configure_axis(labelFontSize=15, titleFontSize=15, tickCount=5)
+            .configure_legend(labelFontSize=15, titleFontSize=15, orient="top")
             .configure_text(color=ink, fontSize=15, fontWeight="bold")
+            .configure_view(stroke=None)
         )
 
-    return TIER, best_seconds, call_api, format_bytes, format_ms, static_table, tier_chart
+    def chart_or_table(chart, rows, label: str):
+        """A lab result: the chart that shows the finding, and the exact numbers one click away."""
+        return mo.ui.tabs({"Chart": chart, "Table": static_table(rows, label=label)})
+
+    def chapter_intro(tier: str, question: str, context: str):
+        """A chapter's opening card: the tier badge, the Key Question in large type, one line of markdown context."""
+        return mo.Html(
+            f'<div class="key-q tier-{tier}"><span class="tier-badge">{tier} tier</span>'
+            f'<p class="key-q-text">{question}</p>{mo.md(context).text}</div>'
+        )
+
+    return TIER, best_seconds, call_api, chapter_intro, chart_or_table, format_bytes, format_ms, static_table, tier_chart
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 1. File Locks vs Databases (ACID)
-    """)
-    return
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 1. File Locks vs Databases (ACID)"),
+            chapter_intro(
+                "data",
+                "When many users update shared data at the same time, does it stay correct?",
+                "The very bottom of the data tier: before a format or a layout, writes have to be correct.",
+            ),
+            mo.md(
+                """
+    **ACID**: what a database promises, and what a plain file gives you instead.
 
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity</div>
+        <p>All or nothing.</p><p class="tile-bad">File: a crash leaves half a change.</p></div>
+      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency</div>
+        <p>Rules hold before and after every change.</p><p class="tile-bad">File: no rules at all.</p></div>
+      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation</div>
+        <p>Concurrent changes act as if run one at a time.</p><p class="tile-bad">File: writers overwrite each other.</p></div>
+      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability</div>
+        <p>Committed data survives a crash.</p><p class="tile-bad">File: only after flush + fsync.</p></div>
+    </div>
 
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 1 Introduction
-
-    > **Key Question:** When many users update shared data at the same time, do we preserve correctness?
-
-    *We start in the **data tier**, at its very bottom: before a format or a layout, writes have to be correct.*
-
-    Databases promise four things, abbreviated **ACID**. A plain file, on its own, promises none of them:
-
-    | | Database promise | Plain file |
-    |:---|:---|:---|
-    | **A**tomicity | all or nothing | a crash can leave half a change |
-    | **C**onsistency | the data obeys its rules before and after every change | no rules at all |
-    | **I**solation | concurrent transactions behave as if run one at a time | writers overwrite each other |
-    | **D**urability | committed data survives a crash | only after flush + fsync |
-
-    The signal to watch: with $W$ workers adding $I$ increments each, the counter should end at
-    $E = W \\times I$. The shortfall is the number of lost updates: $L = E - A$, where $A$ is the
-    value actually reached.
-            """
-    ).callout(kind="neutral")
+    **The signal to watch:** $W$ workers adding $I$ increments each should reach $E = W \\times I$.
+    The shortfall is the number of lost updates, $L = E - A$, with $A$ the value actually reached.
+                """
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
@@ -332,7 +352,7 @@ def _(mo):
 def _(mo):
     mo.md("""
     <div class="section-card flow-card">
-      <h3>Visual: Lost Update Timeline (Who Does What, When)</h3>
+      <h3>Lost Update: Who Does What, When</h3>
       <div class="lost-update-wrap">
         <div class="lost-update-grid">
           <div class="lu-header">Step</div>
@@ -363,104 +383,137 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
+def _(box, diagram, mo):
+    # Three flatmates who ask for the key, one script that never does.
+    _workers = "".join(
+        box(0, _y, _label, w=300, cls=_cls)
+        for _y, _label, _cls in [
+            (20, "worker 1 · holds the key", "dg-tier"),
+            (92, "worker 2 · waits at the hook", "dg-box"),
+            (164, "worker 3 · waits at the hook", "dg-box"),
+            (240, "script · never asks for the key", "dg-box dg-hot"),
+        ]
+    )
+    _lock_map = diagram(
+        _workers
+        + box(410, 64, "one key per file", w=250, h=104, cls="dg-tier")
+        + '<text class="dg-muted" x="535" y="194" text-anchor="middle">flock(LOCK_EX): the hook</text>'
+        + box(780, 92, "counter.txt", w=200, h=48)
+        + '<path class="dg-edge dg-ok" d="M300 42 C 360 42, 350 92, 404 92"/>'
+        + '<path class="dg-edge" d="M300 114 H 404"/>'
+        + '<path class="dg-edge" d="M300 186 C 360 186, 350 140, 404 140"/>'
+        + '<path class="dg-edge dg-ok dg-flow" d="M660 116 H 774"/>'
+        + '<path class="dg-edge dg-hot" d="M300 262 H 880 V 146"/>'
+        + '<text class="dg-hot" x="590" y="250" text-anchor="middle">no flock call: walks straight in</text>',
+        width=980,
+        height=290,
+        label="Three workers queue for one key on a hook (the OS file lock); only the key holder writes to "
+        "counter.txt. A fourth script never asks for the key and writes to the file directly.",
+        tier="data",
+    )
+    _more = mo.md(
         """
-    ### What a Lock Actually Is
-
-    Four flatmates share one bathroom. **There is no lock on the door.** Instead a single key hangs
-    on a hook in the hall, and the house rule is: do not go in unless you are holding the key.
-    If everyone follows the rule, nobody is ever walked in on.
-
-    Notice what is doing the work. Not the door, which has no lock and never did. **The agreement**
-    is doing the work.
-
-    That is exactly what an operating-system file lock is. The OS hands out one key per file and
-    makes everyone else wait at the hook. It does not touch the door. Any program that opens the file
-    without reaching for the key walks straight in and overwrites whatever it likes.
-
-    Three things the picture gets right, and one it does not:
-
-    - The OS empties the pockets of anyone who leaves the building, so a program that crashes while
-      holding the key does **not** wedge the file forever.
-    - There is a second kind of key that many people may hold at once, for looking but not touching.
-      The code below asks for the exclusive one, `LOCK_EX`.
+    - The OS empties the pockets of anyone who leaves: a program that crashes while holding the
+      key does **not** wedge the file forever.
+    - There is a second kind of key many may hold at once, for looking but not touching
+      (`LOCK_SH`). The lab below asks for the exclusive one, `LOCK_EX`.
     - The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
       which is why file locks are unreliable across a network filesystem.
-    - **Where it breaks:** the flatmate rule is only as good as the flatmates. A database does not
-      rely on an agreement: every write goes through its lock, whether the program asked or not.
-      Whether that is enough is what you are about to measure.
-            """
-    ).callout(kind="neutral")
+    - **Where it breaks:** the rule is only as good as the flatmates. A database does not rely on
+      an agreement: every write goes through its lock, whether the program asked or not.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>What a Lock Actually Is</h3>
+      <p>Four flatmates, one bathroom, <strong>no lock on the door</strong>: one key on a hook in the
+      hall, and a house rule to take it before going in.</p>
+      {_lock_map}
+      <p class="vis-caption"><strong>A file lock is an agreement, not a door.</strong> The OS hands out
+      one key per file and makes everyone else wait. A program that never asks walks straight in.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"Where the picture holds, and where it breaks": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
     # Checkboxes, not a multiselect: the room sees every strategy and whether it is on.
+    STRATEGY_LABELS = {
+        "no_lock": "file, no lock",
+        "thread_lock": "file + Python lock",
+        "file_lock": "file + flock",
+        "sqlite_naive": "SQLite: read, +1, write",
+        "sqlite": "SQLite: one UPDATE",
+    }
     strategies = mo.ui.dictionary(
-        {
-            key: mo.ui.checkbox(value=key != "thread_lock", label=f"`{key}`")
-            for key in ["no_lock", "thread_lock", "file_lock", "sqlite_naive", "sqlite"]
-        }
+        {key: mo.ui.checkbox(value=key != "thread_lock", label=label) for key, label in STRATEGY_LABELS.items()}
     )
-    workers = mo.ui.slider(2, 8, value=4, label="Concurrent workers", show_value=True)
+    workers = mo.ui.slider(2, 8, value=4, label="Workers", show_value=True)
     # Capped so the slowest setting (8 x 120 x 2 ms, paid in a queue by flock) stays near 3 s in all.
-    iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments per worker", show_value=True)
-    jitter = mo.ui.slider(0, 2, value=1, step=1, label="Artificial jitter (ms) per update", show_value=True)
+    iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments each", show_value=True)
+    jitter = mo.ui.slider(0, 2, value=1, step=1, label="Jitter (ms)", show_value=True)
     run_race = mo.ui.run_button(label="Run counter experiment", kind="success")
-    _term_note = mo.md(
+    _notes = mo.md(
         """
-    **Strategy notes**
-    - `no_lock`: plain file writes, nothing stops two workers from overlapping
-    - `thread_lock`: a Python lock, which only works inside one process
-    - `file_lock`: OS file lock (`flock`) held from the read to the write, the key on the hook from the section above
-    - `sqlite_naive`: a real database, used the way most people first use one. Read the value,
-      add one in Python, write it back.
-    - `sqlite`: the same database, one statement, `UPDATE counter SET value = value + 1`,
-      inside a transaction
+    - **file, no lock**: plain file writes; nothing stops two workers from overlapping.
+    - **file + Python lock**: a `threading.Lock`, which only works inside one process.
+    - **file + flock**: the OS key from above, held from the read to the write.
+    - **SQLite: read, +1, write**: a real database, used the way most people first use one.
+    - **SQLite: one UPDATE**: `UPDATE counter SET value = value + 1` inside a transaction.
 
-    **Compare the last two rows.** Both are SQLite. The difference is not the database, it is
-    whether the read and the write were locked together as one step. A transaction protects the
-    steps you actually put inside it, and nothing else.
-
-    **Jitter (ms)** is a pause between the read and the write. It widens the gap the race lives in,
+    **Jitter** is a pause between the read and the write. It widens the gap the race lives in,
     and a locked strategy pays it one worker at a time.
-            """
-    ).callout(kind="info")
+        """
+    )
 
     mo.vstack(
         [
-            mo.md("### Concurrency demo: file vs locks vs database"),
-            mo.hstack([workers, iterations], widths="equal"),
-            jitter,
-            mo.hstack([mo.md("Strategies to run"), strategies.hstack(justify="start", gap=1.5)], justify="start", gap=1.5),
+            mo.md("### Concurrency Demo: File vs Locks vs Database"),
+            mo.hstack([workers, iterations, jitter], widths="equal"),
+            strategies.hstack(justify="start", gap=1.5, wrap=True),
+            mo.accordion({"What each strategy does": _notes}),
             run_race,
-            _term_note,
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    return iterations, jitter, run_race, strategies, workers
+    return STRATEGY_LABELS, iterations, jitter, run_race, strategies, workers
 
 
 @app.cell
 def _(
     Path,
+    STRATEGY_LABELS,
+    TIER,
+    alt,
+    chart_or_table,
     iterations,
     jitter,
     mo,
+    pd,
     run_race,
     sqlite3,
-    static_table,
     strategies,
     tempfile,
     threading,
+    tier_chart,
     time,
     workers,
 ):
     mo.stop(
         not run_race.value,
-        mo.md("Click **Run counter experiment** to simulate concurrent writes.").callout(kind="neutral"),
+        mo.md(
+            "**Predict first:** which strategies will reach the dashed target line? "
+            "Then click **Run counter experiment**."
+        ).callout(kind="neutral"),
     )
 
     from concurrent.futures import ThreadPoolExecutor as _Pool
@@ -528,13 +581,9 @@ def _(
         con.close()
         return seconds, value
 
-    _labels = {
-        "no_lock": "file (no lock)",
-        "thread_lock": "file (thread lock)",
-        "file_lock": "file (flock)" if _fcntl else "file (no flock on this OS, ran unlocked)",
-        "sqlite_naive": "sqlite (read, +1 in Python, write)",
-        "sqlite": "sqlite transaction",
-    }
+    _labels = dict(STRATEGY_LABELS)
+    if not _fcntl:
+        _labels["file_lock"] = "file, no flock on this OS"
     _expected = _workers * _increments
     _rows = []
     with mo.status.spinner(title="Racing the workers ..."), tempfile.TemporaryDirectory() as _tmp:
@@ -555,26 +604,52 @@ def _(
                 }
             )
 
+    _df = pd.DataFrame(_rows)
+    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all kept" for _lost in _df["lost updates"]]
+    _y = alt.Y("strategy:N", sort=None, title=None)
+    _reached = alt.Chart(_df).encode(y=_y, x=alt.X("actual:Q", title="counter reached"))
+    _counts = (
+        _reached.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.condition("datum['lost updates'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+        )
+        + _reached.mark_text(align="left", dx=6).encode(text="verdict:N")
+        + alt.Chart(pd.DataFrame({"target": [_expected]}))
+        .mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"])
+        .encode(x="target:Q")
+    ).properties(width="container", height=48 * len(_df), title=f"Counter reached (target {_expected:,})")
+    _durations = (
+        alt.Chart(_df)
+        .encode(y=alt.Y("strategy:N", sort=None, title=None, axis=None), x=alt.X("duration (ms):Q", title=None))
+        .mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
+        .properties(width="container", height=48 * len(_df), title="Time taken (ms)")
+    )
+
     mo.vstack(
         [
-            static_table(_rows, label="Concurrency results"),
+            chart_or_table(
+                mo.hstack([tier_chart(_counts, "data"), tier_chart(_durations, "data")], widths=[3, 1], gap=1),
+                _rows,
+                label="Concurrency results",
+            ),
             mo.md(
-                """
-    **How to read the table**
-
-    - **No lock**: wrong. Increments simply vanish.
-    - **File lock**: correct, but writers queue, so every millisecond of jitter is paid one
-      worker at a time.
-    - **SQLite, read-modify-write in Python**: a real database, and it still loses updates.
-    - **SQLite, one statement in a transaction**: correct, because the read and the write are a
-      single indivisible step no other writer can interleave with. It is quick too: there is no
-      gap for the jitter to widen, and the lock is held for microseconds.
-
-    With jitter, the unlocked workers fall into step: all read the same value, all pause, all
-    write the same +1. So both unlocked rows end near *one* worker's total, as if the others never
-    ran. Set jitter to 0 and the file race turns messy: its count changes from run to run.
-                """
+                "**Compare the two SQLite bars.** Same database, but only the one-statement transaction keeps "
+                "every increment: a transaction protects the steps you put inside it, and nothing else."
             ).callout(kind="info"),
+            mo.accordion(
+                {
+                    "Why the unlocked bars stop near one worker's total": mo.md(
+                        """
+    With jitter, the unlocked workers fall into step: all read the same value, all pause, all write
+    the same +1. So they end near *one* worker's total, as if the others never ran. Set jitter to 0
+    and the file race turns messy: its count changes from run to run.
+
+    The file lock is correct but slow: writers queue, so every millisecond of jitter is paid one
+    worker at a time. The one-statement transaction is quick too: there is no gap for the jitter to
+    widen, and the lock is held for microseconds.
+                        """
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -583,34 +658,28 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker", show_value=True, debounce=True)
+    interleave_seed = mo.ui.slider(1, 999, value=7, label="Interleaving seed", show_value=True, debounce=True)
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Interleaving Simulator: Why Lost Updates Happen
 
-    Every increment is two steps: **read** the shared value into a local copy, then **write**
-    copy + 1. Here two workers, A and B, take those steps in a random order, and the seed picks
-    the order. A write whose copy no longer matches the shared value is a **stale write**: it
-    erases every increment made since that copy was read. The trace marks each one.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker (simulated)", show_value=True, debounce=True)
-    interleave_seed = mo.ui.slider(1, 999, value=7, label="Interleaving seed", show_value=True, debounce=True)
-    show_trace = mo.ui.switch(value=True, label="Show step-by-step trace")
-
-    mo.vstack(
-        [mo.hstack([interleave_steps, interleave_seed], widths="equal"), show_trace],
+    Each increment is two steps: **read** the shared value, then **write** copy + 1. The seed shuffles
+    the order of A's and B's steps. A write from an out-of-date copy is a **stale write**: it erases
+    every increment made since that copy was read.
+                """
+            ),
+            mo.hstack([interleave_steps, interleave_seed], widths="equal"),
+        ],
         gap=0.6,
     ).callout(kind="neutral")
-    return interleave_seed, interleave_steps, show_trace
+    return interleave_seed, interleave_steps
 
 
 @app.cell
-def _(interleave_seed, interleave_steps, mo, random, show_trace, static_table):
+def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, random, tier_chart):
     _rng = random.Random(interleave_seed.value)
     _ops = {w: ["read", "write"] * interleave_steps.value for w in "AB"}
     _local, _shared, _log = {}, 0, []
@@ -635,78 +704,97 @@ def _(interleave_seed, interleave_steps, mo, random, show_trace, static_table):
         )
 
     _expected = interleave_steps.value * 2
-    _lost = _expected - _shared
-    _summary = mo.md(f"Expected **{_expected}**, actual **{_shared}**, lost updates **{_lost}**.").callout(
-        kind="danger" if _lost else "success"
+    _df = pd.DataFrame(_log)
+    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
+    # A read shows the value it copied, a write the value it left; short labels once the steps get narrow.
+    _short = len(_df) > 12
+    _df["label"] = [
+        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
+        for _a, _v in zip(_df["action"], _df["shared after"], strict=True)
+    ]
+    _df["if no update were lost"] = (_df["action"] == "write").cumsum()
+    _df["shared counter"] = _df["shared after"]
+    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
+    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("worker:N", title=None, axis=alt.Axis(minExtent=40)))
+    _lanes = (
+        _lane.mark_rect(cornerRadius=8).encode(
+            color=alt.Color(
+                "kind:N",
+                title=None,
+                scale=alt.Scale(domain=["read", "write", "stale write"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
+            )
+        )
+        # fixed text colours: the fills above are the same in both themes
+        + _lane.mark_text().encode(
+            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
+        )
+    ).properties(width=940, height=110)
+    _counter = (
+        alt.Chart(_df)
+        .transform_fold(["shared counter", "if no update were lost"], as_=["series", "value"])
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=_x,
+            y=alt.Y("value:Q", title="counter", axis=alt.Axis(minExtent=40)),
+            color=alt.Color(
+                "series:N",
+                title=None,
+                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[TIER["data"], TIER["muted"]]),
+            ),
+            strokeDash=alt.StrokeDash(
+                "series:N",
+                legend=None,
+                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[[1, 0], [6, 4]]),
+            ),
+        )
+        .properties(width=940, height=170)
     )
-    mo.vstack([_summary, static_table(_log, label="Interleaving trace")] if show_trace.value else [_summary], gap=0.6)
-    return
-
-
-@app.cell
-def _(mo):
-    _atomic_intro = mo.md(
-        """
-    ### Atomicity Demo: Transfer With Failure
-
-    Atomicity means a transaction is **all-or-nothing**: either every step commits, or none do.
-    A transfer must keep $B_{\\text{Alice}} + B_{\\text{Bob}}$ constant. Without a transaction, a crash between
-    **debit** and **credit** breaks that; a database rolls the partial work back.
-
-    This demo is about atomicity alone: one transfer, no concurrent writers.
-
-    **Try this:** run once with failure **on** (the file total breaks), then with failure
-    **off** (both totals hold).
-            """
-    ).callout(kind="neutral")
-    _atomic_flow = mo.md(
-        """
-    <div class="section-card flow-card">
-      <h3>Transaction Boundary</h3>
-      <div class="flow-diagram">
-        <div class="flow-box">Debit Alice</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Credit Bob</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Commit or Rollback</div>
-      </div>
-    </div>
-            """
-    )
-    mo.vstack([_atomic_intro, _atomic_flow], gap=0.6)
-    return
-
-
-@app.cell
-def _(mo):
-    atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount", show_value=True)
-    atomic_fail = mo.ui.switch(value=True, label="Inject failure after debit")
-    run_atomic = mo.ui.run_button(label="Run atomicity demo", kind="success")
 
     mo.vstack(
-        [mo.hstack([atomic_amount, atomic_fail], widths="equal"), run_atomic],
+        [
+            mo.hstack(
+                [
+                    mo.stat(_expected, label="expected", bordered=True),
+                    mo.stat(_shared, label="actual", bordered=True),
+                    mo.stat(_expected - _shared, label="lost updates", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(
+                tier_chart(alt.vconcat(_lanes, _counter).resolve_scale(color="independent"), "data"),
+                _log,
+                label="Interleaving trace",
+            ),
+        ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return atomic_amount, atomic_fail, run_atomic
+    )
+    return
 
 
 @app.cell
-def _(
-    Path,
-    atomic_amount,
-    atomic_fail,
-    json,
-    mo,
-    run_atomic,
-    sqlite3,
-    static_table,
-    tempfile,
-):
-    mo.stop(
-        not run_atomic.value,
-        mo.md("Click **Run atomicity demo** to run the transfer step by step.").callout(kind="neutral"),
-    )
+def _(mo):
+    atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount", show_value=True, debounce=True)
+    atomic_fail = mo.ui.switch(value=True, label="Crash after the debit")
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Atomicity Demo: a Transfer That Crashes
 
+    Atomicity means **all or nothing**. A transfer must keep $B_{\\text{Alice}} + B_{\\text{Bob}}$
+    constant; crash between **debit** and **credit**, and only a transaction puts the money back.
+    One transfer, no concurrent writers: flip the switch and watch both totals.
+                """
+            ),
+            mo.hstack([atomic_amount, atomic_fail], widths="equal"),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
+    return atomic_amount, atomic_fail
+
+
+@app.cell
+def _(Path, atomic_amount, atomic_fail, chart_or_table, diagram, json, mo, sqlite3, tempfile):
     _initial = {"Alice": 1000, "Bob": 500}
     _expected = sum(_initial.values())
     _amount = atomic_amount.value
@@ -756,22 +844,41 @@ def _(
         _db_total = sum(_balances().values())
         _con.close()
 
-    def _bar(label, total):
-        fill = "good" if total == _expected else "bad"
-        return (
-            f'<div class="bar-row"><div class="bar-label">{label}</div>'
-            f'<div class="bar-track"><div class="bar-fill {fill}" style="width: {total / _expected:.1%}"></div></div>'
-            f'<div class="bar-value">{total:,} / {_expected:,}</div></div>'
-        )
+    # One lane per system, one box per step: the balances after it, and the total at the end.
+    _style = {"crash": "dg-box dg-hot", "credit": "dg-box dg-ok", "commit": "dg-box dg-ok", "rollback": "dg-box dg-ok"}
 
-    _total_chart = mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Total Balance Snapshot</h3>
-      <div class="bar-chart">{_bar("File total", _file_total)}{_bar("SQLite total", _db_total)}</div>
-    </div>
-            """
+    def _lane(y, system, label, total):
+        steps = [_row for _row in _timeline if _row["system"] == system]
+        parts = [f'<text x="0" y="{y + 38}" font-weight="700">{label}</text>']
+        for _i, _row in enumerate(steps):
+            x = 120 + _i * 250
+            parts.append(
+                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="210" height="72" rx="12"/>'
+                f'<text x="{x + 105}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
+                f'<text class="dg-muted" x="{x + 105}" y="{y + 54}" text-anchor="middle">'
+                f"Alice {_row['Alice']:,} · Bob {_row['Bob']:,}</text>"
+            )
+            if _i:
+                parts.append(f'<path class="dg-edge" d="M{x - 40} {y + 36} H {x - 6}"/>')
+        _ok = total == _expected
+        parts.append(
+            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="870" y="{y + 44}" font-size="22">'
+            f"{'&#10003;' if _ok else '&#10007;'} total {total:,}</text>"
+        )
+        return "".join(parts)
+
+    _picture = diagram(
+        _lane(20, "file (JSON)", "file", _file_total)
+        + '<rect x="356" y="134" width="488" height="92" rx="16" fill="none" stroke="currentColor"'
+        ' stroke-dasharray="8 6" opacity="0.45"/>'
+        + '<text class="dg-muted" x="593" y="256" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
+        + _lane(144, "sqlite", "SQLite", _db_total),
+        width=1080,
+        height=270,
+        label=f"Transfer of {_amount}: the file keeps a total of {_file_total}, SQLite a total of {_db_total}; "
+        f"both should be {_expected}.",
     )
+
     _file_ok = _file_total == _expected
     _file_callout = mo.md(
         "**File:** debit and credit are two separate writes. "
@@ -788,8 +895,7 @@ def _(
 
     mo.vstack(
         [
-            static_table(_timeline, label="Step-by-step timeline"),
-            _total_chart,
+            chart_or_table(_picture, _timeline, label="Step-by-step timeline"),
             mo.hstack([_file_callout, _db_callout], widths="equal"),
         ],
         gap=0.6,
@@ -803,18 +909,18 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Atomicity & Concurrency</h3>
       <details>
-        <summary><strong>Q1:</strong> If only files were available (no database), how can a transfer be made all‑or‑nothing?</summary>
-        <p><strong>Answer:</strong> Write a small log entry first (write‑ahead log, or WAL), or write to a temp file and rename it (an atomic rename).
-        On restart, replay or roll back the log.</p>
+        <summary><strong>Q1:</strong> With only files (no database), how can a transfer be made all‑or‑nothing?</summary>
+        <p><strong>Answer:</strong> Write a small log entry first (a write‑ahead log, WAL), or write a temp file and
+        rename it over the old one (an atomic rename). On restart, replay or roll back the log.</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
-        <p><strong>Answer:</strong> The total balance should never change. Build checks/tests that verify this after crashes and retries (invariant checks).</p>
+        <p><strong>Answer:</strong> The total balance never changes. Check that invariant after crashes and retries.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Should a system stop on error or allow temporary mismatch?</summary>
-        <p><strong>Answer:</strong> Finance usually prefers fail‑fast (abort immediately on error); analytics may allow temporary inconsistency and repair later (eventual consistency: convergence to a correct state after delay).
-        Choose based on the cost of wrong data vs. downtime.</p>
+        <summary><strong>Q3:</strong> Should a system stop on error or allow a temporary mismatch?</summary>
+        <p><strong>Answer:</strong> Finance usually fails fast; analytics may accept a temporary mismatch and repair
+        it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
       </details>
     </div>
     """)
@@ -827,12 +933,11 @@ def _(mo):
         """
     ### Chapter 1 Conclusion
 
-    - Unsynchronised file updates lose increments under concurrency.
-    - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Put the read
-      and the write in one statement or one transaction.
-    - A transaction also makes a multi-step change all-or-nothing: the crashed transfer rolled back
-      in SQLite, while the file kept half of it.
-    - Track invariants (expected vs actual, the total balance) to catch correctness bugs early.
+    - Unsynchronised writes lose updates; a lock or a transaction stops it.
+    - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Make the read
+      and the write one statement, or one transaction.
+    - A transaction makes a multi-step change all-or-nothing: the crashed transfer rolled back.
+    - Check invariants (expected vs actual, the total balance) to catch these bugs early.
             """
     ).callout(kind="success")
     return
@@ -850,7 +955,7 @@ def _(mo):
     \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
     $$
 
-    So better formats can reduce waiting by shrinking bytes or speeding parsing.
+    Better formats cut the wait by shrinking the bytes or speeding up the parse.
             """
     ).callout(kind="neutral")
     return
