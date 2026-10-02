@@ -1,0 +1,15 @@
+<!-- Slides at one size: marimo shows the deck as 16:9 slides (layouts/), and this zoom makes every slide
+     SLIDE_HEIGHT css px tall on any screen, scaled to fit. So a slide that fits on a laptop fits on the
+     projector and on a 4K screen, and only gets bigger. SLIDE_HEIGHT is the knob: larger fits more on a
+     slide in smaller text. 64 is marimo's padding around the slide. marimo loads this file in run mode
+     only; `marimo edit` shows the deck unzoomed. -->
+<script>
+  const SLIDE_HEIGHT = 1000;
+  const fitDeck = () =>
+    document.documentElement.style.setProperty(
+      "--deck-zoom",
+      Math.min(innerHeight / (SLIDE_HEIGHT + 64), innerWidth / ((SLIDE_HEIGHT * 16) / 9 + 64)),
+    );
+  addEventListener("resize", fitDeck);
+  fitDeck();
+</script>

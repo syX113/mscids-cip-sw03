@@ -28,6 +28,7 @@ The lecture builds one data product in **three tiers**:
 | Material | File | Purpose |
 | --- | --- | --- |
 | 📓 Lecture Notebook | `sw03_lecture_content.py` | Main teaching notebook |
+| 🎨 Lecture Styles | `sw03_deck.css`, `sw03_deck_head.html`, `layouts/` | Colours and diagram styles, the slide grouping, and the zoom that fits a slide to any screen |
 | 🧪 Exercises Notebook | `sw03_lecture_exercises.py` | Student exercises |
 | ✅ Solutions Notebook | `sw03_lecture_exercises_solutions.py` | Reference solutions |
 | 🚀 Demo API | `sw03_demo_api.py` | FastAPI service for API examples |
@@ -150,6 +151,14 @@ To stop a running process in a terminal: `Ctrl + C`.
 > With `--reload` the API restarts, and resets `data/`, whenever a `.py` file in this folder is saved.
 > marimo autosaves the exercises notebook while you type, so leave `--reload` out during the lecture
 > and add it only while you edit `sw03_demo_api.py` yourself.
+
+### The lecture is a slide deck
+
+`marimo run sw03_lecture_content.py` opens the lecture as 16:9 slides (`layouts/`), sized to fit any
+screen. **→** / **Space** moves on; on a lab slide, **→** first reveals the result below the
+controls, then moves to the next slide. **←** goes back. The ⤢ button at the top right goes full
+screen. The slide size is the `SLIDE_HEIGHT` knob in `sw03_deck_head.html`: larger fits more on a
+slide in smaller text.
 
 ### Benchmarks run only when you click
 
