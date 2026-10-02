@@ -3140,129 +3140,212 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 6. REST API Demo (GET, POST, PUT, DELETE)
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)"),
+            chapter_intro(
+                "logic",
+                "Did the client and server agree on the same contract?",
+                "Up to the logic tier: the data tier is finished, now other programs ask for its data.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 6 Introduction
-
-    > **Key Question:** Did the client and server agree on the same contract?
-
-    *We move up to the **logic tier**. The data tier is finished; now other programs need to ask for that data.*
-
-    An API is a contract between systems.
-    Most API bugs are contract mismatches: wrong path, wrong payload shape, or wrong status handling.
-
-    Quick basics:
-
-    - **HTTP** is the message protocol used by clients and servers on the web.
-    - **HTTPS** is HTTP with encryption (TLS), so data is protected in transit.
-    - In practice: same API idea, but HTTPS is the secure default.
-
-    Keep this mapping in mind:
-
-    - 2xx: success
-    - 4xx: client-side issue
-    - 5xx: server-side issue
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### REST Principles
-
-    First the four words this whole chapter is built from:
-
+def _(box, diagram, mo):
+    _labels = [
+        # (x, y, text): the names of the parts, above the request and below the response
+        (225, 56, "verb"),
+        (330, 56, "path"),
+        (600, 56, "payload (JSON)"),
+        (280, 148, "endpoint = verb + path"),
+        (255, 240, "status code"),
+        (575, 240, "the resource, as JSON"),
+    ]
+    _message = diagram(
+        '<rect class="dg-box" x="0" y="40" width="150" height="190" rx="12"/>'
+        '<text x="75" y="130" text-anchor="middle" font-weight="700">client</text>'
+        '<text class="dg-muted" x="75" y="156" text-anchor="middle">script or app</text>'
+        '<rect class="dg-tier" x="850" y="40" width="150" height="190" rx="12"/>'
+        '<text x="925" y="130" text-anchor="middle" font-weight="700">API</text>'
+        '<text class="dg-muted" x="925" y="156" text-anchor="middle">sw03_demo_api</text>'
+        '<path class="dg-edge" d="M150 90 H 844"/><path class="dg-edge" d="M850 190 H 156"/>'
+        # an opaque strip under each message, so the arrow does not show through its see-through boxes
+        '<rect x="176" y="64" width="638" height="52" style="fill: var(--surface)"/>'
+        '<rect x="176" y="164" width="638" height="52" style="fill: var(--surface)"/>'
+        + box(180, 68, "POST", w=90, cls="dg-tier")
+        + box(280, 68, "/sales", w=100, cls="dg-tier")
+        + box(390, 68, '{"product_id": 1, "units_sold": 2, ...}', w=420)
+        + '<path d="M182 118 V 126 H 378 V 118" fill="none" stroke="currentColor" opacity="0.45"/>'
+        + box(180, 168, "201 Created", w=150, cls="dg-box dg-ok")
+        + box(340, 168, '{"sale_id": 3361, "total_price": 390.0, ...}', w=470)
+        + "".join(f'<text class="dg-muted" x="{_x}" y="{_y}" text-anchor="middle">{_t}</text>' for _x, _y, _t in _labels),
+        width=1000,
+        height=250,
+        label="A request travels from client to API: the verb POST, the path /sales and a JSON payload. "
+        "The response travels back: the status code 201 Created and the new sale as JSON.",
+        tier="logic",
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>One Request, One Response</h3>
+      {_message}
+      <p class="vis-caption">An API is a <strong>contract</strong>. Most API bugs break it: a wrong
+      path, a wrong payload shape, or a status code the client did not handle.</p>
+    </div>
+                """
+            ),
+            mo.accordion(
+                {
+                    "Resource, path, endpoint, payload: the four words": mo.md(
+                        """
     - A **resource** is one thing the server knows about, like a product or a sale.
     - A **path** is the address of a resource, like `/products/8`.
     - An **endpoint** is one path combined with one verb, like `GET /products/8`.
-    - A **payload** is the data you send along with a request, written as JSON.
-
-    The four verbs say what you want done to a resource:
-
-    - **GET**: fetch a resource
-    - **POST**: create a new resource
-    - **PUT**: replace a resource with the version you send. Our API also accepts just the
-      fields you change, which the HTTP standard calls **PATCH**; its `/docs` page says so.
-    - **DELETE**: remove a resource
-
-    One more word, because the mini-lab below and chapter 8's *Press It Twice* lab turn on it.
-    **Idempotent** means pressing it twice changes nothing more than pressing it once. The button
-    to call a lift is idempotent: jab it ten times, one lift comes. A ticket dispenser is not:
-    press it ten times and you are holding ten tickets.
-
-    GET, PUT and DELETE are lift buttons. POST is a ticket dispenser. That is the whole reason a
-    failed POST is frightening to retry and a failed PUT is not: when the network drops before
-    the answer arrives, you cannot tell whether the server acted, and only for POST does guessing
-    wrong cost you a duplicate.
-
-    *The lift button suggests nothing happens on the second press, and something does.* The
-    request really is sent and really is processed. Idempotent means the **end state** is the
-    same, not that the work is skipped, and not even that the answer is the same: DELETE a sale
-    twice and you get **204**, then **404**. Still idempotent, because after one press or ten the
-    sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
-
-    Core REST constraints (why it scales):
-
-    - **Stateless** — the server keeps no memory of *you* between requests: no notion of where
-      you are in a conversation, what you asked last, or which page you were on. Every request
-      must carry everything needed to answer it. It absolutely does remember your **data**, which
-      is what the whole data tier was for. Session state no, resource state yes. That distinction
-      is what lets a second copy of the server answer your next request without anyone noticing.
-    - **Uniform interface** — the same four verbs work on every resource, so once you
-      can read one endpoint you can read all of them.
-    - **Cacheable** — a response may say "this stays valid for a while", so the answer
-      can be reused instead of recomputed.
-    - **Layered** — the client talks only to the next layer, never past it. That is the
-      tier idea from the start of this notebook, applied to the network.
-
-    In a JSON API, the payload is the state representation:
-
-    $$
-    \\text{Resource} \\xleftrightarrow[\\text{response}]{\\text{request}} \\text{Representation}
-    $$
-            """
-    ).callout(kind="neutral")
+    - A **payload** is the data sent along with a request, written as JSON. In a JSON API the
+      payload is the resource's *representation*: the same thing, written down to travel.
+    - **HTTP** is the message protocol of the web; **HTTPS** is HTTP with encryption (TLS), the
+      secure default. Same API idea either way.
+                        """
+                    )
+                }
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
 def _(mo):
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### REST Principles
+
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch</div>
+        <p>Idempotent: a lift button.</p></div>
+      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create</div>
+        <p class="tile-bad">Not idempotent: a ticket dispenser.</p></div>
+      <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">replace</div>
+        <p>Idempotent. Ours also takes only the changed fields (the standard's PATCH).</p></div>
+      <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove</div>
+        <p>Idempotent.</p></div>
+    </div>
+
+    **Idempotent**: pressing twice changes nothing more than pressing once. Jab a lift button ten
+    times, one lift comes; press a ticket dispenser ten times, you hold ten tickets. So a POST that
+    timed out is frightening to retry: you cannot tell whether the server acted.
+
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
+        <p>The server forgets the conversation, never the data.</p></div>
+      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
+        <p>The same four verbs on every resource.</p></div>
+      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
+        <p>An answer may say "valid for a while" and be reused.</p></div>
+      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
+        <p>The client talks to the next layer only: the tier map, on the network.</p></div>
+    </div>
+                """
+            ),
+            mo.accordion(
+                {
+                    "Idempotent does not mean nothing happens": mo.md(
+                        """
+    The second press really is sent and really is processed. Idempotent means the **end state**
+    is the same, not that the work is skipped, and not even that the answer is the same: DELETE a
+    sale twice and you get **204**, then **404**. Still idempotent, because after one press or ten
+    the sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
+                        """
+                    ),
+                    "Why these four constraints let REST scale": mo.md(
+                        """
+    - **Stateless**: the server keeps no memory of *you* between requests: not where you are in a
+      conversation, what you asked last, or which page you were on. Every request carries
+      everything needed to answer it. It does remember your **data**, which is what the whole data
+      tier was for. Session state no, resource state yes: that is what lets a second copy of the
+      server answer your next request without anyone noticing.
+    - **Uniform interface**: once you can read one endpoint, you can read them all.
+    - **Cacheable**: a reused answer is one the server did not have to recompute.
+    - **Layered**: the tier idea from the start of this notebook, applied to the network.
+                        """
+                    ),
+                }
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(diagram, mo):
+    def _stage(x, title, sub, cls):
+        return (
+            f'<rect class="{cls}" x="{x}" y="10" width="210" height="80" rx="12"/>'
+            f'<text x="{x + 105}" y="44" text-anchor="middle" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="{x + 105}" y="70" text-anchor="middle">{sub}</text>'
+        )
+
+    def _exit(x, code, meaning, example):
+        return (
+            f'<rect class="dg-box dg-hot" x="{x}" y="190" width="220" height="100" rx="12"/>'
+            f'<text x="{x + 110}" y="220" text-anchor="middle" font-weight="700">{code}</text>'
+            f'<text class="dg-muted" x="{x + 110}" y="245" text-anchor="middle">{meaning}</text>'
+            f'<text class="dg-muted" x="{x + 110}" y="270" text-anchor="middle">{example}</text>'
+        )
+
+    _gates = diagram(
+        _stage(0, "request", "you send", "dg-box")
+        + _stage(260, "the door", "the model's rules", "dg-tier")
+        + _stage(520, "endpoint code", "checks the data", "dg-tier")
+        + _stage(780, "201 Created", "a valid sale", "dg-box dg-ok")
+        + '<path class="dg-edge" d="M210 50 H 254"/><path class="dg-edge" d="M470 50 H 514"/>'
+        + '<path class="dg-edge" d="M730 50 H 774"/>'
+        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · total_price")
+        + _exit(505, "404 Not Found", "nothing lives there", "GET /sales/999999")
+        + _exit(755, "400 Bad Request", "asks the impossible", "region_id 999")
+        + '<path class="dg-edge dg-hot" d="M365 90 V 184"/>'
+        + '<path class="dg-edge dg-hot" d="M615 90 V 184"/>'
+        + '<path class="dg-edge dg-hot" d="M700 90 C 700 140, 865 130, 865 184"/>',
+        width=1000,
+        height=300,
+        label="Where each status code comes from. A request first meets the door, the model's rules: breaking one "
+        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the data: no such sale "
+        "answers 404, a region that does not exist answers 400. A valid sale answers 201 Created.",
+        tier="logic",
+    )
     mo.md(
-        """
+        f"""
     ### Four Real Answers From Our Own API
 
-    Not a lookup table. These are the actual replies `sw03_demo_api.py` gives, and the difference
-    between the three failures is the part worth learning. The mini-lab below sends each of them.
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
+        <p>It worked; 201: a new thing now exists.</p></div>
+      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
+        <p>Resending the same request gets the same answer.</p></div>
+      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">The server broke</div>
+        <p>A retry may work (blindly only for the lift-button verbs).</p></div>
+    </div>
 
-    | You send | You get | Why |
-    | :--- | :--- | :--- |
-    | `POST /sales` with a valid sale | **201 Created** | it worked, and a new thing now exists |
-    | `GET /sales/999999` | **404 Not Found** | the address is fine, nothing lives there |
-    | `POST /countries` with `region_id: 999` | **400 Bad Request** | well formed, but it asks for the impossible |
-    | `POST /sales` with `customer_rating: 9` | **422 Unprocessable Content** | it breaks a rule written in the model (1 to 5), so the endpoint's code never ran |
-
-    All three failures are **4xx**, and that first digit is the instruction: *you* must change
-    something; resending the same request gets the same answer. A **5xx** is the opposite
-    message: the server broke, so retrying may well work (blindly only for the lift-button verbs).
-
-    400 or 422 is where students trip. **422**: the request broke a rule in the model (missing
-    field, wrong type, rating 9, a name of only spaces, an unknown field such as `total_price`,
-    which the server computes itself), so it was turned away at the door (chapter 7). **400**: it
-    passed the door, then broke a rule only the data can check, like a region that does not exist.
+    <div class="section-card" style="margin-top: 14px">
+      {_gates}
+      <p class="vis-caption"><strong>400 or 422 is where students trip.</strong> 422: turned away at
+      the door (chapter 7), the endpoint's code never ran. 400: passed the door, then broke a rule
+      only the data can check. The mini-lab below sends all four.</p>
+    </div>
         """
-    ).callout(kind="neutral")
+    )
     return
 
 
@@ -3292,17 +3375,25 @@ def _(mo):
                 """
     ### Mini-lab: Ask Our API
 
-    Start the API in a terminal first: `uvicorn sw03_demo_api:app`. **uvicorn** is the program
-    that listens on the port and hands each request to the FastAPI code; `sw03_demo_api` is the
-    file and `app` the variable inside it. Leave out `--reload` today: it also restarts the server
-    whenever marimo saves a notebook in this folder, and every restart resets `data/`.
-
-    Pick a request, **guess the status code**, then press **Send request**. Send the POST, the PUT and the DELETE twice each:
-    which of them leave the server where the first press left it? The API restores `data/` from
-    `data/seed/` every time it starts, so nothing you change or delete here is permanent.
+    Start the API in a terminal first: `uvicorn sw03_demo_api:app`, without `--reload` today.
+    Send the POST, the PUT and the DELETE twice each: which leave the server where the first
+    press left it?
                 """
             ),
             mo.hstack([ch6_preset, api_base_url], widths="equal", align="end"),
+            mo.accordion(
+                {
+                    "What uvicorn is, and why no --reload": mo.md(
+                        """
+    **uvicorn** is the program that listens on the port and hands each request to the FastAPI
+    code; `sw03_demo_api` is the file and `app` the variable inside it. `--reload` also restarts
+    the server whenever marimo saves a notebook in this folder, and every restart resets `data/`:
+    the API restores it from `data/seed/` each time it starts, so nothing you change or delete
+    here is permanent.
+                        """
+                    )
+                }
+            ),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -3330,13 +3421,17 @@ def _(
     ch6_method,
     ch6_path,
     ch6_send,
+    html,
     json,
     mo,
     requests,
 ):
     from http.client import responses as _phrases
 
-    mo.stop(not ch6_send.value, mo.md("Pick a request, guess the status code, then click **Send request**.").callout(kind="neutral"))
+    mo.stop(
+        not ch6_send.value,
+        mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral"),
+    )
 
     _url = api_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
     try:
@@ -3357,10 +3452,18 @@ def _(
         _shown = mo.plain_text(str(_answer))  # not JSON, e.g. a 500 "Internal Server Error"
     else:
         _shown = mo.md("*No body: 204 means done, nothing to send back.*")
-    mo.vstack(
-        [mo.md(f"`{ch6_method.value} {_url}` → **{_status} {_phrases.get(_status, '(no standard name)')}**"), _shown],
-        gap=0.5,
-    ).callout(kind={2: "success", 4: "warn"}.get(_status // 100, "danger"))
+    _kind, _colour, _meaning = {
+        2: ("success", "var(--teal)", "done"),
+        4: ("warn", "var(--amber)", "fix your request: resending it gets the same answer"),
+    }.get(_status // 100, ("danger", "var(--red)", "the server broke: a retry may work"))
+    _badge = mo.Html(
+        '<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px">'
+        f'<span style="color: {_colour}; font-size: 3rem; font-weight: 700; line-height: 1">{_status}</span>'
+        f'<span style="font-size: 1.4rem; font-weight: 700">{_phrases.get(_status, "(no standard name)")}</span>'
+        f'<span style="color: var(--ink-soft); font-size: 1.1rem">{_meaning}</span></div>'
+        f"<p><code>{html.escape(ch6_method.value)} {html.escape(_url)}</code></p>"
+    )
+    mo.vstack([_badge, _shown], gap=0.5).callout(kind=_kind)
     return
 
 
@@ -3391,8 +3494,7 @@ def _(mo):
     ### Chapter 6 Conclusion
 
     - The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.
-    - 404, 400 and 422 are three different client mistakes: nothing lives there, the request asks
-      for the impossible, the request breaks a written rule.
+    - 422: broke a written rule at the door. 404: nothing lives there. 400: asks the impossible.
     - GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.
     - Stateless: the server forgets the conversation, never the data.
             """
@@ -3406,14 +3508,12 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Every 422 above was the request's *shape* failing a check. Pydantic is that checkpoint:
-    required fields, types and ranges are checked before any endpoint code runs.
+    Every 422 above was the request's *shape* failing a check before any endpoint code ran.
+    Pydantic is that door. Chapter 7 shows why the second arrow fails:
 
     $$
     \\text{valid request} \\Rightarrow \\text{schema checks pass} \\quad\\text{but}\\quad \\text{schema checks pass} \\nRightarrow \\text{valid request}
     $$
-
-    Chapter 7 shows why the second arrow fails.
             """
     ).callout(kind="neutral")
     return
