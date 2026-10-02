@@ -3520,80 +3520,56 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 7. Pydantic Models
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 7. Pydantic Models"),
+            chapter_intro(
+                "logic",
+                "Which inputs are allowed into the trusted system boundary?",
+                "Chapter 6 wrote the contract; now we enforce it.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
-def _(mo):
+def _(diagram, mo):
+    def _card(x, y, title, sub, cls, w=280, h=130):
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
+            f'<text x="{x + w / 2}" y="{y + h / 2 - 6}" text-anchor="middle" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="{x + w / 2}" y="{y + h / 2 + 20}" text-anchor="middle">{sub}</text>'
+        )
+
+    _boundary = diagram(
+        '<path d="M680 0 V 200" fill="none" stroke="currentColor" stroke-dasharray="6 6" opacity="0.45"/>'
+        '<text class="dg-muted" x="668" y="20" text-anchor="end">untrusted</text>'
+        '<text class="dg-muted" x="692" y="20">trusted</text>'
+        + _card(0, 50, "JSON from outside", "request body, form, CSV row", "dg-box", w=250)
+        + _card(330, 50, "Pydantic model", "the door: types and rules", "dg-tier")
+        + _card(720, 50, "typed Python object", "nothing behind it re-checks", "dg-box dg-ok")
+        + _card(330, 230, "422: a list of errors", "one entry per broken rule", "dg-box dg-hot", h=70)
+        + '<path class="dg-edge" d="M250 115 H 324"/><path class="dg-edge dg-ok" d="M610 115 H 714"/>'
+        + '<path class="dg-edge dg-hot" d="M470 180 V 224"/>',
+        width=1000,
+        height=300,
+        label="Untrusted JSON enters a Pydantic model, the door. What passes becomes a typed Python object on the "
+        "trusted side; what breaks a rule is turned away as a 422 with one error per broken rule.",
+        tier="logic",
+    )
     mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Pydantic: Check Once, at the Door</h3>
+      {_boundary}
+      <p class="vis-caption">A <strong>type hint</strong> (<code>name: str</code>) is only documentation
+      to plain Python; Pydantic <em>enforces</em> it.</p>
+    </div>
         """
-    ### Chapter 7 Introduction
-
-    > **Key Question:** Which inputs are allowed into the trusted system boundary?
-
-    *Still in the **logic tier**. Chapter 6 agreed on a contract; now we enforce it.*
-
-    Validation decides which inputs may cross into the trusted part of the system. Check once at
-    the door, and every function behind it can stop re-checking.
-
-    $$
-    \\text{accepted input} = \\{\\, x \\in \\text{untrusted input} \\mid x \\text{ passes every rule you wrote} \\,\\}
-    $$
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Pydantic = Validated Data Models
-
-    Pydantic turns raw data into **validated Python objects**, guided by type hints.
-
-    A **type hint** is the note after a colon that says what kind of value a name should hold:
-
-    ```python
-    name: str        # this should be text
-    age: int         # this should be a whole number
-    gpa: float       # this should be a decimal number
-    ```
-
-    Plain Python does not enforce these; they are documentation. Pydantic reads the same
-    hints and *does* enforce them, which is why one line of description becomes a real check.
-
-    Example constraint: $0 \\le \\text{gpa} \\le 4$ (grade-point average).
-
-    In the mini-lab below, pick a preset or edit the JSON and watch the errors appear.
-    **Then run the last two presets, which are the point of this chapter.**
-
-    `garbage_that_passes` sends a negative id, a name of three spaces, a gpa of 0.0 and
-    `"definitely not an email"`. Every field is the declared type and inside its declared range,
-    so `Student` **accepts all of it**.
-
-    `silently_coerced` sends `"42"` and `"3.5"` as text. Pydantic does not reject them; it
-    converts them and hands you numbers.
-
-    So validation checks **shape**, not **truth**: a bouncer with a list of rules, not a person who
-    knows whether the answer makes sense. A negative id and a blank name are shaped correctly and
-    still garbage; only a written rule stops them, as in `StrictStudent` in the lab. Two of its
-    rules are subtle:
-
-    - `min_length=1` alone lets three spaces through (three characters).
-      `str_strip_whitespace=True` trims first, then counts. Every request model of our API
-      inherits this from its `Input` base, plus `extra="forbid"` against unknown fields.
-    - `strict=True` refuses `"42"` for an int instead of converting it. Our API leaves it off:
-      `"2"` for `units_sold` becomes 2.
-
-    Validation is exactly as good as the rules you thought to write. (The email `pattern` is a
-    cheap check; `EmailStr` is the real one, after `pip install "pydantic[email]"`.)
-            """
-    ).callout(kind="neutral")
+    )
     return
 
 
@@ -3602,9 +3578,9 @@ def _(mo):
     ch7_preset = mo.ui.dropdown(
         options={
             "valid → should pass": {"id": 1, "name": "Ada", "gpa": 3.8, "email": "ada@example.com"},
-            "missing_email → should fail (missing field)": {"id": 2, "name": "Lin", "gpa": 3.4},
-            "gpa_out_of_range → should fail (gpa > 4.0)": {"id": 3, "name": "Mira", "gpa": 5.2, "email": "mira@example.com"},
-            "wrong_type → should fail (type mismatch)": {"id": "not-an-int", "name": "Sam", "gpa": "high", "email": "sam@example.com"},
+            "missing_email → should fail": {"id": 2, "name": "Lin", "gpa": 3.4},
+            "gpa_out_of_range → should fail": {"id": 3, "name": "Mira", "gpa": 5.2, "email": "mira@example.com"},
+            "wrong_type → should fail": {"id": "not-an-int", "name": "Sam", "gpa": "high", "email": "sam@example.com"},
             # Every field is the declared type and inside its declared range. Every field is also nonsense.
             "garbage_that_passes → ???": {"id": -7, "name": "   ", "gpa": 0.0, "email": "definitely not an email"},
             # Two numbers arrive as text, and nothing is rejected either.
@@ -3615,13 +3591,11 @@ def _(mo):
     )
     mo.vstack(
         [
-            mo.md("### Mini-lab: Interactive Payload Validation"),
-            ch7_preset,
             mo.md(
                 """
-    ```python
-    from pydantic import BaseModel, ConfigDict, Field
+    ### Mini-lab: Interactive Payload Validation
 
+    ```python
     class Student(BaseModel):            # types and one range
         id: int
         name: str
@@ -3635,10 +3609,10 @@ def _(mo):
         email: str = Field(pattern=".+@.+")
     ```
 
-    Guess what each model says, then click **Validate with Pydantic**. Each error line is one
-    entry of the list FastAPI sends back as the body of a 422.
+    Pick a preset, or edit the JSON. Guess both verdicts first: **the last two presets are the point.**
                 """
             ),
+            ch7_preset,
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -3648,15 +3622,12 @@ def _(mo):
 @app.cell
 def _(ch7_preset, json, mo):
     ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="Student JSON", full_width=True)
-    ch7_validate = mo.ui.run_button(label="Validate with Pydantic", kind="success")
-    mo.vstack([ch7_json, ch7_validate], gap=0.6).callout(kind="neutral")
-    return ch7_json, ch7_validate
+    ch7_json
+    return (ch7_json,)
 
 
 @app.cell
-def _(ch7_json, ch7_validate, mo, pydantic):
-    mo.stop(not ch7_validate.value, mo.md("Guess the verdict, then click **Validate with Pydantic**.").callout(kind="neutral"))
-
+def _(ch7_json, html, json, mo, pydantic):
     class _Student(pydantic.BaseModel):
         id: int
         name: str
@@ -3669,21 +3640,92 @@ def _(ch7_json, ch7_validate, mo, pydantic):
         name: str = pydantic.Field(min_length=1)
         email: str = pydantic.Field(pattern=".+@.+")
 
-    def _verdict(title, model):
+    try:
+        _sent = json.loads(ch7_json.value)
+    except json.JSONDecodeError:
+        _sent = None  # Pydantic reports it too, as one error on the whole input
+
+    def _code(value):
+        # no-break spaces, so a name of three spaces does not collapse to one
+        return f"<code>{html.escape(repr(value)).replace(' ', '&nbsp;')}</code>"
+
+    def _row(colour, field, sent, verdict):
+        return (
+            f'<div style="margin-top: 8px; padding: 8px 12px; border-left: 4px solid {colour}; border-radius: 8px;'
+            f' background: color-mix(in srgb, {colour} 12%, transparent)"><strong>{field}</strong> {sent} {verdict}</div>'
+        )
+
+    def _column(title, model):
+        """One model's verdict: a tile with one row per field, ok in teal and broken in red; and the raw output."""
         try:
             student = model.model_validate_json(ch7_json.value)  # parse + validate in one step
+            errors, raw = {}, student.model_dump_json(indent=2)
         except pydantic.ValidationError as exc:
-            lines = [
-                f"- `{'.'.join(map(str, e['loc'])) or 'JSON'}`: {e['msg']}"
-                # no-break spaces, so three spaces do not collapse to one in the rendered code span
-                + ("" if e["type"] in {"missing", "json_invalid"} else f" (you sent `{repr(e['input']).replace(' ', '\u00a0')}`)")
-                for e in exc.errors()
-            ]
-            return mo.md(f"**{title}: rejected**\n\n" + "\n".join(lines)).callout(kind="danger")
-        # a code block, not mo.json: its tree view would squeeze a name of three spaces to one
-        return mo.md(f"**{title}: accepted**\n\n```json\n{student.model_dump_json(indent=2)}\n```").callout(kind="success")
+            student, errors, raw = None, {}, exc.json(indent=2, include_url=False)
+            for _e in exc.errors():
+                errors.setdefault(".".join(map(str, _e["loc"])) or "JSON", []).append(_e["msg"])
+        fields = [*model.model_fields, *(_f for _f in errors if _f not in model.model_fields)] if isinstance(_sent, dict) else list(errors)
+        rows = []
+        for field in fields:
+            sent = _code(_sent[field]) if isinstance(_sent, dict) and field in _sent else "<em>(missing)</em>"
+            if field in errors:
+                rows.append(_row("var(--red)", field, sent, "&#10007; " + html.escape("; ".join(errors[field]))))
+            elif student is None:
+                rows.append(_row("var(--teal)", field, sent, "&#10003;"))
+            else:
+                kept = getattr(student, field)
+                changed = isinstance(_sent, dict) and repr(kept) != repr(_sent.get(field))
+                rows.append(_row("var(--teal)", field, sent, "&#10003;" + (f" became {_code(kept)}" if changed else "")))
+        ok = student is not None
+        verdict = "accepted" if ok else f"rejected, {sum(map(len, errors.values()))} error(s)"
+        tile = (
+            f'<div class="tile" style="--tier: var({"--teal" if ok else "--red"})">'
+            f'<div class="tile-key">{"&#10003;" if ok else "&#10007;"}</div>'
+            f'<div class="tile-title">{title}: {verdict}</div>{"".join(rows)}</div>'
+        )
+        return tile, mo.md(f"**{title}**\n\n```json\n{raw}\n```")
 
-    mo.hstack([_verdict("Student", _Student), _verdict("StrictStudent", _StrictStudent)], widths="equal")
+    _loose, _loose_raw = _column("Student", _Student)
+    _strict, _strict_raw = _column("StrictStudent", _StrictStudent)
+    mo.ui.tabs(
+        {
+            "Per field": mo.Html(f'<div class="grid-2" style="font-size: 16px">{_loose}{_strict}</div>'),
+            "Raw output": mo.vstack([_loose_raw, _strict_raw]),  # stacked: a long error line would push a twin off screen
+        }
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.vstack(
+        [
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">&ne;</div><div class="tile-title">Shape, not truth</div>
+        <p>A negative id, a blank name, no real email: right types, in range, so <code>Student</code>
+        accepts it.</p></div>
+      <div class="tile"><div class="tile-key">"&nbsp;&nbsp;&nbsp;"</div><div class="tile-title">Strip, then count</div>
+        <p><code>min_length=1</code> alone lets three spaces through; <code>str_strip_whitespace</code>
+        trims first. Our API's <code>Input</code> base does both, plus <code>extra="forbid"</code>.</p></div>
+      <div class="tile"><div class="tile-key">"42"</div><div class="tile-title">Lax or strict</div>
+        <p>Lax, the default, turns <code>"42"</code> into 42; <code>strict=True</code> refuses it.
+        Our API stays lax.</p></div>
+    </div>
+                """
+            ),
+            mo.md("**Validation is only as good as the rules you wrote.**").callout(kind="info"),
+            mo.accordion(
+                {
+                    "A real email check": mo.md(
+                        'The `pattern` above is a cheap check. `EmailStr` is the real one, after `pip install "pydantic[email]"`.'
+                    )
+                }
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -3694,8 +3736,8 @@ def _(mo):
       <h3>Discussion — Validation</h3>
       <details>
         <summary><strong>Q1:</strong> Where should validation happen: client, server, or both?</summary>
-        <p><strong>Answer:</strong> Both. Clients give fast feedback, but servers must enforce rules to protect data (server-side validation):
-        anyone can skip your client and call the API directly, as chapter 6 just did.</p>
+        <p><strong>Answer:</strong> Both. The client gives fast feedback; the server must enforce the rules (server-side validation),
+        because anyone can skip your client and call the API directly, as chapter 6 just did.</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> Should <code>"42"</code> count as a valid <code>int</code>?</summary>
@@ -3713,10 +3755,9 @@ def _(mo):
         """
     ### Chapter 7 Conclusion
 
-    - A model checks shape (fields, types, ranges), not truth: it is only as good as the rules you wrote.
-    - Pydantic converts `"42"` to 42 and accepts a name of three spaces unless you say otherwise
-      (`strict`; `str_strip_whitespace` plus `min_length=1`).
-    - A rejection is a precise list of errors, and FastAPI sends that list back as a 422.
+    - A model checks shape, not truth.
+    - Lax by default: `"42"` becomes 42 and three spaces pass as a name, unless a rule says no.
+    - A rejection lists every broken rule: FastAPI's 422.
             """
     ).callout(kind="success")
     return
@@ -3728,10 +3769,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Once models are defined, FastAPI can use them to:
-    - validate inputs,
-    - power endpoints,
-    - generate docs automatically.
+    FastAPI turns these models into validation, endpoints and docs:
 
     $$
     \\text{Python types + models} \\rightarrow \\text{OpenAPI schema} \\rightarrow \\text{interactive docs}
