@@ -3952,8 +3952,9 @@ def _(chapter_intro, mo):
             mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)"),
             chapter_intro(
                 "logic",
-                "Did the client and server agree on the same contract?",
-                "Up to the logic tier: the data tier is finished, now other programs ask for its data.",
+                "The dashboard and the partners' scripts both need the sales. How do they ask for them?",
+                "Up to the logic tier. Both ask our sales API in the same way: a request goes out, an answer comes "
+                "back. This chapter shows what the two look like.",
             ),
         ],
         gap=1,
@@ -3962,119 +3963,173 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(box, diagram, mo):
+def _(box, diagram, html, in_plain, mo, shop_sales):
+    _sale = shop_sales.iloc[0]  # sale 1, as GET /sales/1 sends it back
+    _json = [
+        f'{{"sale_id": {_sale["sale_id"]}, "sale_date": "{_sale["sale_date"]:%Y-%m-%d}",',
+        f' "product_name": "{_sale["product"]}",',
+        f' "country_name": "{_sale["country"]}",',
+        f' "units_sold": {_sale["units_sold"]}, "total_price": {_sale["total_price"]}, ...}}',
+    ]
     _labels = [
         # (x, y, text): the names of the parts, above the request and below the response
-        (225, 56, "verb"),
-        (330, 56, "path"),
-        (600, 56, "payload (JSON)"),
-        (280, 148, "endpoint = verb + path"),
-        (255, 240, "status code"),
-        (575, 240, "the resource, as JSON"),
+        (245, 62, "verb: what to do"),
+        (378, 62, "path: which sale"),
+        (308, 158, "endpoint = verb + path"),
+        (262, 344, "status code: how it went"),
+        (596, 344, "the sale, written as JSON"),
     ]
     _message = diagram(
-        '<rect class="dg-box" x="0" y="40" width="150" height="190" rx="12"/>'
-        '<text x="75" y="130" text-anchor="middle" font-weight="700">client</text>'
-        '<text class="dg-muted" x="75" y="156" text-anchor="middle">script or app</text>'
-        '<rect class="dg-tier" x="850" y="40" width="150" height="190" rx="12"/>'
-        '<text x="925" y="130" text-anchor="middle" font-weight="700">API</text>'
-        '<text class="dg-muted" x="925" y="156" text-anchor="middle">sw03_demo_api</text>'
-        '<path class="dg-edge" d="M150 90 H 844"/><path class="dg-edge" d="M850 190 H 156"/>'
+        '<rect class="dg-box" x="0" y="40" width="170" height="276" rx="12"/>'
+        '<text x="85" y="172" text-anchor="middle" font-weight="700">Mia\'s dashboard</text>'
+        '<text class="dg-muted" x="85" y="198" text-anchor="middle">the client</text>'
+        '<rect class="dg-tier" x="930" y="40" width="170" height="276" rx="12"/>'
+        '<text x="1015" y="172" text-anchor="middle" font-weight="700">sales API</text>'
+        '<text class="dg-muted" x="1015" y="198" text-anchor="middle">sw03_demo_api</text>'
+        '<path class="dg-edge" d="M170 100 H 924"/><path class="dg-edge" d="M930 248 H 176"/>'
         # an opaque strip under each message, so the arrow does not show through its see-through boxes
-        '<rect x="176" y="64" width="638" height="52" style="fill: var(--surface)"/>'
-        '<rect x="176" y="164" width="638" height="52" style="fill: var(--surface)"/>'
-        + box(180, 68, "POST", w=90, cls="dg-tier")
-        + box(280, 68, "/sales", w=100, cls="dg-tier")
-        + box(390, 68, '{"product_id": 1, "units_sold": 2, ...}', w=420)
-        + '<path d="M182 118 V 126 H 378 V 118" fill="none" stroke="currentColor" opacity="0.45"/>'
-        + box(180, 168, "201 Created", w=150, cls="dg-box dg-ok")
-        + box(340, 168, '{"sale_id": 3361, "total_price": 390.0, ...}', w=470)
+        '<rect x="196" y="74" width="460" height="52" style="fill: var(--surface)"/>'
+        '<rect x="196" y="176" width="672" height="144" style="fill: var(--surface)"/>'
+        + box(200, 78, "GET", w=90, cls="dg-tier")
+        + box(310, 78, "/sales/1", w=136, cls="dg-tier")
+        + '<text class="dg-muted" x="466" y="105">no body: a GET only asks</text>'
+        + '<path d="M202 128 V 136 H 444 V 128" fill="none" stroke="currentColor" opacity="0.45"/>'
+        + box(200, 226, "200 OK", w=124, cls="dg-box dg-ok")
+        + '<rect class="dg-box" x="336" y="180" width="520" height="136" rx="12"/>'
+        + "".join(
+            f'<text x="352" y="{208 + 28 * _i}" style="font-family: var(--monospace-font, monospace); font-size: 15px; white-space: pre">'
+            f"{html.escape(_line)}</text>"
+            for _i, _line in enumerate(_json)
+        )
         + "".join(f'<text class="dg-muted" x="{_x}" y="{_y}" text-anchor="middle">{_t}</text>' for _x, _y, _t in _labels),
-        width=1000,
-        height=250,
-        label="A request travels from client to API: the verb POST, the path /sales and a JSON payload. "
-        "The response travels back: the status code 201 Created and the new sale as JSON.",
+        width=1100,
+        height=356,
+        label="Mia's dashboard sends the request GET /sales/1 to the sales API: the verb GET and the path /sales/1, "
+        f"no body. The API answers 200 OK and sale 1 as JSON: {_sale['product']}, {_sale['country']}, "
+        f"{_sale['units_sold']} units, CHF {_sale['total_price']:,.2f}.",
         tier="logic",
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>One Request, One Response</h3>
-      {_message}
-      <p class="vis-caption">An API is a <strong>contract</strong>. Most API bugs break it: a wrong
-      path, a wrong payload shape, or a status code the client did not handle.</p>
-    </div>
-                """
+            mo.md("### The dashboard asks the sales API for sale 1"),
+            in_plain(
+                "An **API** (application programming interface) is a program's front desk for other programs. Mia's "
+                "dashboard never opens the sales files: it sends a **request** to our sales API over **HTTP**, the "
+                "message format of the web, and gets a **response** back."
             ),
+            _message,
+            mo.md(
+                "**What to notice:** the dashboard knows only the address `/sales/1`. Where the sale is kept, and in "
+                "what format, is the API's business: the files could become a database tomorrow and the dashboard "
+                "would not notice."
+            ).callout(kind="info"),
             mo.accordion(
                 {
                     "Resource, path, endpoint, payload: the four words": mo.md(
                         """
-    - A **resource** is one thing the server knows about, like a product or a sale.
-    - A **path** is the address of a resource, like `/products/8`.
-    - An **endpoint** is one path combined with one verb, like `GET /products/8`.
-    - A **payload** is the data sent along with a request, written as JSON. In a JSON API the
-      payload is the resource's *representation*: the same thing, written down to travel.
-    - **HTTP** is the message protocol of the web; **HTTPS** is HTTP with encryption (TLS), the
-      secure default. Same API idea either way.
+    - A **resource** is one thing the server knows about: a sale, a product, a country.
+    - A **path** is the address of a resource, like `/sales/1`.
+    - An **endpoint** is one path combined with one verb, like `GET /sales/1`.
+    - A **payload** is the data sent along with a request, written as JSON: the new sale a sales
+      rep's app sends with `POST /sales`. In a JSON API the payload is the resource's
+      *representation*: the same thing, written down to travel.
+    - **HTTPS** is HTTP with encryption (TLS), the secure default. Same API idea either way.
                         """
                     )
                 }
             ),
         ],
-        gap=1,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(mo):
+def _(in_plain, mo):
     mo.vstack(
         [
+            mo.md("### Four verbs: what the dashboard and the sales reps can ask for"),
+            in_plain(
+                "The **verb** says what to do with the thing the path names. HTTP has four everyday ones, and our "
+                "API answers all four on `/sales`. A verb is **idempotent** when sending the same request twice "
+                "leaves the sales just as sending it once: it matters when a request times out and the app sends "
+                "it again."
+            ),
             mo.md(
                 """
-    ### REST Principles
-
     <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch</div>
-        <p>Idempotent: a lift button.</p></div>
-      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create</div>
-        <p class="tile-bad">Not idempotent: a ticket dispenser.</p></div>
-      <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">replace</div>
-        <p>Idempotent. Ours also takes only the changed fields (the standard's PATCH).</p></div>
-      <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove</div>
-        <p>Idempotent.</p></div>
-    </div>
-
-    **Idempotent**: pressing twice changes nothing more than pressing once. Jab a lift button ten
-    times, one lift comes; press a ticket dispenser ten times, you hold ten tickets. So a POST that
-    timed out is frightening to retry: you cannot tell whether the server acted.
-
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
-        <p>The server forgets the conversation, never the data.</p></div>
-      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
-        <p>The same four verbs on every resource.</p></div>
-      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
-        <p>An answer may say "valid for a while" and be reused.</p></div>
-      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
-        <p>The client talks to the next layer only: the tier map, on the network.</p></div>
+      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch: <code>GET /sales/1</code></div>
+        <p>The dashboard shows sale 1.</p>
+        <p>Sent twice: the same sale, nothing changes.</p></div>
+      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create: <code>POST /sales</code></div>
+        <p>A sales rep books a new order; the API gives it the next id, 3,361.</p>
+        <p class="tile-bad">Sent twice: two orders booked.</p></div>
+      <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">change: <code>PUT /sales/1</code></div>
+        <p>A correction: the customer's rating was 5, not 3. Ours takes only the changed fields
+        (the standard calls that PATCH).</p>
+        <p>Sent twice: still 5.</p></div>
+      <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove: <code>DELETE /sales/1</code></div>
+        <p>The order was cancelled.</p>
+        <p>Sent twice: gone either way.</p></div>
     </div>
                 """
             ),
+            mo.md(
+                "**What to notice:** only POST is unsafe to resend. A sales rep's app whose POST timed out cannot "
+                "tell whether the order was booked; booking it again counts it twice."
+            ).callout(kind="info"),
             mo.accordion(
                 {
                     "Idempotent does not mean nothing happens": mo.md(
                         """
-    The second press really is sent and really is processed. Idempotent means the **end state**
+    The second request really is sent and really is processed. Idempotent means the **end state**
     is the same, not that the work is skipped, and not even that the answer is the same: DELETE a
     sale twice and you get **204**, then **404**. Still idempotent, because after one press or ten
     the sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
                         """
                     ),
-                    "Why these four constraints let REST scale": mo.md(
+                }
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### REST: four habits that make an API predictable"),
+            in_plain(
+                "**REST** (representational state transfer) is a style for web APIs, not a library: a few habits "
+                "that make every endpoint behave the way a caller expects. Our sales API keeps these four."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
+        <p>Every request says everything it needs: <code>GET /sales/1</code> means the same whoever sends it,
+        whenever. The API remembers the sales, not the caller.</p></div>
+      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
+        <p>The same four verbs on every resource: <code>/sales</code>, <code>/products</code>,
+        <code>/countries</code>. Learn one, and you can read them all.</p></div>
+      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
+        <p>The product list hardly changes. An answer may say "valid for an hour", and the dashboard
+        reuses it instead of asking again.</p></div>
+      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
+        <p>The dashboard talks to the API, never to the files: the tier map from the start of the
+        lecture, over the network.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**What to notice:** because the API remembers nothing about the caller, EdgeWorks can run a second "
+                "copy of it when the dashboard gets busy: any copy can answer any request."
+            ).callout(kind="info"),
+            mo.accordion(
+                {
+                    "Why these four habits let REST scale": mo.md(
                         """
     - **Stateless**: the server keeps no memory of *you* between requests: not where you are in a
       conversation, what you asked last, or which page you were on. Every request carries
@@ -4089,13 +4144,53 @@ def _(mo):
                 }
             ),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(diagram, mo):
+def _(in_plain, mo, static_table):
+    _codes = [
+        ("200 OK", "here it is", "GET /sales/1"),
+        ("201 Created", "booked: the new sale is in the answer", "POST /sales with a valid sale"),
+        ("204 No Content", "done, nothing to send back", "DELETE /sales/1"),
+        ("400 Bad Request", "well formed, but impossible", "a sale of product 99, which does not exist"),
+        ("404 Not Found", "nothing lives at that address", "GET /sales/999999"),
+        ("422 Unprocessable Content", "your sale broke a written rule", "a sale with rating 9"),
+        ("500 Internal Server Error", "our code crashed: not your fault", "a bug on our side"),
+    ]
+    mo.vstack(
+        [
+            mo.md("### Status codes: what the answer tells the caller"),
+            in_plain(
+                "Every response starts with a three-digit **status code**, which the caller's code reads before "
+                "anything else. The first digit says who has to act."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
+        <p>It worked. Nobody has to do anything.</p></div>
+      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
+        <p>The caller must change something: sending the same request again gets the same answer.</p></div>
+      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">Our side broke</div>
+        <p>A retry may work: blindly only for the idempotent verbs.</p></div>
+    </div>
+                """
+            ),
+            static_table(
+                [{"status code": _c, "tells the caller": _t, "our sales API sends it for": _w} for _c, _t, _w in _codes],
+                label="The codes our sales API sends",
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(diagram, in_plain, mo):
     def _stage(x, title, sub, cls):
         return (
             f'<rect class="{cls}" x="{x}" y="10" width="210" height="80" rx="12"/>'
@@ -4112,45 +4207,39 @@ def _(diagram, mo):
         )
 
     _gates = diagram(
-        _stage(0, "request", "you send", "dg-box")
-        + _stage(260, "the door", "the model's rules", "dg-tier")
-        + _stage(520, "endpoint code", "checks the data", "dg-tier")
-        + _stage(780, "201 Created", "a valid sale", "dg-box dg-ok")
+        _stage(0, "request", "a sale someone sends", "dg-box")
+        + _stage(260, "the door", "the sale's written rules", "dg-tier")
+        + _stage(520, "endpoint code", "checks the sales files", "dg-tier")
+        + _stage(780, "201 Created", "the sale is booked", "dg-box dg-ok")
         + '<path class="dg-edge" d="M210 50 H 254"/><path class="dg-edge" d="M470 50 H 514"/>'
         + '<path class="dg-edge" d="M730 50 H 774"/>'
-        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · total_price")
+        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · 0 units")
         + _exit(505, "404 Not Found", "nothing lives there", "GET /sales/999999")
-        + _exit(755, "400 Bad Request", "asks the impossible", "region_id 999")
+        + _exit(755, "400 Bad Request", "asks the impossible", "product 99 does not exist")
         + '<path class="dg-edge dg-hot" d="M365 90 V 184"/>'
         + '<path class="dg-edge dg-hot" d="M615 90 V 184"/>'
         + '<path class="dg-edge dg-hot" d="M700 90 C 700 140, 865 130, 865 184"/>',
         width=1000,
         height=300,
-        label="Where each status code comes from. A request first meets the door, the model's rules: breaking one "
-        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the data: no such sale "
-        "answers 404, a region that does not exist answers 400. A valid sale answers 201 Created.",
+        label="Where each status code comes from. A sale first meets the door, its written rules: breaking one "
+        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the sales files: no such "
+        "sale answers 404, a product that does not exist answers 400. A valid sale answers 201 Created.",
         tier="logic",
     )
-    mo.md(
-        f"""
-    ### Four Real Answers From Our Own API
-
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
-        <p>It worked; 201: a new thing now exists.</p></div>
-      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
-        <p>Resending the same request gets the same answer.</p></div>
-      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">The server broke</div>
-        <p>A retry may work (blindly only for the lift-button verbs).</p></div>
-    </div>
-
-    <div class="section-card" style="margin-top: 14px">
-      {_gates}
-      <p class="vis-caption"><strong>400 or 422 is where students trip.</strong> 422: turned away at
-      the door (chapter 7), the endpoint's code never ran. 400: passed the door, then broke a rule
-      only the data can check. The mini-lab below sends all four.</p>
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### 422, 404 or 400: where our API turns a request away"),
+            in_plain(
+                "A request meets two checks. First the door: the written rules for a sale, called its **model** "
+                "(chapter 7 builds it). Then the endpoint's own code, the part that reads and writes the sales files."
+            ),
+            _gates,
+            mo.md(
+                "**What to notice:** 422 means our code never ran: the door turned the sale away. 400 means it passed "
+                "the door, and our code found it impossible. The lab on the next slide sends both."
+            ).callout(kind="info"),
+        ],
+        gap=0.8,
     )
     return
 
@@ -4162,31 +4251,57 @@ def _(mo):
     _sale = {"sale_date": "2026-09-01", "product_id": 1, "country_id": 3, "units_sold": 2, "customer_rating": 4}
     ch6_preset = mo.ui.dropdown(
         options={
-            "GET /sales/1": ("GET", "/sales/1", None),
-            "POST /sales with a valid sale": ("POST", "/sales", _sale),
-            "GET /sales/999999": ("GET", "/sales/999999", None),
-            "POST /countries with region_id 999": ("POST", "/countries", {"name": "Atlantis", "region_id": 999}),
-            "POST /sales with customer_rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
-            "POST /sales that sends total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
-            "POST /countries named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
-            "PUT /sales/1 with only a new rating": ("PUT", "/sales/1", {"customer_rating": 5}),
-            "DELETE /sales/1": ("DELETE", "/sales/1", None),
+            "Show sale 1": ("GET", "/sales/1", None),
+            "Book a valid sale": ("POST", "/sales", _sale),
+            "Show a sale that does not exist": ("GET", "/sales/999999", None),
+            "Book a sale of product 99, which does not exist": ("POST", "/sales", _sale | {"product_id": 99}),
+            "Book a sale with rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
+            "Book a sale that sends its own total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
+            "Add a country named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
+            "Correct sale 1: the rating was 5": ("PUT", "/sales/1", {"customer_rating": 5}),
+            "Delete sale 1 (a cancelled order)": ("DELETE", "/sales/1", None),
         },
-        value="GET /sales/1",
+        value="Show sale 1",
         label="Request",
     )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Mini-lab: Ask Our API
+    return api_base_url, ch6_preset
 
-    Start the API in a terminal first: `uvicorn sw03_demo_api:app`, without `--reload` today.
-    Send the POST, the PUT and the DELETE twice each: which leave the server where the first
-    press left it?
-                """
-            ),
-            mo.hstack([ch6_preset, api_base_url], widths="equal", align="end"),
+
+@app.cell
+def _(ch6_preset, json, mo):
+    _method, _path, _body = ch6_preset.value
+    ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Verb")
+    ch6_path = mo.ui.text(value=_path, label="Path")
+    ch6_body = mo.ui.text_area(
+        value=json.dumps(_body) if _body else "", rows=3, label="JSON body (sent with POST and PUT)", full_width=True
+    )
+    ch6_send = mo.ui.run_button(label="Send request", kind="success")
+    return ch6_body, ch6_method, ch6_path, ch6_send
+
+
+@app.cell
+def _(
+    api_base_url,
+    call_api,
+    ch6_body,
+    ch6_method,
+    ch6_path,
+    ch6_preset,
+    ch6_send,
+    html,
+    json,
+    mo,
+    requests,
+):
+    from http.client import responses as _phrases
+
+    _controls = mo.vstack(
+        [
+            ch6_preset,
+            api_base_url,
+            mo.hstack([ch6_method, ch6_path], justify="start", gap=2),
+            ch6_body,
+            ch6_send,
             mo.accordion(
                 {
                     "What uvicorn is, and why no --reload": mo.md(
@@ -4202,52 +4317,40 @@ def _(mo):
             ),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return api_base_url, ch6_preset
-
-
-@app.cell
-def _(ch6_preset, json, mo):
-    _method, _path, _body = ch6_preset.value
-    ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Method")
-    ch6_path = mo.ui.text(value=_path, label="Path")
-    ch6_body = mo.ui.text_area(
-        value=json.dumps(_body) if _body else "", rows=3, label="JSON body (sent with POST and PUT)", full_width=True
     )
-    ch6_send = mo.ui.run_button(label="Send request", kind="success")
-    mo.vstack([mo.hstack([ch6_method, ch6_path], justify="start", gap=2), ch6_body, ch6_send], gap=0.6).callout(kind="neutral")
-    return ch6_body, ch6_method, ch6_path, ch6_send
 
-
-@app.cell
-def _(
-    api_base_url,
-    call_api,
-    ch6_body,
-    ch6_method,
-    ch6_path,
-    ch6_send,
-    html,
-    json,
-    mo,
-    requests,
-):
-    from http.client import responses as _phrases
+    def _show(result):
+        """The whole lab slide: heading, the controls on the left, `result` on the right."""
+        return mo.vstack(
+            [
+                mo.md("### Try it: ask our sales API"),
+                mo.md(
+                    "Pick a request, or edit it, and send it. Then send the POST, the PUT and the DELETE twice each: "
+                    "which leave the sales where the first press left them? Start the API in a terminal first: "
+                    "`uvicorn sw03_demo_api:app`, without `--reload` today."
+                ),
+                mo.hstack([_controls, result], widths=[2, 3], gap=2, align="start"),
+            ],
+            gap=0.6,
+        )
 
     mo.stop(
         not ch6_send.value,
-        mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral"),
+        _show(mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral")),
     )
 
     _url = api_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
     try:
         _body = json.loads(ch6_body.value) if ch6_method.value in {"POST", "PUT"} else None
     except json.JSONDecodeError as _exc:
-        mo.stop(True, mo.md(f"The body is not valid JSON: {_exc}").callout(kind="danger"))
+        mo.stop(True, _show(mo.md(f"The body is not valid JSON: {_exc}").callout(kind="danger")))
     try:
         _status, _answer = call_api(ch6_method.value, _url, _body)
     except requests.RequestException:
-        mo.stop(True, mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger"))
+        mo.stop(
+            True,
+            _show(mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger")),
+        )
 
     # JSON as a code block, not mo.json: its tree view squeezes a name of three spaces to one
     if isinstance(_answer, list):  # GET /sales is thousands of rows: show a taste, not a wall
@@ -4269,7 +4372,7 @@ def _(
         f'<span style="color: var(--ink-soft); font-size: 1.1rem">{_meaning}</span></div>'
         f"<p><code>{html.escape(ch6_method.value)} {html.escape(_url)}</code></p>"
     )
-    mo.vstack([_badge, _shown], gap=0.5).callout(kind=_kind)
+    _show(mo.vstack([_badge, _shown], gap=0.5).callout(kind=_kind))
     return
 
 
@@ -4279,13 +4382,13 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — APIs</h3>
       <details>
-        <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
+        <summary><strong>Q1:</strong> A sales rep's app timed out on <code>POST /sales</code>. When is it safe to send it again?</summary>
         <p><strong>Answer:</strong> Only when the server can recognise the repeat: the client sends a unique key
         (an idempotency key, or an id it chose) and the server refuses to create a second record with that key.
-        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the mini-lab above and chapter 8 show it).</p>
+        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the lab above and chapter 8 show it).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> How can an API evolve without breaking clients?</summary>
+        <summary><strong>Q2:</strong> How can our API change without breaking the partners' scripts?</summary>
         <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
       </details>
     </div>
@@ -4295,33 +4398,31 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 6 Conclusion
 
-    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.
+    - The dashboard and the partners ask the same way: a verb and a path go out, a status code and JSON come back.
+    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx our side broke.
     - 422: broke a written rule at the door. 404: nothing lives there. 400: asks the impossible.
     - GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.
-    - Stateless: the server forgets the conversation, never the data.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Stateless: the API forgets the caller, never the sales.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    Every 422 above was the request's *shape* failing a check before any endpoint code ran.
-    Pydantic is that door. Chapter 7 shows why the second arrow fails:
-
-    $$
-    \\text{valid request} \\Rightarrow \\text{schema checks pass} \\quad\\text{but}\\quad \\text{schema checks pass} \\nRightarrow \\text{valid request}
-    $$
-            """
-    ).callout(kind="neutral")
+    Every 422 above was a sale turned away at the door, before any of our code ran. Chapter 7
+    builds that door with Pydantic, and shows its limit: a valid sale always passes the checks,
+    but passing the checks does not make a sale valid.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
