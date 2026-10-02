@@ -198,13 +198,6 @@
   gap: 16px;
 }
 
-.focus-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
 .focus-item {
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -215,30 +208,6 @@
 .flow-card {
   display: grid;
   gap: 12px;
-}
-
-.flow-diagram {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.flow-box {
-  min-width: 150px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-2);
-  color: var(--ink);
-  font-weight: 600;
-  text-align: center;
-}
-
-.flow-arrow {
-  color: var(--ink-muted);
-  font-size: 1.4rem;
-  line-height: 1;
 }
 
 .flow-note {
@@ -309,51 +278,6 @@
   font-weight: 700;
 }
 
-.bar-chart {
-  display: grid;
-  gap: 10px;
-}
-
-.bar-row {
-  display: grid;
-  grid-template-columns: 140px 1fr 110px;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.92rem;
-}
-
-.bar-label {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.bar-track {
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--brand), var(--teal));
-}
-
-.bar-fill.good {
-  background: linear-gradient(90deg, var(--teal), var(--brand));
-}
-
-.bar-fill.bad {
-  background: linear-gradient(90deg, #f97316, #ef4444);
-}
-
-.bar-value {
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
 .disclaimer-red {
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--red) 55%, transparent);
@@ -418,7 +342,6 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .dg-flow { animation: dg-flow 0.9s linear infinite; }
-  .dg-pulse { animation: dg-pulse 1.6s ease-in-out infinite; }
 }
 
 /* the travelling token moves by SMIL, which ignores the media query above */
@@ -427,7 +350,6 @@
 }
 
 @keyframes dg-flow { to { stroke-dashoffset: -18; } }
-@keyframes dg-pulse { 50% { opacity: 0.3; } }
 
 /* the one or two lines under or beside a visual */
 .vis-caption {
