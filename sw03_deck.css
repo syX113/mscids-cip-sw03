@@ -31,9 +31,29 @@
   padding-inline: 32px;
 }
 
+/* the slide frame: marimo caps it at 95vh, which ignores the zoom; the zoom already leaves the margin */
+#App > div > .aspect-video {
+  max-height: none;
+}
+
 /* projector-sized prose: marimo's default is 14.4 px */
 .markdown {
   font-size: 16px;
+}
+
+/* marimo's slide mode enlarges prose on its own (paragraphs 1.5rem, h2 3rem, h3 2.3rem), on top of
+   sw03_deck_head.html's zoom; the deck keeps one text size and lets the zoom scale it */
+.prose-slides :is(p, li, .paragraph) {
+  font-size: inherit;
+  line-height: 1.6;
+}
+
+.prose-slides h2 {
+  font-size: 1.75rem;
+}
+
+.prose-slides h3 {
+  font-size: 1.4rem;
 }
 
 .markdown h2 {

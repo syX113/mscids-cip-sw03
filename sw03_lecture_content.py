@@ -5,7 +5,15 @@
 import marimo
 
 __generated_with = "0.25.0"
-app = marimo.App(width="medium", css_file="sw03_deck.css", html_head_file="sw03_deck_head.html")
+# The deck is shown as slides: layouts/ holds one entry per cell, in cell order ({} starts a new slide,
+# "fragment" appears on the same slide at the next arrow press). marimo edit keeps it in step; when
+# adding or removing a cell any other way, add or remove its entry there too.
+app = marimo.App(
+    width="medium",
+    css_file="sw03_deck.css",
+    html_head_file="sw03_deck_head.html",
+    layout_file="layouts/sw03_lecture_content.slides.json",
+)
 
 
 @app.cell
@@ -587,7 +595,8 @@ def _(
         _labels["file_lock"] = "file, no flock on this OS"
     _expected = _workers * _increments
     _rows = []
-    with mo.status.spinner(title="Racing the workers ..."), tempfile.TemporaryDirectory() as _tmp:
+    # No mo.status.spinner here: as a slide, a cell whose output blanks while it runs drops into marimo's edit preview.
+    with tempfile.TemporaryDirectory() as _tmp:
         for _key, _label in _labels.items():
             if not strategies.value[_key]:
                 continue
@@ -979,7 +988,7 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(box, diagram, fastavro, html, io, json, mo):
+def _(diagram, json, mo):
     _record = {"sale_id": 1, "sale_date": "2024-03-07", "total_price": 4034.91}
     # The bytes in the middle are the real start of this record's JSON.
     _hex = json.dumps(_record).encode()[:24].hex(" ").upper()
@@ -1019,7 +1028,19 @@ def _(box, diagram, fastavro, html, io, json, mo):
         label="A Python record is serialized into bytes for a file or the network, and deserialized back into a Python record.",
         tier="data",
     )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Serialization = Bytes on Disk (or Wire)</h3>
+      {_pipeline}
+    </div>
+        """
+    )
+    return
 
+
+@app.cell
+def _(box, diagram, fastavro, html, io, mo):
     # The pre-printed form refuses an answer that does not fit its box: the real error from the Avro writer.
     try:
         fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": "about forty"}])
@@ -1081,14 +1102,6 @@ def _(box, diagram, fastavro, html, io, json, mo):
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Serialization = Bytes on Disk (or Wire)</h3>
-      {_pipeline}
-    </div>
-                """
-            ),
             mo.md(
                 f"""
     <div class="section-card">
@@ -2320,18 +2333,6 @@ def _(TIER, alt, budget_ratio, budget_scans_day, budget_size_gb, mo, pd, tier_ch
 
 @app.cell
 def _(mo):
-    mo.Html(
-        """
-    <div class="disclaimer-red">
-      Disclaimer: PCA is covered in depth in <strong>Machine Learning 2</strong>; here it only illustrates compression.
-    </div>
-            """
-    )
-    return
-
-
-@app.cell
-def _(mo):
     ch4_k_range = (4, 90, 2)  # first, last, step: the slider below and the curve the lab draws
     image_demo_rank = mo.ui.slider(*ch4_k_range, value=26, label="Components kept (rank k)", show_value=True, debounce=True)
     image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True, debounce=True)
@@ -2341,7 +2342,8 @@ def _(mo):
             mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
             mo.md(
                 "Rebuilt from the top `k` singular vectors per colour channel: rank-k SVD, the maths behind "
-                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis)."
+                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis). *PCA itself is covered in "
+                "Machine Learning 2; here it only illustrates compression.*"
             ),
         ],
         gap=0.6,
@@ -2481,17 +2483,10 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
         tier="data",
     )
     _pca_wins = _pca_bytes < len(_gz)
-    mo.vstack(
+    # Shown on the next slide: what this k costs, against every other k.
+    ch4_pca_result = mo.vstack(
         [
-            _pipeline,
-            mo.hstack(
-                [
-                    mo.image(ch4_cat, width="100%", caption="Original"),
-                    mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
-                ],
-                widths="equal",
-                gap=0.8,
-            ),
+            mo.md(f"### What k = {_k} Costs: Bytes Against Pixel Error"),
             mo.md(
                 """
     <div class="tiles tier-data">
@@ -2514,6 +2509,26 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
         ],
         gap=0.6,
     )
+    mo.vstack(
+        [
+            _pipeline,
+            mo.hstack(
+                [
+                    mo.image(ch4_cat, width="100%", caption="Original"),
+                    mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
+                ],
+                widths="equal",
+                gap=0.8,
+            ),
+        ],
+        gap=0.6,
+    )
+    return (ch4_pca_result,)
+
+
+@app.cell
+def _(ch4_pca_result):
+    ch4_pca_result
     return
 
 
@@ -3937,7 +3952,7 @@ def _(ch6_preset, json, mo):
     ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Method")
     ch6_path = mo.ui.text(value=_path, label="Path")
     ch6_body = mo.ui.text_area(
-        value=json.dumps(_body, indent=2) if _body else "", rows=8, label="JSON body (sent with POST and PUT)", full_width=True
+        value=json.dumps(_body) if _body else "", rows=3, label="JSON body (sent with POST and PUT)", full_width=True
     )
     ch6_send = mo.ui.run_button(label="Send request", kind="success")
     mo.vstack([mo.hstack([ch6_method, ch6_path], justify="start", gap=2), ch6_body, ch6_send], gap=0.6).callout(kind="neutral")
@@ -4152,7 +4167,7 @@ def _(mo):
 
 @app.cell
 def _(ch7_preset, json, mo):
-    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="Student JSON", full_width=True)
+    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=6, label="Student JSON", full_width=True)
     ch7_json
     return (ch7_json,)
 
@@ -4231,6 +4246,7 @@ def _(ch7_json, html, json, mo, pydantic):
 def _(mo):
     mo.vstack(
         [
+            mo.md("### What the Two Verdicts Teach"),
             mo.md(
                 """
     <div class="tiles tier-logic">
@@ -4538,18 +4554,15 @@ def _(mo):
 
 
 @app.cell
-def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload, fastapi_post, mo):
+def _(api_base_url, fastapi_check, mo):
     # Display only, so editing the shared URL re-renders these widgets instead of rebuilding them.
     mo.vstack(
         [
             mo.md(
-                "### Live API Workflow\n\n"
-                "Start the API (`uvicorn sw03_demo_api:app`), then press the buttons in order. Press **2)** "
-                "twice: the name is taken, so the second answer is `400`."
+                "### Live API Workflow: Is It Running?\n\n"
+                "Start the API (`uvicorn sw03_demo_api:app`), then press the buttons in order."
             ),
             mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
-            fastapi_payload,
-            mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
         ],
         gap=0.8,
     ).callout(kind="neutral")
@@ -4638,6 +4651,22 @@ def _(api_base_url, box, ch8_api, diagram, fastapi_check, mo):
         ],
         gap=0.8,
     ).callout(kind="success")
+    return
+
+
+@app.cell
+def _(fastapi_get, fastapi_item_id, fastapi_payload, fastapi_post, mo):
+    mo.vstack(
+        [
+            mo.md(
+                "### Live API Workflow: Create, Then Read\n\n"
+                "Press **2)** twice: the name is taken, so the second answer is `400`."
+            ),
+            fastapi_payload,
+            mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
+        ],
+        gap=0.8,
+    ).callout(kind="neutral")
     return
 
 
@@ -5551,6 +5580,7 @@ def _(mo):
     chart_seed = mo.ui.slider(1, 999, value=21, label="Seed", show_value=True, debounce=True)
     mo.vstack(
         [
+            mo.md("### Signal or Noise: Set the Truth, Then Read the Fit"),
             mo.hstack([chart_slope, chart_noise], widths="equal"),
             mo.hstack([chart_rows, chart_seed], widths="equal"),
         ],
