@@ -962,116 +962,265 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 2. Serialization & Deserialization Benchmarks
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 2 Introduction
-
-    > **Key Question:** Which format gives the best trade-off for the workload (actual data + query pattern)?
-
-    *Still in the **data tier**. Chapter 1 made writes correct; now we choose what those bytes look like.*
-
-    Every format trades readability, portability, size and speed differently; the benchmark below
-    measures the trade.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    _explanation = mo.md(
-        """
-    ### Serialization = Bytes on Disk (or Wire)
-
-    Serialization transforms Python objects into bytes so they can be stored or sent.
-    Deserialization rebuilds objects from bytes.
-
-    **First, one word we will use all day.** A **schema** is the blank form. Not the answers,
-    the printed boxes: what fields exist, in what order, and what kind of thing goes in each one.
-    `sale_id` a whole number, `sale_date` a date, `total_price` a decimal.
-
-    JSON is longhand on blank paper. Anyone can read it, and nothing stops you writing
-    "about forty" in the price box. Avro is a **pre-printed form**: compact, because the labels
-    live on the form instead of being repeated on every sheet, but you must keep the form to read
-    the sheets back.
-
-    **Schema evolution** is what happens when the office adds a box to the form. Do last year's
-    sheets, printed on the old form, still get read? We will test exactly that below.
-
-    *Where the picture breaks:* a paper form is inseparable from its answers, which is true for
-    Avro and false for JSON and CSV. There the form exists only in the mind of whoever reads the
-    file, which is why two teams can disagree about what the same sheet means. That is the reason
-    chapter 7 exists.
-
-    You will meet this blank form three more times today: DuckDB **guesses** it in chapter 5,
-    Pydantic **enforces** it in chapter 7, FastAPI **publishes** it in chapter 8.
-
-    **Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
-    **What to compare:**
-
-    - **Speed**: how long writing and reading take  
-    - **Size**: how many bytes hit disk  
-    - **Interop**: language/tool compatibility  
-    - **Type fidelity**: do types round-trip cleanly?  
-    - **Schema evolution**: do old files survive a new field?
-    - **Safety**: Pickle can execute arbitrary code
-
-    Two words people mix up.
-
-    **Latency** is how long *one* thing takes, end to end. Post a letter to Vienna: two days.
-
-    **Throughput** is how much gets through per unit of time. The van leaving the depot each
-    night carries 40,000 letters.
-
-    In the benchmark below, one round trip is a file written and read back, and what gets through
-    is records, counted like letters rather than by the weight of the paper:
-
-    $$
-    \\text{Latency} = \\text{write time} + \\text{read time}
-    \\qquad
-    \\text{Throughput} = \\frac{\\text{rows written}}{\\text{write time}}
-    $$
-
-    They trade against each other, and this is the part people get wrong. Waiting to fill the van
-    raises throughput and *hurts* the latency of the first letter that boarded it. A container
-    ship has appalling latency and colossal throughput. When someone says a system is fast, ask
-    which one they mean. The benchmark below measures both: check whether they rank the formats
-    the same way.
-
-    *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
-
-    **Format quick reference:**  
-    - **JSON/CSV**: human‑readable, row‑oriented  
-    - **Avro**: row‑oriented, schema‑driven events  
-    - **Arrow/Feather**: columnar interchange (fast analytics)  
-    - **Parquet**: columnar on‑disk analytics  
-    - **Pickle**: Python‑specific (unsafe for untrusted data)
-            """
-    ).callout(kind="neutral")
-    _flow = mo.md(
-        """
-    <div class="section-card flow-card">
-      <h3>Serialization Pipeline</h3>
-      <div class="flow-diagram">
-        <div class="flow-box">Python object</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Bytes (disk / wire)</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Python object</div>
-      </div>
-    </div>
-            """
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 2. Serialization & Deserialization Benchmarks"),
+            chapter_intro(
+                "data",
+                "Which format gives the best trade-off for this workload: this data, these queries?",
+                "Chapter 1 made the writes correct; now we choose what those bytes look like.",
+            ),
+        ],
+        gap=1,
     )
-    mo.vstack([_explanation, _flow], gap=0.6)
+    return
+
+
+@app.cell
+def _(box, diagram, fastavro, html, io, json, mo):
+    _record = {"sale_id": 1, "sale_date": "2024-03-07", "total_price": 4034.91}
+    # The bytes in the middle are the real start of this record's JSON.
+    _hex = json.dumps(_record).encode()[:24].hex(" ").upper()
+
+    def _object(x, title, cls):
+        lines = "".join(
+            f'<text x="{x + 125}" y="{104 + _i * 26}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
+            for _i, (_k, _v) in enumerate(_record.items())
+        )
+        return (
+            f'<rect class="{cls}" x="{x}" y="30" width="250" height="140" rx="12"/>'
+            f'<text x="{x + 125}" y="64" text-anchor="middle" font-weight="700">{title}</text>{lines}'
+        )
+
+    def _arrow(x, verb, word):
+        return (
+            f'<path class="dg-edge dg-flow" d="M{x} 100 H {x + 122}"/>'
+            f'<text x="{x + 60}" y="86" text-anchor="middle" font-weight="700">{verb}</text>'
+            f'<text class="dg-muted" x="{x + 60}" y="126" text-anchor="middle">{word}</text>'
+        )
+
+    _pipeline = diagram(
+        _object(0, "Python object", "dg-tier")
+        + _arrow(258, "serialize", "write")
+        + '<rect class="dg-box" x="390" y="30" width="260" height="140" rx="12"/>'
+        + '<text x="520" y="64" text-anchor="middle" font-weight="700">bytes</text>'
+        + "".join(
+            f'<text x="520" y="{104 + _i * 26}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
+            for _i in range(3)
+        )
+        + _arrow(660, "deserialize", "read")
+        + _object(790, "Python object", "dg-tier")
+        + '<text class="dg-muted" x="520" y="200" text-anchor="middle">'
+        "on disk or on the wire: files, API payloads, queues, caches</text>",
+        width=1040,
+        height=212,
+        label="A Python record is serialized into bytes for a file or the network, and deserialized back into a Python record.",
+        tier="data",
+    )
+
+    # The pre-printed form refuses an answer that does not fit its box: the real error from the Avro writer.
+    try:
+        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": "about forty"}])
+        _refusal = "accepted"
+    except (TypeError, ValueError) as _exc:
+        _refusal = f"{type(_exc).__name__}: {str(_exc).split(': ')[0]}"
+
+    def _sheet(y, sale_id, date, price):
+        return (
+            f'<rect class="dg-box" x="0" y="{y}" width="470" height="70" rx="8"/>'
+            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale_id}, "sale_date": "{date}",</text>'
+            f'<text x="18" y="{y + 54}" font-family="monospace"> "total_price": {price}}}</text>'
+        )
+
+    _form_cells = [("sale_id: int", 130), ("sale_date: date", 170), ("total_price: double", 200)]
+
+    def _form_row(y, values, cls):
+        x, parts = 540, []
+        for (_, w), value in zip(_form_cells, values, strict=True):
+            parts.append(box(x, y, value, w=w - 8, h=40, cls=cls))
+            x += w
+        return "".join(parts)
+
+    _forms = diagram(
+        '<text x="0" y="22" font-weight="700">JSON: longhand on blank paper</text>'
+        + _sheet(40, 1, "2024-03-07", "4034.91")
+        + _sheet(124, 2, "2024-03-08", '<tspan class="dg-hot">"about forty"</tspan>')
+        + '<text class="dg-muted" x="0" y="222">every sheet writes the labels out again</text>'
+        + '<text class="dg-hot" x="0" y="248">and nothing stops "about forty" in the price box</text>'
+        + '<text x="540" y="22" font-weight="700">Avro: a pre-printed form</text>'
+        + _form_row(40, [_label for _label, _ in _form_cells], "dg-tier")
+        + _form_row(92, ["1", "2024-03-07", "4034.91"], "dg-box")
+        + _form_row(140, ["2", "2024-03-08", '<tspan class="dg-hot" text-decoration="line-through">about forty</tspan>'], "dg-box")
+        + '<text class="dg-muted" x="540" y="222">labels printed once; sheets hold only answers</text>'
+        + f'<text class="dg-hot" x="540" y="248" font-size="15">refused: {html.escape(_refusal, quote=False)}</text>'
+        + '<text x="0" y="306" font-weight="700">The form comes back:</text>'
+        + '<g class="tier-data"><rect class="dg-tier" x="190" y="282" width="250" height="40" rx="12"/>'
+        '<text x="315" y="307" text-anchor="middle">5 · DuckDB <tspan font-weight="700">guesses</tspan> it</text></g>'
+        + '<g class="tier-logic"><rect class="dg-tier" x="456" y="282" width="270" height="40" rx="12"/>'
+        '<text x="591" y="307" text-anchor="middle">7 · Pydantic <tspan font-weight="700">enforces</tspan> it</text>'
+        '<rect class="dg-tier" x="742" y="282" width="270" height="40" rx="12"/>'
+        '<text x="877" y="307" text-anchor="middle">8 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
+        width=1040,
+        height=330,
+        label="Left: JSON sheets repeat every label, and one has 'about forty' in the price box. Right: an Avro form "
+        "prints the labels once, each row holds only the answers, and the writer refuses 'about forty'. "
+        "The same form returns in chapters 5, 7 and 8.",
+        tier="data",
+    )
+    _breaks = mo.md(
+        """
+    - A paper form is inseparable from its answers: true for Avro, which stores the form in the
+      file, and false for JSON and CSV. There the form exists only in the mind of whoever reads the
+      file, which is why two teams can disagree about what the same sheet means. That is the reason
+      chapter 7 exists.
+    - **Schema evolution** is what happens when the office adds a box to the form: do last year's
+      sheets, printed on the old form, still get read? The last lab of this chapter tests exactly that.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Serialization = Bytes on Disk (or Wire)</h3>
+      {_pipeline}
+    </div>
+                """
+            ),
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>The Schema Is the Blank Form</h3>
+      <p>Not the answers, the printed boxes: which fields, in what order, what kind of thing goes in each.</p>
+      {_forms}
+    </div>
+                """
+            ),
+            mo.accordion({"Where the picture breaks, and what schema evolution means": _breaks}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(box, diagram, mo):
+    def _envelope(x, y, w, h):
+        return (
+            f'<rect class="dg-box" x="{x}" y="{y}" width="{w}" height="{h}" rx="3"/>'
+            f'<path d="M{x} {y} L{x + w / 2:.0f} {y + h * 0.6:.0f} L{x + w} {y}" fill="none" stroke="currentColor" opacity="0.5"/>'
+        )
+
+    # Letters handed in through the day; the van leaves with all of them at 22:00.
+    _hours = [8, 10, 12, 14, 16, 18, 20]
+
+    def _at(hour):
+        return 60 + (hour - 8) * 60
+
+    _post = diagram(
+        '<text x="0" y="24" font-weight="700">Latency: how long one thing takes</text>'
+        + _envelope(10, 60, 90, 60)
+        + '<path class="dg-edge" d="M112 90 H 330"/>'
+        + '<text x="220" y="78" text-anchor="middle" font-weight="700">2 days</text>'
+        + box(338, 66, "Vienna", w=110, h=48)
+        + '<text x="560" y="24" font-weight="700">Throughput: how much gets through per night</text>'
+        + '<rect class="dg-tier" x="570" y="46" width="230" height="78" rx="10"/>'
+        + '<text x="685" y="91" text-anchor="middle" font-weight="700">40,000 letters</text>'
+        + '<path class="dg-tier" d="M800 72 H 846 L 872 98 V 124 H 800 Z"/>'
+        + '<circle class="dg-box" cx="620" cy="128" r="14"/><circle class="dg-box" cx="836" cy="128" r="14"/>'
+        # the trade: the van waits for the last letter, so the first one waits longest
+        + '<text x="0" y="214" font-weight="700">They trade:</text>'
+        + f'<path d="M{_at(8)} 262 H {_at(22) - 50}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
+        + "".join(
+            _envelope(_at(_h) - 14, 236, 28, 20)
+            + f'<text class="dg-muted" x="{_at(_h)}" y="284" text-anchor="middle">{_h:02d}:00</text>'
+            for _h in _hours
+        )
+        + f'<rect class="dg-tier" x="{_at(22) - 50}" y="226" width="100" height="40" rx="10"/>'
+        + f'<text x="{_at(22)}" y="251" text-anchor="middle">van 22:00</text>'
+        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 304 H {_at(22) - 54}"/>'
+        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="330" text-anchor="middle">'
+        "the first letter waits 14 hours</text>",
+        width=1040,
+        height=344,
+        label="Latency: one letter takes two days to Vienna. Throughput: a van carries 40,000 letters a night. "
+        "Letters handed in from 08:00 all wait for the 22:00 van, so filling the van raises throughput and "
+        "makes the first letter wait 14 hours.",
+        tier="data",
+    )
+    _more = mo.md(
+        """
+    - A container ship has appalling latency and colossal throughput.
+    - In the benchmark, one round trip is a file written and read back, and what gets through is
+      records, counted like letters rather than by the weight of the paper.
+    - *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Latency vs Throughput</h3>
+      {_post}
+      <p class="vis-caption"><strong>Filling the van raises throughput and hurts the first letter's latency.</strong>
+      Ask which one "fast" means.</p>
+    </div>
+                """
+            ),
+            mo.md(
+                """
+    In the benchmark below:
+    $\\text{Latency} = \\text{write time} + \\text{read time}$ and
+    $\\text{Throughput} = \\text{rows written} / \\text{write time}$.
+                """
+            ),
+            mo.accordion({"Container ships, and how to get both": _more}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    _criteria = mo.md(
+        """
+    - **Speed**: how long writing and reading take
+    - **Size**: how many bytes hit the disk
+    - **Interop**: which languages and tools can read it
+    - **Type fidelity**: do dates and codes come back as dates and codes?
+    - **Schema evolution**: do old files survive a new field?
+    - **Safety**: can loading a file run someone else's code?
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Format Quick Reference
+
+    **Compare on:** speed · size · interop · type fidelity · schema evolution · safety
+
+    <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
+      <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
+        <p>JSON and CSV: every tool reads them.</p></div>
+      <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
+        <p>Event streams.</p></div>
+      <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
+        <p>Arrow / Feather: hand-over between tools.</p></div>
+      <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
+        <p>Analytics files.</p></div>
+      <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
+        <p class="tile-bad">Loading it can run code.</p></div>
+    </div>
+                """
+            ),
+            mo.accordion({"What each criterion asks": _criteria}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -1092,14 +1241,8 @@ def _(mo):
         value="Interoperability",
         label="Priority",
     )
-    _note = mo.md(
-        """
-    Pick a context and goal, then compare the recommendation with the benchmark table below.
-    This is a starting heuristic, not a final rule.
-            """
-    ).callout(kind="info")
     mo.vstack(
-        [mo.md("### Mini-lab: Format Decision Assistant"), format_use_case, format_priority, _note],
+        [mo.md("### Mini-lab: Format Decision Assistant"), mo.hstack([format_use_case, format_priority], justify="start", gap=2)],
         gap=0.5,
     ).callout(kind="neutral")
     return format_priority, format_use_case
@@ -1107,28 +1250,34 @@ def _(mo):
 
 @app.cell
 def _(format_priority, format_use_case, mo):
+    # one row per use case, one entry per priority in the order of the priority dropdown
     _recommendations = {
-        ("Public API payload", "Interoperability"): "JSON",
-        ("Public API payload", "Speed"): "JSON (or MessagePack if both sides support it)",
-        ("Public API payload", "Small size"): "Compressed JSON or binary protocol",
-        ("Public API payload", "Safety"): "JSON with strict schema validation",
-        ("Internal Python checkpoint", "Interoperability"): "Parquet/Arrow",
-        ("Internal Python checkpoint", "Speed"): "Pickle (trusted data only)",
-        ("Internal Python checkpoint", "Small size"): "Parquet or compressed pickle",
-        ("Internal Python checkpoint", "Safety"): "Parquet/JSON, avoid untrusted pickle",
-        ("Analytics table", "Interoperability"): "Parquet",
-        ("Analytics table", "Speed"): "Parquet or Arrow",
-        ("Analytics table", "Small size"): "Parquet + zstd/snappy",
-        ("Analytics table", "Safety"): "Parquet with schema checks",
-        ("Streaming event log", "Interoperability"): "Avro/JSON",
-        ("Streaming event log", "Speed"): "Avro",
-        ("Streaming event log", "Small size"): "Avro with compression",
-        ("Streaming event log", "Safety"): "Avro + schema registry",
+        "Public API payload": ["JSON", "JSON, or MessagePack if both sides speak it", "Compressed JSON or a binary protocol", "JSON with strict schema validation"],
+        "Internal Python checkpoint": ["Parquet / Arrow", "Pickle (trusted data only)", "Parquet or compressed Pickle", "Parquet / JSON, no untrusted Pickle"],
+        "Analytics table": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
+        "Streaming event log": ["Avro / JSON", "Avro", "Avro with compression", "Avro + schema registry"],
     }
-    _choice = _recommendations[(format_use_case.value, format_priority.value)]
+    _priorities = list(format_priority.options)
+    _pick = (format_use_case.value, _priorities.index(format_priority.value))
+    def _cell(text, chosen):
+        """A grey grid cell; the chosen use case, priority and recommendation stand out as tiles."""
+        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
+
+    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == format_priority.value) for _p in _priorities]
+    for _use, _row in _recommendations.items():
+        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
+        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
     mo.md(
-        f"Recommended starting point: **{_choice}**\n\nTreat this as a default, then benchmark on the real workload."
-    ).callout(kind="info")
+        f"""
+    <div class="section-card tier-data">
+      <div style="display: grid; grid-template-columns: 190px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
+        {"".join(_grid)}
+      </div>
+      <p class="vis-caption">Starting point: <strong>{_recommendations[_pick[0]][_pick[1]]}</strong>.
+      A default to benchmark, not a rule.</p>
+    </div>
+        """
+    )
     return
 
 
@@ -1139,11 +1288,8 @@ def _(mo):
     run_serial = mo.ui.run_button(label="Run serialization benchmark", kind="success")
     mo.vstack(
         [
+            mo.md("### Benchmark: Six Formats, the Same Records"),
             mo.hstack([serial_rows, serial_cols], widths="equal"),
-            mo.md(
-                "Six formats, the same records. Every write and every read runs three times and "
-                "the table keeps the fastest, so a one-off start-up cost cannot decide the ranking."
-            ),
             run_serial,
         ],
         gap=0.6,
@@ -1154,8 +1300,10 @@ def _(mo):
 @app.cell
 def _(
     Path,
+    TIER,
     alt,
     best_seconds,
+    chart_or_table,
     csv,
     fastavro,
     feather,
@@ -1171,8 +1319,14 @@ def _(
     serial_rows,
     static_table,
     tempfile,
+    tier_chart,
 ):
-    mo.stop(not run_serial.value, mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral"))
+    mo.stop(
+        not run_serial.value,
+        mo.md(
+            "**Predict first:** is the smallest file also the fastest? Then click **Run serialization benchmark**."
+        ).callout(kind="neutral"),
+    )
 
     _rng = random.Random(42)
     _records = [
@@ -1237,29 +1391,65 @@ def _(
                 }
             )
 
-    _bars = (
-        alt.Chart(pd.DataFrame(_rows))
-        .mark_bar()
-        .encode(y=alt.Y("format:N", sort=None, title=None))
-        .properties(width="container", height=200)  # half the page each, at any screen width
-        .configure(background="transparent")  # sit on the page, light or dark
-        .configure_axis(labelFontSize=13, titleFontSize=13, tickCount=4)
+    _df = pd.DataFrame(_rows)
+    _df["unsafe"] = _df["format"].str.startswith("Pickle")
+    # Two points close together: the smaller file's label goes to the left, so the labels do not collide.
+    _dx, _dy = 0.15 * _df["size (KB)"].max(), 0.08 * _df["latency (ms)"].max()
+    _df["left"] = [
+        any(
+            _o is not _r and 0 <= _o["size (KB)"] - _r["size (KB)"] < _dx and abs(_o["latency (ms)"] - _r["latency (ms)"]) < _dy
+            for _o in _rows
+        )
+        for _r in _rows
+    ]
+    _color = alt.condition("datum.unsafe", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+    _tooltip = list(_rows[0])
+    _base = alt.Chart(_df).encode(
+        x=alt.X("size (KB):Q", title="file size (KB)", scale=alt.Scale(zero=True)),
+        y=alt.Y("latency (ms):Q", title="write + read (ms)", scale=alt.Scale(zero=True)),
+        tooltip=_tooltip,
     )
+    _scatter = (
+        _base.mark_circle(size=260, opacity=1).encode(color=_color)
+        + _base.transform_filter("!datum.left").mark_text(align="left", dx=14).encode(text="format:N")
+        + _base.transform_filter("datum.left").mark_text(align="right", dx=-14).encode(text="format:N")
+    ).properties(width=470, height=300, title="Size vs latency: the bottom-left corner wins")
+    _speed = alt.Chart(_df).encode(
+        y=alt.Y("format:N", sort="-x", title=None),
+        x=alt.X(
+            "rows/s written:Q",
+            axis=None,
+            scale=alt.Scale(domain=[0, _df["rows/s written"].max() * 1.3]),
+        ),
+        tooltip=_tooltip,
+    )
+    _throughput = (
+        _speed.mark_bar(cornerRadiusEnd=4).encode(color=_color)
+        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("rows/s written:Q", format=".2s"))
+    ).properties(width=250, height=300, title="Throughput: rows written per second")
 
     mo.vstack(
         [
-            static_table(_records[:3], label="Sample records"),
-            static_table(_rows, label="Serialization benchmark (best of 3)"),
-            mo.md("**Shorter bars win in both charts.**"),
-            mo.hstack([_bars.encode(x="size (KB):Q"), _bars.encode(x="latency (ms):Q")], widths="equal", gap=2),
-            mo.md(
-                "Numbers vary by machine and caching, so compare the formats with each other, not with "
-                "another laptop. The reads are not quite like for like: Arrow and Parquet stop at a columnar "
-                "table without building Python objects, and CSV hands back strings it never converts to numbers."
-            ).callout(kind="info"),
-            mo.md(
-                "**Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources."
-            ).callout(kind="warn"),
+            chart_or_table(
+                tier_chart(alt.hconcat(_scatter, _throughput, spacing=40), "data"),
+                _rows,
+                label="Serialization benchmark (best of 3)",
+            ),
+            mo.md("**Do latency and throughput rank the formats the same way?**"),
+            mo.accordion(
+                {
+                    "The records being saved, and why the reads are not quite like for like": mo.vstack(
+                        [
+                            static_table(_records[:3], label="Sample records"),
+                            mo.md(
+                                "Numbers vary by machine and caching, so compare the formats with each other, not with "
+                                "another laptop. Arrow and Parquet stop at a columnar table without building Python "
+                                "objects, and CSV hands back strings it never converts to numbers."
+                            ),
+                        ]
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -1267,7 +1457,7 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
+def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500)
     # Store codes are the classic case: they look like numbers and are not.
     _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
@@ -1280,15 +1470,27 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
         _from_csv = pd.read_csv(_csv_p)
         _from_pq = pd.read_parquet(_pq_p)
 
-    _dtypes = [
-        {
-            "column": _c,
-            "wrote": str(_src[_c].dtype),
-            "back from CSV": str(_from_csv[_c].dtype),
-            "back from Parquet": str(_from_pq[_c].dtype),
-        }
-        for _c in _src.columns
-    ]
+    # One row per column: the type written, then the type each file hands back, ticked where it matches.
+    _xs = {"wrote": 190, "back from CSV": 470, "back from Parquet": 750}
+    _parts = [f'<text x="{_x + 130}" y="22" text-anchor="middle" font-weight="700">{_name}</text>' for _name, _x in _xs.items()]
+    for _i, _c in enumerate(_src.columns):
+        _y = 40 + _i * 56
+        _wrote = str(_src[_c].dtype)
+        _parts.append(f'<text x="0" y="{_y + 27}" font-family="monospace" font-weight="700">{_c}</text>')
+        _parts.append(box(_xs["wrote"], _y, _wrote, w=260))
+        for _x, _back_df in ((_xs["back from CSV"], _from_csv), (_xs["back from Parquet"], _from_pq)):
+            _back = str(_back_df[_c].dtype)
+            if _back == _wrote:
+                _parts.append(box(_x, _y, f"&#10003; {_back}", w=260, cls="dg-box dg-ok"))
+            else:
+                _parts.append(box(_x, _y, f'<tspan class="dg-hot">&#10007; {_back}</tspan>', w=260, cls="dg-box dg-hot"))
+    _types = diagram(
+        "".join(_parts),
+        width=1010,
+        height=270,
+        label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
+        "CSV returns sale_date as text and store_code as a whole number.",
+    )
 
     def _span(_df):
         try:
@@ -1296,36 +1498,39 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
         except TypeError as _exc:
             return f"TypeError: {_exc}"
 
-    _answers = [
-        {
-            "question": "How long did sales run?",
-            "via Parquet": _span(_from_pq),
-            "via CSV": _span(_from_csv),
-        },
-        {
-            "question": "First three store codes",
-            "via Parquet": str(list(_from_pq["store_code"].head(3))),
-            "via CSV": str(list(_from_csv["store_code"].head(3))),
-        },
-    ]
+    def _ask(name, df, kind):
+        return mo.md(
+            f"""
+    **Ask the {name} copy**
 
-    _note = mo.md(
-        """
-    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not
-    lose the date. They lost **the note saying it was a date**, and that note is what your analysis
-    was standing on. Parquet stores the date as a plain number and keeps the note in its schema,
-    which is why it came back as `datetime64`.
-
-    The first failure shouted. The second did not: the store codes came back as `7, 10, 42`
-    with no error, no warning and nothing in the log. That is the one that ends up in a report.
+    - How long did sales run? `{_span(df)}`
+    - First three store codes: `{df["store_code"].head(3).tolist()}`
             """
-    ).callout(kind="warn")
+        ).callout(kind=kind)
 
+    _why = mo.md(
+        """
+    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not lose the
+    date. They lost **the note saying it was a date**, and that note is what your analysis was standing
+    on. Parquet stores the date as a plain number and keeps the note in its schema, which is why it came
+    back as `datetime64`.
+        """
+    )
     mo.vstack(
         [
-            static_table(_dtypes, label="Same 500 rows, written two ways and read back"),
-            static_table(_answers, label="Now ask the data a question", wrapped_columns=["via CSV"]),
-            _note,
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Same 500 Sales, Written Two Ways and Read Back</h3>
+      {_types}
+    </div>
+                """
+            ),
+            mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
+            mo.md(
+                "The date failure shouted; the store codes failed silently. **That one ends up in a report.**"
+            ).callout(kind="warn"),
+            mo.accordion({"What the CSV actually lost": _why}),
         ],
         gap=0.6,
     )
@@ -1333,7 +1538,7 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
 
 
 @app.cell
-def _(csv, fastavro, io, mo, static_table):
+def _(csv, diagram, fastavro, html, io, mo):
     # It is next March. Your team adds a `channel` field to the sales event.
     # Two years of old files sit on disk, and one old program nobody redeployed
     # is still running in production. What happens?
@@ -1370,35 +1575,56 @@ def _(csv, fastavro, io, mo, static_table):
     except KeyError as _exc:
         _csv_result = f"KeyError: {_exc}"
 
-    _rows = [
-        {
-            "situation": "Last year's Avro file, read by this year's code",
-            "result": str(_old_by_new[0]),
-            "verdict": "works: the reader supplied the default the writer never wrote",
-        },
-        {
-            "situation": "This year's Avro file, read by the old program",
-            "result": str(_new_by_old[0]),
-            "verdict": "works: the extra field is skipped, nothing crashes",
-        },
-        {
-            "situation": "Last year's CSV file, read by this year's code",
-            "result": _csv_result,
-            "verdict": "breaks: the only fix is changing every program that reads it",
-        },
+    def _card(x, y, w, title, sub, cls="dg-box"):
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="64" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 26}" text-anchor="middle" font-weight="700">{html.escape(title, quote=False)}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 50}" text-anchor="middle">{sub}</text>'
+        )
+
+    def _fields(record):
+        return " · ".join(f"{_k} {_v}" for _k, _v in record.items())
+
+    _lanes = [
+        ("last year's Avro file", "old form", "this year's code", "new form: + channel",
+         _fields(_old_by_new[0]), "&#10003; the reader filled in the default", "dg-box dg-ok"),
+        ("this year's Avro file", "new form", "the old program", "old form",
+         _fields(_new_by_old[0]), "&#10003; the extra box is skipped", "dg-box dg-ok"),
+        ("last year's CSV file", "no form inside", "this year's code", "expects channel",
+         _csv_result, "&#10007; only fix: change every reader", "dg-box dg-hot"),
     ]
-    _note = mo.md(
-        "The printed form is not decoration. It is what lets a sheet filled in last year and a "
-        "program written this morning still agree. CSV ships without the form, so the agreement "
-        "lives only in someone's memory."
-    ).callout(kind="info")
-    mo.vstack(
-        [
-            mo.md("### Schema Evolution: the office adds a box to the form"),
-            static_table(_rows, label="Same change, three situations", wrapped_columns=["result", "verdict"]),
-            _note,
-        ],
-        gap=0.6,
+    _parts = [
+        '<text x="120" y="20" text-anchor="middle" font-weight="700">the file</text>'
+        '<text x="390" y="20" text-anchor="middle" font-weight="700">read by</text>'
+        '<text x="790" y="20" text-anchor="middle" font-weight="700">what comes back</text>'
+    ]
+    for _i, (_file, _file_sub, _reader, _reader_sub, _result, _verdict, _cls) in enumerate(_lanes):
+        _y = 36 + _i * 84
+        _parts += [
+            _card(0, _y, 240, _file, _file_sub),
+            f'<path class="dg-edge" d="M246 {_y + 32} H 284"/>',
+            _card(290, _y, 200, _reader, _reader_sub, "dg-tier"),
+            f'<path class="dg-edge" d="M496 {_y + 32} H 534"/>',
+            _card(540, _y, 500, _result, _verdict, _cls),
+        ]
+    _lanes_svg = diagram(
+        "".join(_parts),
+        width=1040,
+        height=290,
+        label="Avro: last year's file read by this year's code gets the default channel; this year's file read by the "
+        "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
+        tier="data",
+    )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Schema Evolution: the Office Adds a Box to the Form</h3>
+      <p>A <code>channel</code> box is added (default <code>in-store</code>), while old files and one old
+      program live on.</p>
+      {_lanes_svg}
+      <p class="vis-caption">CSV ships without the form, so the agreement lives only in someone's memory.</p>
+    </div>
+        """
     )
     return
 
@@ -1409,18 +1635,18 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Serialization Choices</h3>
       <details>
-        <summary><strong>Q1:</strong> How is a format selected among JSON, Avro, or Parquet?</summary>
-        <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
-        Avro for event streams with changing schemas (schema evolution),
-        Parquet for analytics scans and compression (columnar).</p>
+        <summary><strong>Q1:</strong> JSON, Avro or Parquet: how do you choose?</summary>
+        <p><strong>Answer:</strong> JSON for the widest tool support, Avro for event streams whose schema
+        changes, Parquet for analytics.</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
-        <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
+        <p><strong>Answer:</strong> If so, never unpickle it, and validate it strictly.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
-        <p><strong>Answer:</strong> In staging (a production-like test environment), then confirmed on a canary (the new format serving a small share of real traffic). Compare before/after on the same workload.</p>
+        <summary><strong>Q3:</strong> Where should size vs speed trade‑offs be measured?</summary>
+        <p><strong>Answer:</strong> In staging, then on a canary: the new format serving a small share of
+        real traffic.</p>
       </details>
     </div>
     """)
@@ -1433,12 +1659,10 @@ def _(mo):
         """
     ### Chapter 2 Conclusion
 
-    - Format choice is a trade-off between speed, size, interoperability, and safety.
-    - Use benchmarks from a representative workload to compare latency and storage cost.
-    - CSV keeps values but drops types: dates came back as `str`, store code `007` as `7`.
-      Parquet and Avro carry the schema.
-    - An Avro reader schema with defaults lets last year's files and this year's code agree.
-    - Pickle preserves Python types but should not be used for untrusted data.
+    - Formats trade speed, size, interop and safety: benchmark on your workload.
+    - CSV keeps values, drops types (`str` dates, `007` as `7`); Parquet and Avro carry the schema.
+    - Avro reader defaults let old files and new code agree.
+    - Never load Pickle from a source you do not trust.
             """
     ).callout(kind="success")
     return
@@ -1450,12 +1674,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Now that we know how to serialize data, the next question is **how to lay it out** on disk.
-
-    - Row layout: good when queries read one full record at a time.
-    - Column layout: good when queries scan a few columns across many rows.
-
-    Rule of thumb:
+    Next: **lay the bytes out** on disk, by row or by column.
 
     $$
     \\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
@@ -1466,106 +1685,150 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 3. Column-Based vs Row-Based Storage
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 3. Column-Based vs Row-Based Storage"),
+            chapter_intro(
+                "data",
+                "Is read work spent on data the query does not need?",
+                "Chapter 2 picked a format; now we choose how its bytes are arranged on disk.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-    ### Chapter 3 Introduction
+    ch3_query = mo.ui.radio(
+        options=["Show me sale 2,914", "Total revenue", "Revenue in January 2026"],
+        value="Total revenue",
+        label="Ask the shop:",
+        inline=True,
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Row Store vs Column Store: the Shoebox and the Ledger
 
-    > **Key Question:** Is read work spent on data that queries do not need?
-
-    *Still in the **data tier**. Chapter 2 picked a format; now we choose how it is arranged on disk.*
-
-    Storage layout determines read cost:
-
-    - Row store: incurs read cost (I/O + CPU) for whole rows
-    - Column store: incurs read cost mainly for selected columns
-            """
+    A shop keeps its sales twice: a **shoebox** of till receipts, one slip per sale, and a **ledger**
+    with one page per field. Pick a question and watch what each one has to read.
+                """
+            ),
+            ch3_query,
+        ],
+        gap=0.6,
     ).callout(kind="neutral")
-    return
+    return (ch3_query,)
 
 
 @app.cell
-def _(mo):
-    mo.md(
+def _(ch3_query, diagram, mo):
+    _fields = ["id", "date", "product", "country", "units", "price", "rating"]
+    _sales = list(range(2911, 2919))
+    # (sales the question needs, fields it needs); a filter on the date needs the date of every sale
+    _rows, _cols = {
+        "Show me sale 2,914": ([2914], _fields),
+        "Total revenue": (_sales, ["price"]),
+        "Revenue in January 2026": (_sales, ["date", "price"]),
+    }[ch3_query.value]
+    _cls = {"used": "dg-tier", "wasted": "dg-hot", "idle": "dg-box"}
+
+    def _cell(x, y, state):
+        opacity = ' opacity="0.45"' if state == "idle" else ""
+        return f'<rect class="{_cls[state]}" x="{x}" y="{y}" width="52" height="26" rx="4"{opacity}/>'
+
+    # The shoebox: one slip per sale. A slip is picked up whole, so every field on it is read.
+    _box = ['<text x="0" y="20" font-weight="700">Shoebox: row layout</text>']
+    _box += [f'<text class="dg-muted" x="{88 + _j * 56}" y="54" text-anchor="middle">{_f}</text>' for _j, _f in enumerate(_fields)]
+    for _i, _sale in enumerate(_sales):
+        _y = 66 + _i * 38
+        _picked = _sale in _rows
+        _box.append(f'<rect class="{"dg-tier" if _picked else "dg-box"}" x="58" y="{_y}" width="400" height="34" rx="6" fill-opacity="0.35"/>')
+        _box.append(f'<text class="dg-muted" x="50" y="{_y + 22}" text-anchor="end">{_sale}</text>')
+        _box += [
+            _cell(62 + _j * 56, _y + 4, ("used" if _f in _cols else "wasted") if _picked else "idle")
+            for _j, _f in enumerate(_fields)
+        ]
+
+    # The ledger: one page per field. Only the pages the question needs come down, at the lines it needs.
+    _ledger = ['<text x="560" y="20" font-weight="700">Ledger: column layout</text>']
+    for _j, _f in enumerate(_fields):
+        _x = 600 + _j * 64
+        _taken = _f in _cols
+        _ledger.append(f'<text class="dg-muted" x="{_x + 29}" y="54" text-anchor="middle">{_f}</text>')
+        _ledger.append(f'<rect class="{"dg-tier" if _taken else "dg-box"}" x="{_x}" y="62" width="58" height="248" rx="6" fill-opacity="0.35"/>')
+        _ledger += [_cell(_x + 3, 66 + _i * 30, "used" if _taken and _sale in _rows else "idle") for _i, _sale in enumerate(_sales)]
+    _ledger += [f'<text class="dg-muted" x="590" y="{84 + _i * 30}" text-anchor="end">{_sale}</text>' for _i, _sale in enumerate(_sales)]
+
+    _used = len(_rows) * len(_cols)
+    _row_read, _col_read = len(_rows) * len(_fields), _used
+
+    def _tally(x, grabbed, read):
+        hot = ' class="dg-hot"' if read > _used else ""
+        return (
+            f'<text x="{x}" y="400">{grabbed} · reads <tspan font-weight="700"{hot}>{read} fields</tspan>'
+            f" to use {_used}</text>"
+        )
+
+    _legend = "".join(
+        f'<rect class="{_cls[_state]}" x="{_x}" y="424" width="22" height="16" rx="3"/>'
+        f'<text class="dg-muted" x="{_x + 30}" y="437">{_label}</text>'
+        for _x, _state, _label in [(0, "used", "needed"), (130, "wasted", "read, not needed"), (330, "idle", "left alone")]
+    )
+    _picture = diagram(
+        "".join(_box + _ledger)
+        + _tally(0, f"picks up {len(_rows)} slip{'s' if len(_rows) > 1 else ''}", _row_read)
+        + _tally(560, f"takes down {len(_cols)} page{'s' if len(_cols) > 1 else ''}", _col_read)
+        + _legend,
+        width=1060,
+        height=450,
+        label=f"{ch3_query.value}: the shoebox picks up {len(_rows)} slips and reads {_row_read} fields; "
+        f"the ledger takes down {len(_cols)} pages and reads {_col_read} fields; the question needs {_used}.",
+        tier="data",
+    )
+    _story = mo.md(
         """
-    ### Row Store vs Column Store
-
-    **Row stores** keep full records together. Great for OLTP (Online Transaction Processing) and point lookups.  
-    **Column stores** group values by column. Great for scans, aggregates, and compression.
-
-    If a query scans only *k* columns out of *C*, the I/O pattern changes:
-
-    $$
-    \\text{IO}_{\\text{row}} \\approx N \\times C
-    \\qquad
-    \\text{IO}_{\\text{col}} \\approx N \\times k
-    $$
-
-    Where:
-    - $N$: number of rows  
-    - $C$: total columns in the dataset  
-    - $k$: columns actually needed by the query ($k \\ll C$ for narrow queries)
-
-    A shop keeps its sales two ways.
-
     **The shoebox.** Every sale is one till receipt: sale number, date, product, country, units,
     price and rating printed together on one slip. To answer *what did we take in January 2026?*
     you pick up all 3,360 slips one at a time, read the date, read the price, and put down the
-    other five fields untouched. You handled every field of every sale to use two of them. That
-    is a **row store**, and it is exactly the right shape for *show me sale 2,914*: one slip, one grab.
+    other five fields untouched. That is a **row store**, and it is exactly the right shape for
+    *show me sale 2,914*: one slip, one grab. Row stores suit OLTP (Online Transaction
+    Processing): point lookups and updates of whole records.
 
-    **The ledger.** The same sales copied into a bookkeeper's ledger, one field per page: a long
-    page of dates, a long page of prices, a long page of product codes. The same question now
-    means taking down two pages and leaving the other five on the shelf. That is a **column
-    store**. It is the wrong shape for *show me sale 2,914*, which is now line 2,914 of seven
-    different pages.
-
-    Same sales, same shop. The cost of a question changed because the paper was arranged
-    differently.
+    **The ledger.** The same sales copied into a bookkeeper's ledger, one field per page. The same
+    question now means taking down two pages and leaving the other five on the shelf. That is a
+    **column store**: right for scans, aggregates and compression, wrong for *show me sale 2,914*,
+    which is now line 2,914 of seven different pages.
 
     *Two things the picture does not show.* The ledger pages are written in shorthand, so they are
     not all the same size, which is chapter 4. And the ledger is not one endless page per field,
     which comes right after the benchmark.
-
-    Below we time both layouts on the same numbers.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card flow-card">
-      <h3>Visual: Same Table, Two Physical Layouts</h3>
-      <div class="grid-2">
-        <div>
-          <h4>Row layout (record-oriented)</h4>
-          <pre>sale 1: [sale_id, sale_date, total_price, …]
-    sale 2: [sale_id, sale_date, total_price, …]
-    sale 3: [sale_id, sale_date, total_price, …]
-    …</pre>
-          <div class="flow-note">Good when each request needs most fields of one row.</div>
-        </div>
-        <div>
-          <h4>Column layout (analytics-oriented)</h4>
-          <pre>sale_id:     [1,  2,  3,  …]
-    sale_date:   [d1, d2, d3, …]
-    total_price: [p1, p2, p3, …]
-    …</pre>
-          <div class="flow-note">Good when queries touch a few columns across many rows.</div>
-        </div>
-      </div>
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      {_picture}
+      <p class="vis-caption">Same sales, same shop: <strong>the cost of a question depends on how the paper
+      is arranged.</strong></p>
     </div>
-    """)
+                """
+            ),
+            mo.md(
+                "A scan of $N$ rows that needs $k$ of $C$ columns reads "
+                "$\\text{IO}_{\\text{row}} \\approx N \\times C$ in a row store, "
+                "$\\text{IO}_{\\text{col}} \\approx N \\times k$ in a column store."
+            ),
+            mo.accordion({"The shoebox and the ledger, told in full": _story}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -1573,13 +1836,26 @@ def _(mo):
 def _(mo):
     n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Rows (thousands)", show_value=True)
     run_storage = mo.ui.run_button(label="Run storage benchmark", kind="success")
-    mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2).callout(kind="neutral")
+    mo.vstack(
+        [
+            mo.md("### Benchmark: One Column, Two Layouts"),
+            mo.md("The same random numbers kept twice in memory, record by record and column by column."),
+            mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2),
+        ],
+        gap=0.6,
+    ).callout(kind="neutral")
     return n_rows, run_storage
 
 
 @app.cell
-def _(best_seconds, mo, n_rows, np, run_storage, static_table):
-    mo.stop(not run_storage.value, mo.md("Click **Run storage benchmark** to execute.").callout(kind="neutral"))
+def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, tier_chart):
+    mo.stop(
+        not run_storage.value,
+        mo.md(
+            "**Predict first:** give every record more columns. Which layout slows down when you sum one of them? "
+            "Then click **Run storage benchmark**."
+        ).callout(kind="neutral"),
+    )
 
     _operations = {
         "Count c0 > 0.75": lambda t: np.count_nonzero(t[:, 0] > 0.75),
@@ -1605,98 +1881,145 @@ def _(best_seconds, mo, n_rows, np, run_storage, static_table):
             )
     _results.sort(key=lambda r: r["operation"])  # stable: each operation's rows stay in column order
 
-    _note = mo.md(
-        """
-    **Discussion:** The same numbers, stored once record by record and once column by column.
-    No file is written, so this is not Avro against Parquet, only the access pattern each one uses.
+    _df = pd.DataFrame(_results)
+    _long = _df.melt(
+        id_vars=["operation", "columns (C)"], value_vars=["row layout (ms)", "column layout (ms)"], var_name="layout", value_name="ms"
+    )
+    _long["layout"] = _long["layout"].str.removesuffix(" (ms)")
+    _x = alt.X("columns (C):O", title="columns per record (C)", axis=alt.Axis(labelAngle=0))
+    _charts = []
+    for _operation in _operations:
+        _lines = (
+            alt.Chart(_long[_long["operation"] == _operation])
+            .mark_line(point=alt.OverlayMarkDef(size=90), strokeWidth=3)
+            .encode(
+                x=_x,
+                y=alt.Y("ms:Q", title="ms"),
+                color=alt.Color(
+                    "layout:N", title=None, scale=alt.Scale(domain=["row layout", "column layout"], range=[TIER["hot"], TIER["data"]])
+                ),
+                tooltip=["layout:N", "columns (C):O", "ms:Q"],
+            )
+        )
+        # over each row-layout point: how many times faster the column layout was
+        _speedup = (
+            alt.Chart(_df[_df["operation"] == _operation])
+            .mark_text(align="right", dx=-8, dy=-12)
+            .encode(x=_x, y="row layout (ms):Q", text="column is faster by:N")
+        )
+        _charts.append((_lines + _speedup).properties(width=400, height=260, title=_operation))
 
+    _why = mo.md(
+        """
+    No file is written, so this is not Avro against Parquet, only the access pattern each one uses.
     Both operations read one column. In the row layout its values sit a whole record apart, and the
     CPU fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
-    away. In the column layout the values lie side by side and every byte fetched is used.
-
-    **Read down the table:** as the column count grows, the row side slows down while the column
-    side stays put. That is $\\text{IO}_{\\text{row}} / \\text{IO}_{\\text{col}} = C/k$ at work with $k = 1$: a direction, not an exact ratio. Parquet
+    away. In the column layout the values lie side by side and every byte fetched is used. Parquet
     goes further and never reads the unused columns from disk.
-            """
-    ).callout(kind="info")
-
-    mo.vstack([static_table(_results, label="Row vs column layout, same numbers"), _note], gap=0.6)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
         """
-    ### The Binder and the Index Card
-
-    The ledger is not seven endless pages. It is a **binder**.
-
-    The binder is divided into **sections**. Each section holds a horizontal slice of the shop's
-    sales, say 420 of them, and inside a section each field still gets its own page. So section 3
-    holds a dates page, a prices page and a countries page, all covering the same 420 sales.
-    Parquet calls a section a **row group**.
-
-    At the very back of the binder is an **index card**. For every section and every field it
-    records two numbers and nothing else: the smallest value in that section and the largest.
-    Parquet calls this the **footer**, and those two numbers the **column statistics**.
-
-    Now watch what the index card buys. Someone asks for the average sale in 2026. You read the
-    card first and it says:
-
-    ```
-    section 0   dates 2024-03-01 .. 2024-05-27
-    section 1   dates 2024-06-01 .. 2024-08-27
-    ...
-    section 6   dates 2025-09-01 .. 2025-11-27
-    section 7   dates 2025-12-01 .. 2026-02-27
-    ```
-
-    Sections 0 to 6 end before 2026 began. Not *probably*. **Provably**: their latest date is
-    earlier than your earliest date, so no page inside them can hold a 2026 sale. You leave seven
-    sections closed, open section 7, and take out 2 of its 7 pages.
-
-    That is how a program skips data it never read. It read the index card.
-
-    **Two fences, and the second one matters more than it looks.**
-
-    - The card can prove a section is **hopeless**. It can never prove a section is **useful**.
-      A section labelled <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened, and may turn out to hold no
-      2026 sale at all. Min and max are a rejection test, not a search.
-    - This is why the order rows were written in is not cosmetic. Drop the sales into the binder
-      in random order and every section's card reads roughly <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code>. Every
-      label spans everything, every label is useless, and you open all eight sections. The
-      mechanism did not fail. You gave it nothing to work with. The next cell measures exactly
-      that, on the real file.
-        """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    run_rowgroup = mo.ui.run_button(label="Run row-group audit", kind="success")
+    )
     mo.vstack(
         [
-            mo.md("### Mini-lab: Which Sections Did We Open?"),
+            chart_or_table(tier_chart(alt.hconcat(*_charts, spacing=40), "data"), _results, label="Row vs column layout, same numbers"),
             mo.md(
-                "Same 3,360 real sales, written twice with 420-row sections: once in date order, "
-                "once shuffled. Then we ask the file's own index card what the query "
-                "`avg(total_price) WHERE sale_date >= '2026-01-01'` is entitled to skip."
-            ).callout(kind="info"),
-            run_rowgroup,
+                "Labels: how many times faster the column layout was. As $C$ grows the row layout slows and the "
+                "column layout stays put: $\\text{IO}_{\\text{row}} / \\text{IO}_{\\text{col}} = C/k$ with $k = 1$, "
+                "a direction, not an exact ratio."
+            ),
+            mo.accordion({"Why: cache lines, and what Parquet adds": _why}),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return (run_rowgroup,)
+    )
+    return
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, static_table, tempfile):
-    mo.stop(not run_rowgroup.value, mo.md("Click **Run row-group audit** to read the index card.").callout(kind="neutral"))
+def _(SALES_SEED, box, diagram, mo, pd):
+    # The real sales in date order, cut into 420-sale sections like the audit below writes them.
+    _dates = pd.read_parquet(SALES_SEED, columns=["sale_date"])["sale_date"].sort_values().reset_index(drop=True)
+    _sections = [(_dates[_i : _i + 420].min(), _dates[_i : _i + 420].max()) for _i in range(0, len(_dates), 420)]
+    _cut = pd.Timestamp("2026-01-01")
+    _open = [_hi >= _cut for _lo, _hi in _sections]
+    _wanted = [1, 5]  # the date and price pages of the seven
+
+    _parts = [box(0, 0, "avg(total_price) WHERE sale_date &gt;= '2026-01-01'", cls="dg-tier")]
+    def _rect(x, y, w, h, lit):
+        """A section or a page: tier-coloured when the query opens it, faded when it stays shut."""
+        return f'<rect class="{"dg-tier" if lit else "dg-box"}" x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="3" opacity="{1 if lit else 0.45}"/>'
+
+    for _s, _lit in enumerate(_open):
+        _x = _s * 78
+        _parts.append(f'<text class="dg-muted" x="{_x + 34}" y="88" text-anchor="middle">section {_s}</text>')
+        _parts.append(_rect(_x, 98, 68, 190, _lit))
+        # seven pages per section; in an opened section only the two the query needs come out
+        _parts += [_rect(_x + 5 + _p * 8.5, 106, 7, 174, _lit and _p in _wanted) for _p in range(7)]
+    # the index card: one line per section, smallest and largest date
+    _parts.append('<rect class="dg-box" x="680" y="60" width="380" height="252" rx="10"/>')
+    _parts.append('<text x="700" y="88" font-weight="700">index card (Parquet: footer)</text>')
+    for _s, (_lo, _hi) in enumerate(_sections):
+        _y = 116 + _s * 24
+        _parts.append(f'<text x="700" y="{_y}" font-family="monospace" font-size="15">{_s}  {_lo:%Y-%m-%d} .. {_hi:%Y-%m-%d}</text>')
+        _parts.append(
+            f'<text class="{"dg-ok" if _open[_s] else "dg-muted"}" x="1044" y="{_y}" text-anchor="end">'
+            f'{"open" if _open[_s] else "skip"}</text>'
+        )
+    _first_open = _open.index(True)
+    _parts.append('<path class="dg-edge" d="M406 22 H 870 V 54"/>')
+    _parts.append('<text class="dg-muted" x="640" y="14" text-anchor="middle">read the card first</text>')
+    _parts.append(f'<path class="dg-edge dg-ok" d="M676 {110 + _first_open * 24} H {_first_open * 78 + 74}"/>')
+    _parts.append(
+        f'<text class="dg-muted" x="0" y="314">{_open.count(False)} sections stay closed; '
+        f"each opened one gives up 2 of its 7 pages</text>"
+    )
+    _binder = diagram(
+        "".join(_parts),
+        width=1060,
+        height=326,
+        label=f"A binder of {len(_sections)} sections of 420 sales, seven pages each. The index card lists each "
+        f"section's first and last date; only sections whose last date reaches 2026 are opened, and only their "
+        f"date and price pages are taken out.",
+        tier="data",
+    )
+    _fences = mo.md(
+        """
+    - The card can prove a section is **hopeless**. It can never prove a section is **useful**. A
+      section labelled <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened,
+      and may hold no 2026 sale at all. Min and max are a rejection test, not a search.
+    - Sections 0 to 6 are skipped not *probably* but **provably**: their latest date is earlier than
+      your earliest, so no page inside them can hold a 2026 sale.
+    - The order rows were written in is not cosmetic. Drop the sales into the binder in random order
+      and every section's card spans everything, every label is useless, and you open all eight. The
+      mechanism did not fail; you gave it nothing to work with. The next lab measures exactly that.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>The Binder and the Index Card</h3>
+      <p>The ledger is really a <strong>binder</strong>: sections of 420 sales (Parquet: <strong>row groups</strong>),
+      one page per field in each, and an <strong>index card</strong> at the back with each section's smallest
+      and largest value (Parquet: <strong>column statistics</strong>).</p>
+      {_binder}
+      <p class="vis-caption"><strong>That is how a program skips data it never read: it read the index card.</strong>
+      The card can only say "no match here", so the order the rows were written in decides how much it can skip.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"Two fences: what the card can and cannot prove": _fences}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mo, pd, tempfile, tier_chart):
     _df = pd.read_parquet(SALES_SEED)
     _cut = "2026-01-01"
     _wanted = ["sale_date", "total_price"]
+    _steps = ["A: all columns", "B: 2 columns", "C: 2 columns, open sections"]
 
     with tempfile.TemporaryDirectory() as _td:
         _ordered = Path(_td) / "date_ordered.parquet"
@@ -1705,53 +2028,112 @@ def _(Path, SALES_SEED, duckdb, mo, pd, run_rowgroup, static_table, tempfile):
         _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
 
         _con = duckdb.connect()
-        _rows = []
+        _rows, _cards = [], {}
         _ordered_size, _shuffled_size = _ordered.stat().st_size, _shuffled.stat().st_size
         for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
             _md = _con.execute(
-                "SELECT row_group_id, path_in_schema, total_compressed_size, stats_max "
+                "SELECT row_group_id, path_in_schema, total_compressed_size, stats_min, stats_max "
                 f"FROM parquet_metadata('{_path.as_posix()}')"
             ).df()
             _two_cols = _md[_md["path_in_schema"].isin(_wanted)]
             # The index card: a section survives only if its LATEST date reaches the cut-off.
-            _dates = _md[_md["path_in_schema"] == "sale_date"]
+            _dates = _md[_md["path_in_schema"] == "sale_date"].sort_values("row_group_id")
             _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"]
+            _cards[_label] = list(zip(_dates["stats_min"].str[:7], _dates["stats_max"].str[:7], _dates["stats_max"] >= _cut))
             _answer = _con.execute(
                 f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
             ).fetchone()[0]
             _rows.append(
                 {
                     "file": _label,
-                    "A: all columns": int(_md["total_compressed_size"].sum()),
-                    "B: 2 columns": int(_two_cols["total_compressed_size"].sum()),
-                    "C: 2 columns, open sections": int(
-                        _two_cols[_two_cols["row_group_id"].isin(_live)]["total_compressed_size"].sum()
-                    ),
+                    _steps[0]: int(_md["total_compressed_size"].sum()),
+                    _steps[1]: int(_two_cols["total_compressed_size"].sum()),
+                    _steps[2]: int(_two_cols[_two_cols["row_group_id"].isin(_live)]["total_compressed_size"].sum()),
                     "opened": f"{len(_live)} of {_md['row_group_id'].nunique()}",
                     "answer": _answer,
                 }
             )
+        _con.close()
 
+    # One strip per file: every section with its date range, opened (tier) or skipped (grey).
+    _strip = []
+    for _r, (_label, _card) in enumerate(_cards.items()):
+        _y = _r * 76
+        _opened = sum(_open for *_, _open in _card)
+        _strip.append(f'<text x="0" y="{_y + 24}" font-weight="700">{_label}</text>')
+        _strip.append(
+            f'<text class="{"dg-hot" if _opened == len(_card) else "dg-ok"}" x="0" y="{_y + 48}">opened {_opened} of {len(_card)}</text>'
+        )
+        for _s, (_lo, _hi, _open) in enumerate(_card):
+            _x = 170 + _s * 111
+            _strip.append(
+                f'<rect class="{"dg-tier" if _open else "dg-box"}" x="{_x}" y="{_y}" width="104" height="60" rx="10"/>'
+                f'<text x="{_x + 52}" y="{_y + 25}" text-anchor="middle">{_lo}</text>'
+                f'<text class="dg-muted" x="{_x + 52}" y="{_y + 49}" text-anchor="middle">to {_hi}</text>'
+            )
+    _strip_svg = diagram(
+        "".join(_strip),
+        width=1060,
+        height=136,
+        label=f"Date-ordered file: sections each span three months and {_rows[0]['opened']} are opened. "
+        f"Shuffled file: every section spans the whole range and {_rows[1]['opened']} are opened.",
+        tier="data",
+    )
+
+    _bars = pd.DataFrame([{"file": _r["file"], "read": _s, "bytes": _r[_s]} for _r in _rows for _s in _steps])
+    _bars["label"] = [format_bytes(_b) for _b in _bars["bytes"]]
+    # red where the index card bought nothing: step C still reads everything step B read
+    _bars["nothing skipped"] = [
+        _s == _steps[2] and _r[_steps[2]] == _r[_steps[1]] for _r in _rows for _s in _steps
+    ]
+    _x = alt.X("bytes:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _bars["bytes"].max() * 1.3]))
+    _charts = []
+    for _i, _file in enumerate(["date-ordered", "shuffled"]):
+        _base = alt.Chart(_bars[_bars["file"] == _file]).encode(
+            y=alt.Y("read:N", sort=None, title=None, axis=alt.Axis(labelLimit=260) if _i == 0 else None),
+            x=_x,
+            tooltip=["file:N", "read:N", "bytes:Q"],
+        )
+        _charts.append(
+            (
+                _base.mark_bar(cornerRadiusEnd=4).encode(
+                    color=alt.condition("datum['nothing skipped']", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+                )
+                + _base.mark_text(align="left", dx=6).encode(text="label:N")
+            ).properties(width=300, height=150, title=f"{_file} file: bytes the query must read")
+        )
     _sorted, _mixed = _rows
-    _note = mo.md(
+    _notes = mo.md(
         f"""
-    Read the top row left to right. Choosing columns took the read from **{_sorted['A: all columns']:,}**
-    bytes to **{_sorted['B: 2 columns']:,}**. That is what this chapter has taught so far. The index card
-    then took it from {_sorted['B: 2 columns']:,} to **{_sorted['C: 2 columns, open sections']:,}**, and
-    nobody wrote that in the query.
+    - These are bytes the engine is *entitled to skip*, computed from the file's own footer, not
+      bytes measured leaving the disk.
+    - The shuffled file is also {_shuffled_size / _ordered_size - 1:.0%} larger ({_shuffled_size:,} against
+      {_ordered_size:,} bytes) from the very same rows: a preview of chapter 4, where order is itself a
+      form of compression.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    ### Mini-lab: Which Sections Did We Open?
 
-    Now read the second row. Identical data, identical query, rows written in a different order,
-    and the index card buys **nothing**: {_mixed['opened']} sections opened, because every
-    label spans the whole range. Sorting is not tidying. It is what makes the skipping possible.
-
-    Two honesty notes. These are bytes the engine is *entitled to skip*, computed from the file's
-    own footer, not bytes measured leaving the disk. And the shuffled file is also
-    {_shuffled_size / _ordered_size - 1:.0%} larger ({_shuffled_size:,} against {_ordered_size:,} bytes)
-    from the very same rows, which is a preview of chapter 4: order is itself a form of compression.
-    Both files return the same answer, which is the point.
-            """
-    ).callout(kind="info")
-    mo.vstack([static_table(_rows, label="Bytes the query must read"), _note], gap=0.6)
+    The 3,360 real sales written twice in 420-row sections, in date order and shuffled. Each file's own
+    index card says what `avg(total_price) WHERE sale_date >= '{_cut}'` may skip.
+                """
+            ),
+            _strip_svg,
+            chart_or_table(tier_chart(alt.hconcat(*_charts, spacing=30), "data"), _rows, label="Bytes the query must read"),
+            mo.md(
+                f"Choosing columns took the date-ordered read from **{_sorted[_steps[0]]:,}** to "
+                f"**{_sorted[_steps[1]]:,}** bytes; the index card took it to **{_sorted[_steps[2]]:,}**, and nobody "
+                f"wrote that in the query. Shuffled, the card buys **nothing**: {_mixed['opened']} opened. "
+                f"Both answer **{_sorted['answer']:,.2f}**."
+            ).callout(kind="info"),
+            mo.accordion({"Two honesty notes": _notes}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -1761,16 +2143,19 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Row vs Column Storage</h3>
       <details>
-        <summary><strong>Q1:</strong> When is a row store a better choice?</summary>
-        <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions that read or write full records (OLTP workloads = Online Transaction Processing).</p>
+        <summary><strong>Q1:</strong> When is a row store the better choice?</summary>
+        <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions on whole records (OLTP,
+        Online Transaction Processing).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> How does reading only needed columns help?</summary>
-        <p><strong>Answer:</strong> Unused columns are skipped, which reduces I/O and speeds up scans. This is called projection pushdown (applying column selection early in query execution).</p>
+        <summary><strong>Q2:</strong> How does reading only the needed columns help?</summary>
+        <p><strong>Answer:</strong> Unused columns are never read, so scans move less data. This is projection
+        pushdown: the column choice applied as early as possible.</p>
       </details>
       <details>
         <summary><strong>Q3:</strong> Why does write order matter for Parquet?</summary>
-        <p><strong>Answer:</strong> Min/max can only exclude a row group whose range misses the filter. Sorted data gives narrow ranges; shuffled data gives every group the full range.</p>
+        <p><strong>Answer:</strong> Min/max can only exclude a row group whose range misses the filter. Sorted
+        data gives narrow ranges; shuffled data gives every group the full range.</p>
       </details>
     </div>
     """)
@@ -1783,10 +2168,10 @@ def _(mo):
         """
     ### Chapter 3 Conclusion
 
-    - Row layouts favour transactional record-level access; column layouts favour scans and aggregates.
-    - Reading only required columns cuts I/O and typically improves analytics performance.
-    - Parquet keeps min/max per row group in its footer. Sorted by date, the footer lets the query
-      skip 7 of 8 row groups; shuffled, none.
+    - Row layouts suit record-level transactions; column layouts suit scans and aggregates.
+    - Reading only the columns you need cuts I/O.
+    - Parquet keeps min/max per row group in its footer: sorted by date, the query skips 7 of 8 row
+      groups; shuffled, none.
             """
     ).callout(kind="success")
     return
@@ -1798,85 +2183,95 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Columnar data puts similar values together, and similar values are easier to compress.
-    Next we measure how much size reduction we can actually get.
+    A column puts similar values side by side, and similar values compress well. Next: how much
+    smaller does it get, and at what cost?
             """
     ).callout(kind="neutral")
     return
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 4. Compression & Encoding (Parquet, Gzip)
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 4. Compression & Encoding (Parquet, Gzip)"),
+            chapter_intro(
+                "data",
+                "Will compression cut total query time, not only file size?",
+                "Chapter 3 put similar values side by side, which is exactly what makes them squeeze well.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 4 Introduction
+def _(diagram, mo):
+    # A sketch of the timing model, not a measurement: segment lengths only show which term grows.
+    _amber = ' style="fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.5"'
+    _kinds = {"read": ' class="dg-tier"', "unpack": _amber, "compute": ' class="dg-box"'}
 
-    > **Key Question:** Will compression reduce total query time, not only file size?
+    def _bar(y, name, parts, verdict=""):
+        x, out = 190, [f'<text x="0" y="{y + 25}">{name}</text>']
+        for kind, w in parts:
+            out.append(f'<rect{_kinds[kind]} x="{x}" y="{y}" width="{w}" height="38" rx="6"/>')
+            if w >= 70:
+                out.append(f'<text x="{x + w / 2:.0f}" y="{y + 25}" text-anchor="middle">{kind}</text>')
+            x += w + 3
+        return "".join(out) + verdict.format(x=x + 12, y=y + 25)
 
-    *Still in the **data tier**. Chapter 3 put similar values next to each other, which is exactly what makes them squeeze well.*
+    _faster = '<text class="dg-ok" x="{x}" y="{y}">&#10003; faster</text>'
+    _slower = '<text class="dg-hot" x="{x}" y="{y}">&#10007; slower</text>'
+    _sketch = diagram(
+        '<text x="0" y="20" font-weight="700">slow disk or network: reading bytes dominates</text>'
+        + _bar(36, "plain", [("read", 520), ("compute", 120)])
+        + _bar(82, "compressed", [("read", 190), ("unpack", 110), ("compute", 120)], _faster)
+        + '<text x="0" y="160" font-weight="700">file already in memory, or the CPU already busy</text>'
+        + _bar(176, "plain", [("read", 40), ("compute", 120)])
+        + _bar(222, "compressed", [("read", 16), ("unpack", 110), ("compute", 120)], _slower),
+        width=1000,
+        height=270,
+        label="A sketch: with a slow disk or network, compression shrinks the read time more than unpacking adds, so the "
+        "total shrinks. With the file already in memory there is little read time to save, and unpacking makes it slower.",
+        tier="data",
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>What Compression Trades</h3>
+      {_sketch}
+      <p class="vis-caption">A sketch, not a measurement: <strong>compression trades CPU for I/O</strong>,
+      and pays only when moving bytes is expensive.</p>
+    </div>
+                """
+            ),
+            mo.md(
+                """
+    $T_{\\text{total}} \\approx T_{\\text{io}} + T_{\\text{decompress}} + T_{\\text{compute}}$, and the
+    compression ratio $r = \\text{compressed size} / \\text{original size}$ (savings $= 1 - r$).
 
-    Compression is not just about saving disk space.
-    It usually also reduces how much data must travel from disk to CPU.
-
-    Two quick checks:
-
-    - Is the workload I/O-bound (limited by data transfer from storage)? Compression helps more.
-    - Is CPU already saturated? Heavy codecs can hurt latency.
-
-    Quick timing model:
-
-    $$
-    T_{\\text{total}} \\approx T_{\\text{io}} + T_{\\text{decompress}} + T_{\\text{compute}}
-    $$
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Compression & Encoding
-
-    Compression ratio (lower is better):
-
-    $$
-    r = \\frac{\\text{compressed size}}{\\text{original size}}
-    \\qquad
-    \\text{savings} = 1 - r
-    $$
-
-    We compare JSON/CSV to gzip and Parquet with different codecs.
-
-    **Compression level.** gzip takes a level from 1 (fast, saves less) to 9 (slow, saves most).
-    The `gzip` tool and zlib default to 6; Python's `gzip.compress` defaults to 9. Going from 6
-    to 9 buys almost nothing while the CPU cost roughly doubles. Watch the level rows in the
-    benchmark and the timing lab below.
-            """
-    ).callout(kind="neutral")
+    **gzip levels:** 1 is fast and saves less, 9 slow and saves most. The `gzip` tool and zlib default
+    to 6, Python's `gzip.compress` to 9.
+                """
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
     budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)", show_value=True, debounce=True)
-    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio", show_value=True, debounce=True)
+    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio r", show_value=True, debounce=True)
     budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day", show_value=True, debounce=True)
     mo.vstack(
         [
-            mo.md("### Mini-lab: Compression Cost Impact"),
-            mo.hstack([budget_size_gb, budget_ratio], widths="equal"),
-            budget_scans_day,
-            mo.md("Set the compression ratio and scan frequency to estimate the I/O saved per day. A first-order estimate, not a benchmark.").callout(kind="info"),
+            mo.md("### Mini-lab: Compression Cost Impact (an Estimate)"),
+            mo.hstack([budget_size_gb, budget_ratio, budget_scans_day], widths="equal"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -1884,16 +2279,40 @@ def _(mo):
 
 
 @app.cell
-def _(budget_ratio, budget_scans_day, budget_size_gb, mo):
+def _(TIER, alt, budget_ratio, budget_scans_day, budget_size_gb, mo, pd, tier_chart):
     _on_disk = budget_size_gb.value * budget_ratio.value
     _saved = budget_size_gb.value - _on_disk
-    mo.hstack(
+    _day = pd.DataFrame(
+        {
+            "stored": ["plain", "compressed"],
+            "GB read per day": [budget_size_gb.value * budget_scans_day.value, _on_disk * budget_scans_day.value],
+        }
+    )
+    _day["label"] = [f"{_gb:,.0f} GB" for _gb in _day["GB read per day"]]
+    _base = alt.Chart(_day).encode(
+        y=alt.Y("stored:N", sort=None, title=None),
+        x=alt.X("GB read per day:Q", title="GB read per day", scale=alt.Scale(domain=[0, _day["GB read per day"].max() * 1.2])),
+        tooltip=["stored:N", "GB read per day:Q"],
+    )
+    _bars = (
+        _base.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.Color("stored:N", legend=None, scale=alt.Scale(domain=["plain", "compressed"], range=[TIER["muted"], TIER["data"]]))
+        )
+        + _base.mark_text(align="left", dx=6).encode(text="label:N")
+    ).properties(width="container", height=110)
+    mo.vstack(
         [
-            mo.stat(f"{_on_disk:,.1f} GB", label="On disk after compression", bordered=True),
-            mo.stat(f"{_saved:,.1f} GB", label="Less to read per full scan", bordered=True),
-            mo.stat(f"{_saved * budget_scans_day.value:,.1f} GB", label="Less I/O per day", bordered=True),
+            mo.hstack(
+                [
+                    mo.stat(f"{_on_disk:,.1f} GB", label="On disk after compression", bordered=True),
+                    mo.stat(f"{_saved:,.1f} GB", label="Less to read per full scan", bordered=True),
+                    mo.stat(f"{_saved * budget_scans_day.value:,.1f} GB", label="Less I/O per day", bordered=True),
+                ],
+                widths="equal",
+            ),
+            tier_chart(_bars, "data"),
         ],
-        widths="equal",
+        gap=0.6,
     )
     return
 
@@ -1903,8 +2322,7 @@ def _(mo):
     mo.Html(
         """
     <div class="disclaimer-red">
-      Disclaimer: PCA will be discussed in depth in the <strong>Machine Learning 2</strong> module.
-      Here it is only used as a simple example to illustrate compression ideas.
+      Disclaimer: PCA is covered in depth in <strong>Machine Learning 2</strong>; here it only illustrates compression.
     </div>
             """
     )
@@ -1913,25 +2331,25 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    image_demo_rank = mo.ui.slider(4, 90, value=26, step=2, label="Components kept (rank k)", show_value=True, debounce=True)
+    ch4_k_range = (4, 90, 2)  # first, last, step: the slider below and the curve the lab draws
+    image_demo_rank = mo.ui.slider(*ch4_k_range, value=26, label="Components kept (rank k)", show_value=True, debounce=True)
     image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True, debounce=True)
     mo.vstack(
         [
             mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
             mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
             mo.md(
-                "Left is the original cat. Right is rebuilt from only the top `k` singular vectors per colour channel "
-                "(rank-k SVD, the maths behind PCA)."
-            ).callout(kind="info"),
-            mo.md("Further details: [Principal Component Analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis)").callout(kind="neutral"),
+                "Rebuilt from the top `k` singular vectors per colour channel: rank-k SVD, the maths behind "
+                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis)."
+            ),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    return image_demo_rank, image_demo_width
+    return ch4_k_range, image_demo_rank, image_demo_width
 
 
 @app.cell
-def _(Image, ImageDraw, image_demo_width, np):
+def _(Image, ImageDraw, ch4_k_range, image_demo_width, io, np):
     # Drawn here, so the lab needs no image file. This cell reads only the width: dragging k
     # reuses the SVD below instead of redoing it.
     _w = image_demo_width.value
@@ -1982,106 +2400,121 @@ def _(Image, ImageDraw, image_demo_width, np):
     ch4_cat = np.asarray(_img)
     # One SVD per colour channel, run as a batch of three. It is the slow step, so once per width.
     ch4_cat_svd = np.linalg.svd(ch4_cat.transpose(2, 0, 1) / 255.0, full_matrices=False)
-    return ch4_cat, ch4_cat_svd
+
+    # Every k the slider offers, done once per width: what PCA has to store (the kept factors as float16,
+    # compressed) and how far the rebuilt pixels land from the original on average.
+    _u, _s, _vt = ch4_cat_svd
+    _first, _last, _step_k = ch4_k_range
+    ch4_cat_curve = []
+    for _k in range(_first, _last + 1, _step_k):
+        _kept = (_u[:, :, :_k], _s[:, :_k], _vt[:, :_k])
+        _buf = io.BytesIO()
+        np.savez_compressed(_buf, *(_m.astype(np.float16) for _m in _kept))
+        _back = np.rint(np.clip((_kept[0] * _kept[1][:, None]) @ _kept[2], 0, 1) * 255)
+        ch4_cat_curve.append(
+            {
+                "k": _k,
+                "PCA bytes": _buf.getbuffer().nbytes,
+                "average pixel off by": round(float(np.abs(_back - ch4_cat.transpose(2, 0, 1)).mean()), 2),
+            }
+        )
+    return ch4_cat, ch4_cat_curve, ch4_cat_svd
 
 
 @app.cell
-def _(ch4_cat, ch4_cat_svd, gzip, image_demo_rank, io, mo, np, static_table):
+def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagram, gzip, image_demo_rank, mo, np, pd, tier_chart):
     _k = image_demo_rank.value
     _u, _s, _vt = ch4_cat_svd
-    _u, _s, _vt = _u[:, :, :_k], _s[:, :_k], _vt[:, :_k]
-    _rebuilt = np.rint(np.clip((_u * _s[:, None]) @ _vt, 0, 1) * 255).astype(np.uint8).transpose(1, 2, 0)
-    _pca = io.BytesIO()  # what the lossy method has to store: the kept factors, as float16
-    np.savez_compressed(_pca, *(_m.astype(np.float16) for _m in (_u, _s, _vt)))
+    _rebuilt = np.rint(np.clip((_u[:, :, :_k] * _s[:, None, :_k]) @ _vt[:, :_k], 0, 1) * 255).astype(np.uint8).transpose(1, 2, 0)
+    _pca_bytes = next(_row["PCA bytes"] for _row in ch4_cat_curve if _row["k"] == _k)
     _gz = gzip.compress(ch4_cat.tobytes(), 6)
     _gz_back = np.frombuffer(gzip.decompress(_gz), np.uint8).reshape(ch4_cat.shape)
 
-    _table = static_table(
-        [
-            {
-                "method": _method,
-                "bytes": _size,
-                "ratio (compressed/raw)": round(_size / ch4_cat.nbytes, 4),
-                "identical to the original?": "yes" if np.array_equal(_back, ch4_cat) else "no",
-                "worst pixel off by (of 255)": int(np.abs(_back.astype(int) - ch4_cat).max()),
-            }
-            for _method, _size, _back in (
-                ("gzip (lossless method)", len(_gz), _gz_back),
-                (f"PCA k={_k} (lossy method)", len(_pca.getvalue()), _rebuilt),
-            )
-        ],
-        label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression",
+    _rows = [
+        {
+            "method": _method,
+            "bytes": _size,
+            "ratio (compressed/raw)": round(_size / ch4_cat.nbytes, 4),
+            "identical to the original?": "yes" if np.array_equal(_back, ch4_cat) else "no",
+            "worst pixel off by (of 255)": int(np.abs(_back.astype(int) - ch4_cat).max()),
+        }
+        for _method, _size, _back in (
+            ("gzip (lossless method)", len(_gz), _gz_back),
+            (f"PCA k={_k} (lossy method)", _pca_bytes, _rebuilt),
+        )
+    ]
+
+    _curve = pd.DataFrame(ch4_cat_curve)
+    _x = alt.X("k:Q", title="components kept (k)")
+    _here = _curve[_curve["k"] == _k]
+
+    def _panel(field, title, dy, *extra):
+        """One curve over k, with today's k as a dot labelled dy px above (-) or below (+) it."""
+        line = alt.Chart(_curve).mark_line(strokeWidth=3).encode(x=_x, y=alt.Y(f"{field}:Q", title=None), tooltip=["k:Q", f"{field}:Q"])
+        dot = alt.Chart(_here).mark_circle(size=220, opacity=1).encode(x=_x, y=f"{field}:Q")
+        label = alt.Chart(_here).mark_text(align="left", dx=12, dy=dy).encode(x=_x, y=f"{field}:Q", text=alt.value(f"k = {_k}"))
+        return alt.layer(line, dot, label, *extra).properties(width=400, height=220, title=title)
+
+    _gzip_line = alt.Chart(pd.DataFrame({"bytes": [len(_gz)], "text": [f"gzip, lossless: {len(_gz):,} bytes"]}))
+    _gzip_rule = _gzip_line.mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(y="bytes:Q") + _gzip_line.mark_text(
+        align="right", x="width", dy=-8
+    ).encode(y="bytes:Q", text="text:N")
+    _charts = alt.hconcat(
+        _panel("PCA bytes", "Bytes PCA has to store", 16, _gzip_rule),
+        _panel("average pixel off by", "Average pixel off by (of 255)", -14),
+        spacing=40,
     )
-    _note = mo.md(
-        """
-    **Two different promises, and confusing them is expensive.**
 
-    **Lossless** is a letter folded to fit an envelope. Every word is still there; unfold it and
-    you get the original back exactly, byte for byte. gzip, PNG and Parquet are lossless. This is
-    the only kind you may use on money.
-
-    **Lossy** is a summary. Usually much smaller, still useful, and the original is gone forever.
-    PCA here, JPEG and MP3 in the world. Fine for a photo, where nobody can tell. Never fine for a
-    price.
-
-    The last two columns are the whole difference: gzip *promises* an exact copy, PCA only a
-    close one (push `k` high enough and close can round to exact, but nothing promised it). Notice
-    which row is actually smaller, too. On this image the lossless method wins, because a smooth
-    drawing repeats itself enormously and repetition is exactly what lossless compression removes.
-            """
-    ).callout(kind="info")
-    _pipeline = mo.Html(
-        """
-    <div class="section-card flow-card">
-      <div class="flow-diagram">
-        <div class="flow-box">Image as 3 matrices (R, G, B)</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Keep the top k components</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Rebuilt image</div>
-      </div>
+    _pipeline = diagram(
+        box(0, 8, "image: 3 matrices (R, G, B)")
+        + '<path class="dg-edge" d="M262 30 H 318"/>'
+        + box(324, 8, f"keep the top k = {_k} components", cls="dg-tier")
+        + f'<path class="dg-edge" d="M{324 + 300} 30 H {324 + 356}"/>'
+        + box(686, 8, "rebuilt image"),
+        width=860,
+        height=60,
+        label=f"The image as three colour matrices, of which only the top {_k} components are kept, then rebuilt.",
+        tier="data",
+    )
+    _pca_wins = _pca_bytes < len(_gz)
+    mo.vstack(
+        [
+            _pipeline,
+            mo.hstack(
+                [
+                    mo.image(ch4_cat, width="100%", caption="Original"),
+                    mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
+                ],
+                widths="equal",
+                gap=0.8,
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Lossless: a folded letter</div>
+        <p>Unfold it: every word is back. gzip, PNG, Parquet. The only kind for money.</p></div>
+      <div class="tile"><div class="tile-key">&asymp;</div><div class="tile-title">Lossy: a summary</div>
+        <p>Smaller, still useful, the original gone. PCA, JPEG, MP3. Never for a price.</p></div>
     </div>
-        """
-    )
-    _images = mo.hstack(
-        [
-            mo.image(ch4_cat, width="100%", caption="Original"),
-            mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
+                """
+            ),
+            chart_or_table(tier_chart(_charts, "data"), _rows, label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression"),
+            mo.md(
+                f"**At k = {_k} the {'PCA' if _pca_wins else 'gzip'} file is smaller**"
+                + (
+                    ", but only gzip gives back the exact image."
+                    if _pca_wins
+                    else ": a smooth drawing repeats itself, and lossless compression removes repetition."
+                )
+            ),
         ],
-        widths="equal",
-        gap=0.8,
+        gap=0.6,
     )
-    mo.vstack([_pipeline, _images, _table, _note], gap=0.6)
     return
 
 
 @app.cell
-def _(mo):
-    run_lossy_money = mo.ui.run_button(label="Run lossy vs lossless on money", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: The Cat Trick, Applied to Sales Prices"),
-            mo.md(
-                """
-    Blurring a cat is fine because nobody can tell. So try the same idea on the real sales file:
-    store the prices less precisely and see how much smaller it gets.
-
-    **Predict first.** Which file is smallest, and which ones still add up to the right total?
-                """
-            ).callout(kind="info"),
-            run_lossy_money,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return (run_lossy_money,)
-
-
-@app.cell
-def _(SALES_SEED, io, mo, pd, run_lossy_money, static_table):
-    mo.stop(
-        not run_lossy_money.value,
-        mo.md("Write your prediction down, then click **Run lossy vs lossless on money**.").callout(kind="neutral"),
-    )
+def _(SALES_SEED, TIER, alt, chart_or_table, io, mo, pd, tier_chart):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
     _truth = round(float(_src["total_price"].sum()), 2)
     _rows = []
@@ -2105,69 +2538,71 @@ def _(SALES_SEED, io, mo, pd, run_lossy_money, static_table):
         )
     _exact, _exact_gz, *_, _hundred = (_row["bytes"] for _row in _rows)
 
-    _note = mo.md(
+    _df = pd.DataFrame(_rows)
+    _df["verdict"] = [f"total off by {_off:+,.2f}" if _off else "exact total" for _off in _df["off by"]]
+    _base = alt.Chart(_df).encode(
+        y=alt.Y("how the prices are stored:N", sort=None, title=None, axis=alt.Axis(labelLimit=280)),
+        x=alt.X("bytes:Q", title="file size (bytes)", scale=alt.Scale(domain=[0, _df["bytes"].max() * 1.6])),
+        tooltip=list(_rows[0]),
+    )
+    _chart = (
+        _base.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.condition("datum['off by'] != 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+        )
+        + _base.mark_text(align="left", dx=6).encode(text="verdict:N")
+    ).properties(width="container", height=48 * len(_df), title="Smaller files, wrong totals")
+
+    _more = mo.md(
         f"""
     **The lossy files really are smaller.** Rounding to the nearest 100 francs cuts another
-    {1 - _hundred / _exact_gz:.0%} off the gzipped file, a bigger win than gzip itself managed on
-    the exact data ({1 - _exact_gz / _exact:.0%}).
+    {1 - _hundred / _exact_gz:.0%} off the gzipped file, a bigger win than gzip itself managed on the exact
+    data ({1 - _exact_gz / _exact:.0%}). The true total is `{_truth:,.2f}`; every lossy row reports a
+    different number, the file loads cleanly, the column is still a decimal, and every tool downstream is
+    perfectly happy. Nobody minds a cat whose pixels are a few shades off; every accountant sees a total
+    that is off by hundreds of francs, and by then the original is gone.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Mini-lab: The Cat Trick, Applied to Sales Prices
 
-    **And the last column is why nobody does this.** The true total is
-    `{_truth:,.2f}`. Every lossy row reports a different number, and none of them is flagged: the
-    file loads cleanly, the column is still a decimal, every tool downstream is perfectly happy.
-
-    This is the same trick that was completely acceptable on the cat. The difference is not the
-    technique, it is **what the numbers mean**. Nobody minds a cat whose pixels are a few shades
-    off on average. Every accountant can see a total that is off by hundreds of francs, and by
-    then the original is gone.
-
-    So the rule is not "lossy compression is bad". It is: **lossy compression is a decision about
-    whether an approximation of this particular value is still the truth you need.** For a photo,
-    usually yes. For money, an identifier or a date, never.
-            """
-    ).callout(kind="danger")
-    mo.vstack([static_table(_rows, label=f"Same {len(_src):,} prices, stored five ways"), _note], gap=0.6)
+    Store the real prices less precisely. **Which file is smallest, and which still adds up?**
+                """
+            ),
+            chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Same {len(_src):,} prices, stored five ways"),
+            mo.md(
+                "**Same trick, different meaning.** Is an approximation of *this* value still the truth you need? "
+                "For a photo, usually. For money, an identifier or a date, never."
+            ).callout(kind="danger"),
+            mo.accordion({"How much smaller, and why nobody notices": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows", show_value=True)
-    compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns", show_value=True)
+    compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows", show_value=True, debounce=True)
+    compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns", show_value=True, debounce=True)
     ch4_compress_repeat = mo.ui.switch(label="Only 5 distinct values per column")
-    run_compress = mo.ui.run_button(label="Run compression benchmark", kind="success")
     mo.vstack(
         [
             mo.md("### Mini-lab: Which Format Is Smallest?"),
             mo.md(
-                "**Predict first.** JSON, CSV, gzip or Parquet: which one wins? "
-                "Would your answer change if every column held only five different values?"
-            ).callout(kind="info"),
-            mo.hstack([compress_rows, compress_cols], widths="equal"),
-            ch4_compress_repeat,
-            run_compress,
+                "**Predict first:** JSON, CSV, gzip or Parquet? And if every column held only five values? Flip the switch."
+            ),
+            mo.hstack([compress_rows, compress_cols, ch4_compress_repeat], widths="equal", align="center"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
-    return ch4_compress_repeat, compress_cols, compress_rows, run_compress
+    return ch4_compress_repeat, compress_cols, compress_rows
 
 
 @app.cell
-def _(
-    ch4_compress_repeat,
-    compress_cols,
-    compress_rows,
-    csv,
-    gzip,
-    io,
-    json,
-    mo,
-    pa,
-    pq,
-    random,
-    run_compress,
-    static_table,
-):
-    mo.stop(not run_compress.value, mo.md("Click **Run compression benchmark** to execute.").callout(kind="neutral"))
+def _(TIER, alt, ch4_compress_repeat, chart_or_table, compress_cols, compress_rows, csv, gzip, io, json, mo, pa, pd, pq, random, tier_chart):
     _rng = random.Random(11)  # fixed seed: the same settings always give the same table
     _pool = [round(_rng.random() * 1000, 5) for _ in range(5)]
 
@@ -2196,29 +2631,36 @@ def _(
 
     _smallest = min(_sizes.values())
     _best = " and ".join(_name for _name, _size in _sizes.items() if _size == _smallest)  # ties happen: gzip 6 and 9
-    _note = mo.md(
-        f"""
-    **Smallest here: {_best}**, at {_smallest / _sizes['JSON']:.0%} of the JSON bytes.
+    _rows = [{"format": _name, "size (bytes)": _size, "ratio vs JSON": round(_size / _sizes["JSON"], 4)} for _name, _size in _sizes.items()]
+    _df = pd.DataFrame(_rows)
+    _df["smallest"] = _df["size (bytes)"] == _smallest
+    _df["label"] = [f"{_r:.1%} of JSON" for _r in _df["ratio vs JSON"]]
+    _base = alt.Chart(_df).encode(
+        y=alt.Y("format:N", sort=None, title=None),
+        x=alt.X("size (bytes):Q", title="bytes", scale=alt.Scale(domain=[0, _df["size (bytes)"].max() * 1.25])),
+        tooltip=list(_rows[0]),
+    )
+    _chart = (
+        _base.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.smallest", alt.value(TIER["data"]), alt.value(TIER["muted"])))
+        + _base.mark_text(align="left", dx=6).encode(text="label:N")
+    ).properties(width="container", height=30 * len(_df), title="Same records, twelve ways")
 
-    The `ratio vs JSON` column is size ÷ JSON size: 0.25 means a quarter of the bytes to read from disk or network.
-
-    **And why the ranking is not a law.** Compression removes **repetition**, so the winner
-    depends on your columns, not on the format's reputation. Distinct 5-decimal measurements
-    hold almost none: Parquet stores each one as 8 bytes of float64, while gzipped text pays only
-    for the digits you wrote. Five repeated values per column are exactly what Parquet's
-    dictionary encoding lives on. At the default 2,000 rows x 6 columns, flipping the switch moves
-    the win from gzipped CSV to Parquet.
-
-    Nothing about Parquet changed. Before you pick a format, look at your columns.
+    _why = mo.md(
         """
-    ).callout(kind="info")
+    Distinct 5-decimal measurements hold almost no repetition: Parquet stores each one as 8 bytes of
+    float64, while gzipped text pays only for the digits you wrote. Five repeated values per column are
+    exactly what Parquet's dictionary encoding lives on. At the default 2,000 rows x 6 columns, flipping
+    the switch moves the win from gzipped CSV to Parquet. Nothing about Parquet changed.
+        """
+    )
     mo.vstack(
         [
-            static_table(
-                [{"format": _name, "size (bytes)": _size, "ratio vs JSON": round(_size / _sizes["JSON"], 4)} for _name, _size in _sizes.items()],
-                label="Compression ratios (baseline: JSON size)",
-            ),
-            _note,
+            chart_or_table(tier_chart(_chart, "data"), _rows, label="Compression ratios (baseline: JSON size)"),
+            mo.md(
+                f"**Smallest here: {_best}**, at {_smallest / _sizes['JSON']:.0%} of the JSON bytes. Compression removes "
+                "**repetition**: the winner depends on your columns, not the format's reputation."
+            ).callout(kind="info"),
+            mo.accordion({"Why the ranking flips": _why}),
         ],
         gap=0.6,
     )
@@ -2232,11 +2674,8 @@ def _(mo):
         [
             mo.md("### Mini-lab: Does Compression Make the Query *Faster*?"),
             mo.md(
-                "This chapter opened by asking whether compression cuts total query time, not just "
-                "file size. So far we have only measured size. Now we time the whole job on the sales "
-                "file already in memory: unpack it if needed, parse it, and sum one column. "
-                "Every time is the best of 5 bursts."
-            ).callout(kind="info"),
+                "Unpack, parse and sum one column of the sales file, already in memory. Best of 5 bursts."
+            ),
             run_ctime,
         ],
         gap=0.6,
@@ -2245,8 +2684,14 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, best_seconds, gzip, io, mo, pd, run_ctime, static_table):
-    mo.stop(not run_ctime.value, mo.md("Click **Run compression timing** to measure it.").callout(kind="neutral"))
+def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run_ctime, tier_chart):
+    mo.stop(
+        not run_ctime.value,
+        mo.md(
+            "**Predict first:** the gzipped file is far smaller. Is the query on it faster or slower? "
+            "Then click **Run compression timing**."
+        ).callout(kind="neutral"),
+    )
 
     _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
@@ -2281,39 +2726,78 @@ def _(SALES_SEED, best_seconds, gzip, io, mo, pd, run_ctime, static_table):
     else:
         _verdict = "**Here it is a wash:** unpacking costs about as much as the smaller file saves."
 
+    _df = pd.DataFrame(_rows)
+    _df["slower"] = _df["read + parse + sum (ms)"] > _plain_row["read + parse + sum (ms)"]
+    _query = alt.Chart(_df).encode(
+        y=alt.Y("variant:N", sort=None, title=None),
+        x=alt.X("read + parse + sum (ms):Q", title="ms", scale=alt.Scale(domain=[0, _df["read + parse + sum (ms)"].max() * 1.3])),
+        tooltip=["variant:N", "bytes:Q", "read + parse + sum (ms):Q", "vs plain:N"],
+    )
+    _answer_chart = (
+        _query.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.slower", alt.value(TIER["hot"]), alt.value(TIER["data"])))
+        + _query.mark_text(align="left", dx=6).encode(text="vs plain:N")
+        + alt.Chart(pd.DataFrame({"ms": [_plain]})).mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x="ms:Q")
+    ).properties(width=430, height=200, title="Time to answer (vs plain CSV)")
+    _levels = pd.DataFrame(_rows[1:])
+    _write = alt.Chart(_levels).encode(
+        y=alt.Y("variant:N", sort=None, title=None),
+        x=alt.X("compress (ms):Q", title="ms", scale=alt.Scale(domain=[0, _levels["compress (ms)"].max() * 1.3])),
+        tooltip=["variant:N", "bytes:Q", "compress (ms):Q", "decompress (ms):Q"],
+    )
+    _write_chart = (
+        _write.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _write.mark_text(align="left", dx=6).encode(text=alt.Text("compress (ms):Q", format=".1f"))
+    ).properties(width=260, height=150, title="Compress once (ms)")
+
     _note = mo.md(
         f"""
-    {_verdict}
-
-    Compression trades CPU for I/O. Here the file already sits in memory, so there is no I/O to
-    save: the extra bytes cost nothing to read, while unpacking them costs CPU on every query.
-    Send the same file across a network and the trade flips, which is why compression is normal
-    for transfer and a judgement call on a local disk.
-
-    Look at levels 6 and 9 too. They land {abs(_l6['bytes'] - _l9['bytes']):,} bytes apart, and
-    level 9 spent {_l9['compress (ms)'] / _l6['compress (ms)']:.1f}x the CPU to find them.
-    Decompression costs about the same at every level, so **the level you pick is a decision
-    about writing, not reading.**
+    Here the file already sits in memory, so there is no I/O to save: the extra bytes cost nothing to
+    read, while unpacking them costs CPU on every query. Send the same file across a network and the
+    trade flips, which is why compression is normal for transfer and a judgement call on a local disk.
+    Levels 6 and 9 land {abs(_l6['bytes'] - _l9['bytes']):,} bytes apart, and level 9 spent
+    {_l9['compress (ms)'] / _l6['compress (ms)']:.1f}x the CPU to find them.
         """
-    ).callout(kind="warn")
-    mo.vstack([static_table(_rows, label="Same question, four ways to store the file"), _note], gap=0.6)
+    )
+    mo.vstack(
+        [
+            chart_or_table(tier_chart(alt.hconcat(_answer_chart, _write_chart, spacing=50), "data"), _rows, label="Same question, four files"),
+            mo.md(
+                f"{_verdict} Unpacking costs about the same at every level: **the level is a decision about writing, not reading.**"
+            ).callout(kind="warn"),
+            mo.accordion({"Why: CPU for I/O, and the price of level 9": _note}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
-def _(mo):
+def _(box, diagram, mo):
     dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows", show_value=True, debounce=True)
     dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values", show_value=True, debounce=True)
-    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Average bytes per original value", show_value=True, debounce=True)
+    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Bytes per value", show_value=True, debounce=True)
+    # One small column, encoded: each distinct value once, then a short code per row.
+    _column = ["Zurich", "Basel", "Zurich", "Geneva", "Zurich", "Basel"]
+    _codes = {_v: _i for _i, _v in enumerate(dict.fromkeys(_column))}
+    _drawing = diagram(
+        '<text x="0" y="30">as written</text>'
+        + "".join(box(150 + _i * 118, 8, _v, w=110) for _i, _v in enumerate(_column))
+        + '<path class="dg-edge" d="M480 60 V 92"/>'
+        + '<text x="0" y="122">dictionary</text>'
+        + "".join(box(150 + _c * 150, 100, f"{_c} = {_v}", w=140, cls="dg-tier") for _v, _c in _codes.items())
+        + '<text x="0" y="192">codes</text>'
+        + "".join(box(150 + _i * 58, 170, str(_codes[_v]), w=50, cls="dg-tier") for _i, _v in enumerate(_column))
+        + '<text class="dg-muted" x="510" y="197">2 bits each instead of 5 or 6 bytes</text>',
+        width=1000,
+        height=226,
+        label="The column Zurich, Basel, Zurich, Geneva, Zurich, Basel becomes a dictionary of three values "
+        "and the codes 0, 1, 0, 2, 0, 1.",
+        tier="data",
+    )
     mo.vstack(
         [
-            mo.md("### Dictionary Encoding Intuition (Toy Model)"),
-            mo.hstack([dict_rows, dict_unique], widths="equal"),
-            dict_value_bytes,
-            mo.md(
-                "We estimate storage two ways: (1) store every value in full, or (2) store a dictionary "
-                "of the unique values plus a compact integer code per row."
-            ).callout(kind="info"),
+            mo.md("### Dictionary Encoding (Toy Model)"),
+            _drawing,
+            mo.hstack([dict_rows, dict_unique, dict_value_bytes], widths="equal"),
         ],
         gap=0.6,
     ).callout(kind="neutral")
@@ -2321,34 +2805,86 @@ def _(mo):
 
 
 @app.cell
-def _(dict_rows, dict_unique, dict_value_bytes, math, mo, static_table):
+def _(TIER, alt, chart_or_table, dict_rows, dict_unique, dict_value_bytes, format_bytes, math, mo, pd, tier_chart):
     _code_bits = math.ceil(math.log2(dict_unique.value))
     _raw_bytes = dict_rows.value * dict_value_bytes.value
     _dictionary_bytes = dict_unique.value * dict_value_bytes.value
     _index_bytes = dict_rows.value * _code_bits / 8
     _ratio = (_dictionary_bytes + _index_bytes) / _raw_bytes
 
-    _table = static_table(
-        [
-            {"metric": "Raw storage (no dictionary)", "formula": "rows x bytes_per_value", "value": _raw_bytes},
-            {"metric": "Dictionary storage", "formula": "unique_values x bytes_per_value", "value": _dictionary_bytes},
-            {"metric": "Code size per row", "formula": "ceil(log2(unique_values)) bits", "value": _code_bits},
-            {"metric": "Encoded indexes storage", "formula": "rows x code_bits/8", "value": round(_index_bytes, 2)},
-            {"metric": "Estimated encoded/raw ratio", "formula": "(dictionary + indexes) / raw", "value": round(_ratio, 4)},
-            {"metric": "Estimated savings", "formula": "1 - ratio", "value": f"{(1 - _ratio) * 100:.2f}%"},
-        ],
-        label="Dictionary encoding intuition (toy calculation)",
+    _rows = [
+        {"metric": "Raw storage (no dictionary)", "formula": "rows x bytes_per_value", "value": _raw_bytes},
+        {"metric": "Dictionary storage", "formula": "unique_values x bytes_per_value", "value": _dictionary_bytes},
+        {"metric": "Code size per row", "formula": "ceil(log2(unique_values)) bits", "value": _code_bits},
+        {"metric": "Encoded indexes storage", "formula": "rows x code_bits/8", "value": round(_index_bytes, 2)},
+        {"metric": "Estimated encoded/raw ratio", "formula": "(dictionary + indexes) / raw", "value": round(_ratio, 4)},
+        {"metric": "Estimated savings", "formula": "1 - ratio", "value": f"{(1 - _ratio) * 100:.2f}%"},
+    ]
+    _parts = pd.DataFrame(
+        {
+            "stored": ["every value in full", "dictionary + codes", "dictionary + codes"],
+            "part": ["values in full", "dictionary", "codes"],
+            "bytes": [_raw_bytes, _dictionary_bytes, _index_bytes],
+            "order": [0, 0, 1],
+        }
     )
-    _note = mo.md(
-        """
-    Interpretation:
+    _totals = pd.DataFrame(
+        {
+            "stored": ["every value in full", "dictionary + codes"],
+            "bytes": [_raw_bytes, _dictionary_bytes + _index_bytes],
+            "label": [format_bytes(_raw_bytes), f"{format_bytes(_dictionary_bytes + _index_bytes)}, ratio {_ratio:.2f}"],
+        }
+    )
+    _y = alt.Y("stored:N", sort=None, title=None)
+    _x = alt.X("bytes:Q", title="bytes", stack="zero", scale=alt.Scale(domain=[0, _totals["bytes"].max() * 1.35]))
+    _chart = (
+        alt.Chart(_parts)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(
+            y=_y,
+            x=_x,
+            order="order:Q",
+            color=alt.Color(
+                "part:N",
+                title=None,
+                scale=alt.Scale(domain=["values in full", "dictionary", "codes"], range=[TIER["muted"], TIER["data"], "#8fb4ea"]),
+            ),
+            tooltip=["stored:N", "part:N", "bytes:Q"],
+        )
+        + alt.Chart(_totals).mark_text(align="left", dx=6).encode(y=_y, x="bytes:Q", text="label:N")
+    ).properties(width="container", height=130)
+    mo.vstack(
+        [
+            chart_or_table(tier_chart(_chart, "data"), _rows, label="Dictionary encoding (toy calculation)"),
+            mo.md(
+                f"Fewer unique values, fewer bits per code (here **{_code_bits}**). All unique, and the dictionary is the whole column."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
 
-    - Lower `unique values` usually means fewer bits per code and better compression.
-    - If almost every row has a different value, dictionary encoding helps less.
-    - Columnar formats often benefit because repeated values are common in a column.
-            """
-    ).callout(kind="info")
-    mo.vstack([_table, _note], gap=0.6)
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Compression</h3>
+      <details>
+        <summary><strong>Q1:</strong> A 2 GB CSV crosses the network every minute. Compress it?</summary>
+        <p><strong>Answer:</strong> Probably: over a network, moving bytes dominates. Time it on the real link.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> May sensor readings be rounded to save space?</summary>
+        <p><strong>Answer:</strong> Only to the sensor's own precision, noted in the schema. Prices, ids, dates: never.</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> Why did the shuffled Parquet file in chapter 3 come out larger?</summary>
+        <p><strong>Answer:</strong> Sorting puts equal values next to each other; dictionary and run-length encoding
+        (a value stored once, with its repeat count) feed on that.</p>
+      </details>
+    </div>
+    """)
     return
 
 
@@ -2358,12 +2894,9 @@ def _(mo):
         """
     ### Chapter 4 Conclusion
 
-    - Lossless (gzip, Parquet codecs) gives back every byte; lossy (PCA, rounding) gives back an
-      approximation: fine for a picture, never for prices, ids or dates.
-    - Compression feeds on repetition: five distinct values per column handed Parquet the win,
-      distinct measurements handed it to gzipped CSV.
-    - Smaller is not automatically faster: on a file already in memory, unpacking costs CPU on
-      every query and saves no I/O. The gzip level is a cost paid when writing.
+    - Lossless gives back every byte; lossy an approximation, never for prices, ids or dates.
+    - Compression feeds on repetition: five values per column handed Parquet the win.
+    - Smaller is not automatically faster: in memory, unpacking costs CPU and saves no I/O.
             """
     ).callout(kind="success")
     return
@@ -2375,15 +2908,9 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Smaller files help, but analytics runtime is not only about file size.
-    We also need a query engine that avoids unnecessary work.
-
-    $$
-    \\text{query time} \\approx \\text{I/O time} + \\text{compute time}
-    $$
-
-    DuckDB cuts both: it reads only the columns and row groups a query needs, then runs the maths
-    on whole columns at once.
+    Smaller files help; the engine must also skip work:
+    $\\text{query time} \\approx \\text{I/O time} + \\text{compute time}$.
+    DuckDB reads only the columns and row groups a query needs, and computes on whole columns.
             """
     ).callout(kind="neutral")
     return
