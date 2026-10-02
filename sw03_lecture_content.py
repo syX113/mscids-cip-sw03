@@ -962,116 +962,265 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 2. Serialization & Deserialization Benchmarks
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 2 Introduction
-
-    > **Key Question:** Which format gives the best trade-off for the workload (actual data + query pattern)?
-
-    *Still in the **data tier**. Chapter 1 made writes correct; now we choose what those bytes look like.*
-
-    Every format trades readability, portability, size and speed differently; the benchmark below
-    measures the trade.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    _explanation = mo.md(
-        """
-    ### Serialization = Bytes on Disk (or Wire)
-
-    Serialization transforms Python objects into bytes so they can be stored or sent.
-    Deserialization rebuilds objects from bytes.
-
-    **First, one word we will use all day.** A **schema** is the blank form. Not the answers,
-    the printed boxes: what fields exist, in what order, and what kind of thing goes in each one.
-    `sale_id` a whole number, `sale_date` a date, `total_price` a decimal.
-
-    JSON is longhand on blank paper. Anyone can read it, and nothing stops you writing
-    "about forty" in the price box. Avro is a **pre-printed form**: compact, because the labels
-    live on the form instead of being repeated on every sheet, but you must keep the form to read
-    the sheets back.
-
-    **Schema evolution** is what happens when the office adds a box to the form. Do last year's
-    sheets, printed on the old form, still get read? We will test exactly that below.
-
-    *Where the picture breaks:* a paper form is inseparable from its answers, which is true for
-    Avro and false for JSON and CSV. There the form exists only in the mind of whoever reads the
-    file, which is why two teams can disagree about what the same sheet means. That is the reason
-    chapter 7 exists.
-
-    You will meet this blank form three more times today: DuckDB **guesses** it in chapter 5,
-    Pydantic **enforces** it in chapter 7, FastAPI **publishes** it in chapter 8.
-
-    **Where it shows up:** storage files, API payloads, message queues, caches, checkpoints.  
-    **What to compare:**
-
-    - **Speed**: how long writing and reading take  
-    - **Size**: how many bytes hit disk  
-    - **Interop**: language/tool compatibility  
-    - **Type fidelity**: do types round-trip cleanly?  
-    - **Schema evolution**: do old files survive a new field?
-    - **Safety**: Pickle can execute arbitrary code
-
-    Two words people mix up.
-
-    **Latency** is how long *one* thing takes, end to end. Post a letter to Vienna: two days.
-
-    **Throughput** is how much gets through per unit of time. The van leaving the depot each
-    night carries 40,000 letters.
-
-    In the benchmark below, one round trip is a file written and read back, and what gets through
-    is records, counted like letters rather than by the weight of the paper:
-
-    $$
-    \\text{Latency} = \\text{write time} + \\text{read time}
-    \\qquad
-    \\text{Throughput} = \\frac{\\text{rows written}}{\\text{write time}}
-    $$
-
-    They trade against each other, and this is the part people get wrong. Waiting to fill the van
-    raises throughput and *hurts* the latency of the first letter that boarded it. A container
-    ship has appalling latency and colossal throughput. When someone says a system is fast, ask
-    which one they mean. The benchmark below measures both: check whether they rank the formats
-    the same way.
-
-    *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
-
-    **Format quick reference:**  
-    - **JSON/CSV**: human‑readable, row‑oriented  
-    - **Avro**: row‑oriented, schema‑driven events  
-    - **Arrow/Feather**: columnar interchange (fast analytics)  
-    - **Parquet**: columnar on‑disk analytics  
-    - **Pickle**: Python‑specific (unsafe for untrusted data)
-            """
-    ).callout(kind="neutral")
-    _flow = mo.md(
-        """
-    <div class="section-card flow-card">
-      <h3>Serialization Pipeline</h3>
-      <div class="flow-diagram">
-        <div class="flow-box">Python object</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Bytes (disk / wire)</div>
-        <div class="flow-arrow">&rarr;</div>
-        <div class="flow-box">Python object</div>
-      </div>
-    </div>
-            """
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 2. Serialization & Deserialization Benchmarks"),
+            chapter_intro(
+                "data",
+                "Which format gives the best trade-off for this workload: this data, these queries?",
+                "Chapter 1 made the writes correct; now we choose what those bytes look like.",
+            ),
+        ],
+        gap=1,
     )
-    mo.vstack([_explanation, _flow], gap=0.6)
+    return
+
+
+@app.cell
+def _(box, diagram, fastavro, html, io, json, mo):
+    _record = {"sale_id": 1, "sale_date": "2024-03-07", "total_price": 4034.91}
+    # The bytes in the middle are the real start of this record's JSON.
+    _hex = json.dumps(_record).encode()[:24].hex(" ").upper()
+
+    def _object(x, title, cls):
+        lines = "".join(
+            f'<text x="{x + 125}" y="{104 + _i * 26}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
+            for _i, (_k, _v) in enumerate(_record.items())
+        )
+        return (
+            f'<rect class="{cls}" x="{x}" y="30" width="250" height="140" rx="12"/>'
+            f'<text x="{x + 125}" y="64" text-anchor="middle" font-weight="700">{title}</text>{lines}'
+        )
+
+    def _arrow(x, verb, word):
+        return (
+            f'<path class="dg-edge dg-flow" d="M{x} 100 H {x + 122}"/>'
+            f'<text x="{x + 60}" y="86" text-anchor="middle" font-weight="700">{verb}</text>'
+            f'<text class="dg-muted" x="{x + 60}" y="126" text-anchor="middle">{word}</text>'
+        )
+
+    _pipeline = diagram(
+        _object(0, "Python object", "dg-tier")
+        + _arrow(258, "serialize", "write")
+        + '<rect class="dg-box" x="390" y="30" width="260" height="140" rx="12"/>'
+        + '<text x="520" y="64" text-anchor="middle" font-weight="700">bytes</text>'
+        + "".join(
+            f'<text x="520" y="{104 + _i * 26}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
+            for _i in range(3)
+        )
+        + _arrow(660, "deserialize", "read")
+        + _object(790, "Python object", "dg-tier")
+        + '<text class="dg-muted" x="520" y="200" text-anchor="middle">'
+        "on disk or on the wire: files, API payloads, queues, caches</text>",
+        width=1040,
+        height=212,
+        label="A Python record is serialized into bytes for a file or the network, and deserialized back into a Python record.",
+        tier="data",
+    )
+
+    # The pre-printed form refuses an answer that does not fit its box: the real error from the Avro writer.
+    try:
+        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": "about forty"}])
+        _refusal = "accepted"
+    except (TypeError, ValueError) as _exc:
+        _refusal = f"{type(_exc).__name__}: {str(_exc).split(': ')[0]}"
+
+    def _sheet(y, sale_id, date, price):
+        return (
+            f'<rect class="dg-box" x="0" y="{y}" width="470" height="70" rx="8"/>'
+            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale_id}, "sale_date": "{date}",</text>'
+            f'<text x="18" y="{y + 54}" font-family="monospace"> "total_price": {price}}}</text>'
+        )
+
+    _form_cells = [("sale_id: int", 130), ("sale_date: date", 170), ("total_price: double", 200)]
+
+    def _form_row(y, values, cls):
+        x, parts = 540, []
+        for (_, w), value in zip(_form_cells, values, strict=True):
+            parts.append(box(x, y, value, w=w - 8, h=40, cls=cls))
+            x += w
+        return "".join(parts)
+
+    _forms = diagram(
+        '<text x="0" y="22" font-weight="700">JSON: longhand on blank paper</text>'
+        + _sheet(40, 1, "2024-03-07", "4034.91")
+        + _sheet(124, 2, "2024-03-08", '<tspan class="dg-hot">"about forty"</tspan>')
+        + '<text class="dg-muted" x="0" y="222">every sheet writes the labels out again</text>'
+        + '<text class="dg-hot" x="0" y="248">and nothing stops "about forty" in the price box</text>'
+        + '<text x="540" y="22" font-weight="700">Avro: a pre-printed form</text>'
+        + _form_row(40, [_label for _label, _ in _form_cells], "dg-tier")
+        + _form_row(92, ["1", "2024-03-07", "4034.91"], "dg-box")
+        + _form_row(140, ["2", "2024-03-08", '<tspan class="dg-hot" text-decoration="line-through">about forty</tspan>'], "dg-box")
+        + '<text class="dg-muted" x="540" y="222">labels printed once; sheets hold only answers</text>'
+        + f'<text class="dg-hot" x="540" y="248" font-size="15">refused: {html.escape(_refusal, quote=False)}</text>'
+        + '<text x="0" y="306" font-weight="700">The form comes back:</text>'
+        + '<g class="tier-data"><rect class="dg-tier" x="190" y="282" width="250" height="40" rx="12"/>'
+        '<text x="315" y="307" text-anchor="middle">5 · DuckDB <tspan font-weight="700">guesses</tspan> it</text></g>'
+        + '<g class="tier-logic"><rect class="dg-tier" x="456" y="282" width="270" height="40" rx="12"/>'
+        '<text x="591" y="307" text-anchor="middle">7 · Pydantic <tspan font-weight="700">enforces</tspan> it</text>'
+        '<rect class="dg-tier" x="742" y="282" width="270" height="40" rx="12"/>'
+        '<text x="877" y="307" text-anchor="middle">8 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
+        width=1040,
+        height=330,
+        label="Left: JSON sheets repeat every label, and one has 'about forty' in the price box. Right: an Avro form "
+        "prints the labels once, each row holds only the answers, and the writer refuses 'about forty'. "
+        "The same form returns in chapters 5, 7 and 8.",
+        tier="data",
+    )
+    _breaks = mo.md(
+        """
+    - A paper form is inseparable from its answers: true for Avro, which stores the form in the
+      file, and false for JSON and CSV. There the form exists only in the mind of whoever reads the
+      file, which is why two teams can disagree about what the same sheet means. That is the reason
+      chapter 7 exists.
+    - **Schema evolution** is what happens when the office adds a box to the form: do last year's
+      sheets, printed on the old form, still get read? The last lab of this chapter tests exactly that.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Serialization = Bytes on Disk (or Wire)</h3>
+      {_pipeline}
+    </div>
+                """
+            ),
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>The Schema Is the Blank Form</h3>
+      <p>Not the answers, the printed boxes: which fields, in what order, what kind of thing goes in each.</p>
+      {_forms}
+    </div>
+                """
+            ),
+            mo.accordion({"Where the picture breaks, and what schema evolution means": _breaks}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(box, diagram, mo):
+    def _envelope(x, y, w, h):
+        return (
+            f'<rect class="dg-box" x="{x}" y="{y}" width="{w}" height="{h}" rx="3"/>'
+            f'<path d="M{x} {y} L{x + w / 2:.0f} {y + h * 0.6:.0f} L{x + w} {y}" fill="none" stroke="currentColor" opacity="0.5"/>'
+        )
+
+    # Letters handed in through the day; the van leaves with all of them at 22:00.
+    _hours = [8, 10, 12, 14, 16, 18, 20]
+
+    def _at(hour):
+        return 60 + (hour - 8) * 60
+
+    _post = diagram(
+        '<text x="0" y="24" font-weight="700">Latency: how long one thing takes</text>'
+        + _envelope(10, 60, 90, 60)
+        + '<path class="dg-edge" d="M112 90 H 330"/>'
+        + '<text x="220" y="78" text-anchor="middle" font-weight="700">2 days</text>'
+        + box(338, 66, "Vienna", w=110, h=48)
+        + '<text x="560" y="24" font-weight="700">Throughput: how much gets through per night</text>'
+        + '<rect class="dg-tier" x="570" y="46" width="230" height="78" rx="10"/>'
+        + '<text x="685" y="91" text-anchor="middle" font-weight="700">40,000 letters</text>'
+        + '<path class="dg-tier" d="M800 72 H 846 L 872 98 V 124 H 800 Z"/>'
+        + '<circle class="dg-box" cx="620" cy="128" r="14"/><circle class="dg-box" cx="836" cy="128" r="14"/>'
+        # the trade: the van waits for the last letter, so the first one waits longest
+        + '<text x="0" y="214" font-weight="700">They trade:</text>'
+        + f'<path d="M{_at(8)} 262 H {_at(22) - 50}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
+        + "".join(
+            _envelope(_at(_h) - 14, 236, 28, 20)
+            + f'<text class="dg-muted" x="{_at(_h)}" y="284" text-anchor="middle">{_h:02d}:00</text>'
+            for _h in _hours
+        )
+        + f'<rect class="dg-tier" x="{_at(22) - 50}" y="226" width="100" height="40" rx="10"/>'
+        + f'<text x="{_at(22)}" y="251" text-anchor="middle">van 22:00</text>'
+        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 304 H {_at(22) - 54}"/>'
+        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="330" text-anchor="middle">'
+        "the first letter waits 14 hours</text>",
+        width=1040,
+        height=344,
+        label="Latency: one letter takes two days to Vienna. Throughput: a van carries 40,000 letters a night. "
+        "Letters handed in from 08:00 all wait for the 22:00 van, so filling the van raises throughput and "
+        "makes the first letter wait 14 hours.",
+        tier="data",
+    )
+    _more = mo.md(
+        """
+    - A container ship has appalling latency and colossal throughput.
+    - In the benchmark, one round trip is a file written and read back, and what gets through is
+      records, counted like letters rather than by the weight of the paper.
+    - *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Latency vs Throughput</h3>
+      {_post}
+      <p class="vis-caption"><strong>Filling the van raises throughput and hurts the first letter's latency.</strong>
+      Ask which one "fast" means.</p>
+    </div>
+                """
+            ),
+            mo.md(
+                """
+    In the benchmark below:
+    $\\text{Latency} = \\text{write time} + \\text{read time}$ and
+    $\\text{Throughput} = \\text{rows written} / \\text{write time}$.
+                """
+            ),
+            mo.accordion({"Container ships, and how to get both": _more}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    _criteria = mo.md(
+        """
+    - **Speed**: how long writing and reading take
+    - **Size**: how many bytes hit the disk
+    - **Interop**: which languages and tools can read it
+    - **Type fidelity**: do dates and codes come back as dates and codes?
+    - **Schema evolution**: do old files survive a new field?
+    - **Safety**: can loading a file run someone else's code?
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Format Quick Reference
+
+    **Compare on:** speed · size · interop · type fidelity · schema evolution · safety
+
+    <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
+      <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
+        <p>JSON and CSV: every tool reads them.</p></div>
+      <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
+        <p>Event streams.</p></div>
+      <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
+        <p>Arrow / Feather: hand-over between tools.</p></div>
+      <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
+        <p>Analytics files.</p></div>
+      <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
+        <p class="tile-bad">Loading it can run code.</p></div>
+    </div>
+                """
+            ),
+            mo.accordion({"What each criterion asks": _criteria}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -1092,14 +1241,8 @@ def _(mo):
         value="Interoperability",
         label="Priority",
     )
-    _note = mo.md(
-        """
-    Pick a context and goal, then compare the recommendation with the benchmark table below.
-    This is a starting heuristic, not a final rule.
-            """
-    ).callout(kind="info")
     mo.vstack(
-        [mo.md("### Mini-lab: Format Decision Assistant"), format_use_case, format_priority, _note],
+        [mo.md("### Mini-lab: Format Decision Assistant"), mo.hstack([format_use_case, format_priority], justify="start", gap=2)],
         gap=0.5,
     ).callout(kind="neutral")
     return format_priority, format_use_case
@@ -1107,28 +1250,34 @@ def _(mo):
 
 @app.cell
 def _(format_priority, format_use_case, mo):
+    # one row per use case, one entry per priority in the order of the priority dropdown
     _recommendations = {
-        ("Public API payload", "Interoperability"): "JSON",
-        ("Public API payload", "Speed"): "JSON (or MessagePack if both sides support it)",
-        ("Public API payload", "Small size"): "Compressed JSON or binary protocol",
-        ("Public API payload", "Safety"): "JSON with strict schema validation",
-        ("Internal Python checkpoint", "Interoperability"): "Parquet/Arrow",
-        ("Internal Python checkpoint", "Speed"): "Pickle (trusted data only)",
-        ("Internal Python checkpoint", "Small size"): "Parquet or compressed pickle",
-        ("Internal Python checkpoint", "Safety"): "Parquet/JSON, avoid untrusted pickle",
-        ("Analytics table", "Interoperability"): "Parquet",
-        ("Analytics table", "Speed"): "Parquet or Arrow",
-        ("Analytics table", "Small size"): "Parquet + zstd/snappy",
-        ("Analytics table", "Safety"): "Parquet with schema checks",
-        ("Streaming event log", "Interoperability"): "Avro/JSON",
-        ("Streaming event log", "Speed"): "Avro",
-        ("Streaming event log", "Small size"): "Avro with compression",
-        ("Streaming event log", "Safety"): "Avro + schema registry",
+        "Public API payload": ["JSON", "JSON, or MessagePack if both sides speak it", "Compressed JSON or a binary protocol", "JSON with strict schema validation"],
+        "Internal Python checkpoint": ["Parquet / Arrow", "Pickle (trusted data only)", "Parquet or compressed Pickle", "Parquet / JSON, no untrusted Pickle"],
+        "Analytics table": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
+        "Streaming event log": ["Avro / JSON", "Avro", "Avro with compression", "Avro + schema registry"],
     }
-    _choice = _recommendations[(format_use_case.value, format_priority.value)]
+    _priorities = list(format_priority.options)
+    _pick = (format_use_case.value, _priorities.index(format_priority.value))
+    def _cell(text, chosen):
+        """A grey grid cell; the chosen use case, priority and recommendation stand out as tiles."""
+        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
+
+    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == format_priority.value) for _p in _priorities]
+    for _use, _row in _recommendations.items():
+        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
+        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
     mo.md(
-        f"Recommended starting point: **{_choice}**\n\nTreat this as a default, then benchmark on the real workload."
-    ).callout(kind="info")
+        f"""
+    <div class="section-card tier-data">
+      <div style="display: grid; grid-template-columns: 190px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
+        {"".join(_grid)}
+      </div>
+      <p class="vis-caption">Starting point: <strong>{_recommendations[_pick[0]][_pick[1]]}</strong>.
+      A default to benchmark, not a rule.</p>
+    </div>
+        """
+    )
     return
 
 
@@ -1139,11 +1288,8 @@ def _(mo):
     run_serial = mo.ui.run_button(label="Run serialization benchmark", kind="success")
     mo.vstack(
         [
+            mo.md("### Benchmark: Six Formats, the Same Records"),
             mo.hstack([serial_rows, serial_cols], widths="equal"),
-            mo.md(
-                "Six formats, the same records. Every write and every read runs three times and "
-                "the table keeps the fastest, so a one-off start-up cost cannot decide the ranking."
-            ),
             run_serial,
         ],
         gap=0.6,
@@ -1154,8 +1300,10 @@ def _(mo):
 @app.cell
 def _(
     Path,
+    TIER,
     alt,
     best_seconds,
+    chart_or_table,
     csv,
     fastavro,
     feather,
@@ -1171,8 +1319,14 @@ def _(
     serial_rows,
     static_table,
     tempfile,
+    tier_chart,
 ):
-    mo.stop(not run_serial.value, mo.md("Click **Run serialization benchmark** to execute.").callout(kind="neutral"))
+    mo.stop(
+        not run_serial.value,
+        mo.md(
+            "**Predict first:** is the smallest file also the fastest? Then click **Run serialization benchmark**."
+        ).callout(kind="neutral"),
+    )
 
     _rng = random.Random(42)
     _records = [
@@ -1237,29 +1391,65 @@ def _(
                 }
             )
 
-    _bars = (
-        alt.Chart(pd.DataFrame(_rows))
-        .mark_bar()
-        .encode(y=alt.Y("format:N", sort=None, title=None))
-        .properties(width="container", height=200)  # half the page each, at any screen width
-        .configure(background="transparent")  # sit on the page, light or dark
-        .configure_axis(labelFontSize=13, titleFontSize=13, tickCount=4)
+    _df = pd.DataFrame(_rows)
+    _df["unsafe"] = _df["format"].str.startswith("Pickle")
+    # Two points close together: the smaller file's label goes to the left, so the labels do not collide.
+    _dx, _dy = 0.15 * _df["size (KB)"].max(), 0.08 * _df["latency (ms)"].max()
+    _df["left"] = [
+        any(
+            _o is not _r and 0 <= _o["size (KB)"] - _r["size (KB)"] < _dx and abs(_o["latency (ms)"] - _r["latency (ms)"]) < _dy
+            for _o in _rows
+        )
+        for _r in _rows
+    ]
+    _color = alt.condition("datum.unsafe", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+    _tooltip = list(_rows[0])
+    _base = alt.Chart(_df).encode(
+        x=alt.X("size (KB):Q", title="file size (KB)", scale=alt.Scale(zero=True)),
+        y=alt.Y("latency (ms):Q", title="write + read (ms)", scale=alt.Scale(zero=True)),
+        tooltip=_tooltip,
     )
+    _scatter = (
+        _base.mark_circle(size=260, opacity=1).encode(color=_color)
+        + _base.transform_filter("!datum.left").mark_text(align="left", dx=14).encode(text="format:N")
+        + _base.transform_filter("datum.left").mark_text(align="right", dx=-14).encode(text="format:N")
+    ).properties(width=470, height=300, title="Size vs latency: the bottom-left corner wins")
+    _speed = alt.Chart(_df).encode(
+        y=alt.Y("format:N", sort="-x", title=None),
+        x=alt.X(
+            "rows/s written:Q",
+            axis=None,
+            scale=alt.Scale(domain=[0, _df["rows/s written"].max() * 1.3]),
+        ),
+        tooltip=_tooltip,
+    )
+    _throughput = (
+        _speed.mark_bar(cornerRadiusEnd=4).encode(color=_color)
+        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("rows/s written:Q", format=".2s"))
+    ).properties(width=250, height=300, title="Throughput: rows written per second")
 
     mo.vstack(
         [
-            static_table(_records[:3], label="Sample records"),
-            static_table(_rows, label="Serialization benchmark (best of 3)"),
-            mo.md("**Shorter bars win in both charts.**"),
-            mo.hstack([_bars.encode(x="size (KB):Q"), _bars.encode(x="latency (ms):Q")], widths="equal", gap=2),
-            mo.md(
-                "Numbers vary by machine and caching, so compare the formats with each other, not with "
-                "another laptop. The reads are not quite like for like: Arrow and Parquet stop at a columnar "
-                "table without building Python objects, and CSV hands back strings it never converts to numbers."
-            ).callout(kind="info"),
-            mo.md(
-                "**Security note:** Pickle is not safe for untrusted data. Only load Pickle files from trusted sources."
-            ).callout(kind="warn"),
+            chart_or_table(
+                tier_chart(alt.hconcat(_scatter, _throughput, spacing=40), "data"),
+                _rows,
+                label="Serialization benchmark (best of 3)",
+            ),
+            mo.md("**Do latency and throughput rank the formats the same way?**"),
+            mo.accordion(
+                {
+                    "The records being saved, and why the reads are not quite like for like": mo.vstack(
+                        [
+                            static_table(_records[:3], label="Sample records"),
+                            mo.md(
+                                "Numbers vary by machine and caching, so compare the formats with each other, not with "
+                                "another laptop. Arrow and Parquet stop at a columnar table without building Python "
+                                "objects, and CSV hands back strings it never converts to numbers."
+                            ),
+                        ]
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -1267,7 +1457,7 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
+def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500)
     # Store codes are the classic case: they look like numbers and are not.
     _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
@@ -1280,15 +1470,27 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
         _from_csv = pd.read_csv(_csv_p)
         _from_pq = pd.read_parquet(_pq_p)
 
-    _dtypes = [
-        {
-            "column": _c,
-            "wrote": str(_src[_c].dtype),
-            "back from CSV": str(_from_csv[_c].dtype),
-            "back from Parquet": str(_from_pq[_c].dtype),
-        }
-        for _c in _src.columns
-    ]
+    # One row per column: the type written, then the type each file hands back, ticked where it matches.
+    _xs = {"wrote": 190, "back from CSV": 470, "back from Parquet": 750}
+    _parts = [f'<text x="{_x + 130}" y="22" text-anchor="middle" font-weight="700">{_name}</text>' for _name, _x in _xs.items()]
+    for _i, _c in enumerate(_src.columns):
+        _y = 40 + _i * 56
+        _wrote = str(_src[_c].dtype)
+        _parts.append(f'<text x="0" y="{_y + 27}" font-family="monospace" font-weight="700">{_c}</text>')
+        _parts.append(box(_xs["wrote"], _y, _wrote, w=260))
+        for _x, _back_df in ((_xs["back from CSV"], _from_csv), (_xs["back from Parquet"], _from_pq)):
+            _back = str(_back_df[_c].dtype)
+            if _back == _wrote:
+                _parts.append(box(_x, _y, f"&#10003; {_back}", w=260, cls="dg-box dg-ok"))
+            else:
+                _parts.append(box(_x, _y, f'<tspan class="dg-hot">&#10007; {_back}</tspan>', w=260, cls="dg-box dg-hot"))
+    _types = diagram(
+        "".join(_parts),
+        width=1010,
+        height=270,
+        label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
+        "CSV returns sale_date as text and store_code as a whole number.",
+    )
 
     def _span(_df):
         try:
@@ -1296,36 +1498,39 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
         except TypeError as _exc:
             return f"TypeError: {_exc}"
 
-    _answers = [
-        {
-            "question": "How long did sales run?",
-            "via Parquet": _span(_from_pq),
-            "via CSV": _span(_from_csv),
-        },
-        {
-            "question": "First three store codes",
-            "via Parquet": str(list(_from_pq["store_code"].head(3))),
-            "via CSV": str(list(_from_csv["store_code"].head(3))),
-        },
-    ]
+    def _ask(name, df, kind):
+        return mo.md(
+            f"""
+    **Ask the {name} copy**
 
-    _note = mo.md(
-        """
-    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not
-    lose the date. They lost **the note saying it was a date**, and that note is what your analysis
-    was standing on. Parquet stores the date as a plain number and keeps the note in its schema,
-    which is why it came back as `datetime64`.
-
-    The first failure shouted. The second did not: the store codes came back as `7, 10, 42`
-    with no error, no warning and nothing in the log. That is the one that ends up in a report.
+    - How long did sales run? `{_span(df)}`
+    - First three store codes: `{df["store_code"].head(3).tolist()}`
             """
-    ).callout(kind="warn")
+        ).callout(kind=kind)
 
+    _why = mo.md(
+        """
+    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not lose the
+    date. They lost **the note saying it was a date**, and that note is what your analysis was standing
+    on. Parquet stores the date as a plain number and keeps the note in its schema, which is why it came
+    back as `datetime64`.
+        """
+    )
     mo.vstack(
         [
-            static_table(_dtypes, label="Same 500 rows, written two ways and read back"),
-            static_table(_answers, label="Now ask the data a question", wrapped_columns=["via CSV"]),
-            _note,
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Same 500 Sales, Written Two Ways and Read Back</h3>
+      {_types}
+    </div>
+                """
+            ),
+            mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
+            mo.md(
+                "The date failure shouted; the store codes failed silently. **That one ends up in a report.**"
+            ).callout(kind="warn"),
+            mo.accordion({"What the CSV actually lost": _why}),
         ],
         gap=0.6,
     )
@@ -1333,7 +1538,7 @@ def _(Path, SALES_SEED, mo, pd, static_table, tempfile):
 
 
 @app.cell
-def _(csv, fastavro, io, mo, static_table):
+def _(csv, diagram, fastavro, html, io, mo):
     # It is next March. Your team adds a `channel` field to the sales event.
     # Two years of old files sit on disk, and one old program nobody redeployed
     # is still running in production. What happens?
@@ -1370,35 +1575,56 @@ def _(csv, fastavro, io, mo, static_table):
     except KeyError as _exc:
         _csv_result = f"KeyError: {_exc}"
 
-    _rows = [
-        {
-            "situation": "Last year's Avro file, read by this year's code",
-            "result": str(_old_by_new[0]),
-            "verdict": "works: the reader supplied the default the writer never wrote",
-        },
-        {
-            "situation": "This year's Avro file, read by the old program",
-            "result": str(_new_by_old[0]),
-            "verdict": "works: the extra field is skipped, nothing crashes",
-        },
-        {
-            "situation": "Last year's CSV file, read by this year's code",
-            "result": _csv_result,
-            "verdict": "breaks: the only fix is changing every program that reads it",
-        },
+    def _card(x, y, w, title, sub, cls="dg-box"):
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="64" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 26}" text-anchor="middle" font-weight="700">{html.escape(title, quote=False)}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 50}" text-anchor="middle">{sub}</text>'
+        )
+
+    def _fields(record):
+        return " · ".join(f"{_k} {_v}" for _k, _v in record.items())
+
+    _lanes = [
+        ("last year's Avro file", "old form", "this year's code", "new form: + channel",
+         _fields(_old_by_new[0]), "&#10003; the reader filled in the default", "dg-box dg-ok"),
+        ("this year's Avro file", "new form", "the old program", "old form",
+         _fields(_new_by_old[0]), "&#10003; the extra box is skipped", "dg-box dg-ok"),
+        ("last year's CSV file", "no form inside", "this year's code", "expects channel",
+         _csv_result, "&#10007; only fix: change every reader", "dg-box dg-hot"),
     ]
-    _note = mo.md(
-        "The printed form is not decoration. It is what lets a sheet filled in last year and a "
-        "program written this morning still agree. CSV ships without the form, so the agreement "
-        "lives only in someone's memory."
-    ).callout(kind="info")
-    mo.vstack(
-        [
-            mo.md("### Schema Evolution: the office adds a box to the form"),
-            static_table(_rows, label="Same change, three situations", wrapped_columns=["result", "verdict"]),
-            _note,
-        ],
-        gap=0.6,
+    _parts = [
+        '<text x="120" y="20" text-anchor="middle" font-weight="700">the file</text>'
+        '<text x="390" y="20" text-anchor="middle" font-weight="700">read by</text>'
+        '<text x="790" y="20" text-anchor="middle" font-weight="700">what comes back</text>'
+    ]
+    for _i, (_file, _file_sub, _reader, _reader_sub, _result, _verdict, _cls) in enumerate(_lanes):
+        _y = 36 + _i * 84
+        _parts += [
+            _card(0, _y, 240, _file, _file_sub),
+            f'<path class="dg-edge" d="M246 {_y + 32} H 284"/>',
+            _card(290, _y, 200, _reader, _reader_sub, "dg-tier"),
+            f'<path class="dg-edge" d="M496 {_y + 32} H 534"/>',
+            _card(540, _y, 500, _result, _verdict, _cls),
+        ]
+    _lanes_svg = diagram(
+        "".join(_parts),
+        width=1040,
+        height=290,
+        label="Avro: last year's file read by this year's code gets the default channel; this year's file read by the "
+        "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
+        tier="data",
+    )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Schema Evolution: the Office Adds a Box to the Form</h3>
+      <p>A <code>channel</code> box is added (default <code>in-store</code>), while old files and one old
+      program live on.</p>
+      {_lanes_svg}
+      <p class="vis-caption">CSV ships without the form, so the agreement lives only in someone's memory.</p>
+    </div>
+        """
     )
     return
 
@@ -1409,18 +1635,18 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Serialization Choices</h3>
       <details>
-        <summary><strong>Q1:</strong> How is a format selected among JSON, Avro, or Parquet?</summary>
-        <p><strong>Answer:</strong> Start with who reads it and how. JSON for broad tool support (interoperability),
-        Avro for event streams with changing schemas (schema evolution),
-        Parquet for analytics scans and compression (columnar).</p>
+        <summary><strong>Q1:</strong> JSON, Avro or Parquet: how do you choose?</summary>
+        <p><strong>Answer:</strong> JSON for the widest tool support, Avro for event streams whose schema
+        changes, Parquet for analytics.</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
-        <p><strong>Answer:</strong> If data is untrusted, avoid Pickle and validate strictly (input validation).</p>
+        <p><strong>Answer:</strong> If so, never unpickle it, and validate it strictly.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Where should size vs. speed trade‑offs be measured?</summary>
-        <p><strong>Answer:</strong> In staging (a production-like test environment), then confirmed on a canary (the new format serving a small share of real traffic). Compare before/after on the same workload.</p>
+        <summary><strong>Q3:</strong> Where should size vs speed trade‑offs be measured?</summary>
+        <p><strong>Answer:</strong> In staging, then on a canary: the new format serving a small share of
+        real traffic.</p>
       </details>
     </div>
     """)
@@ -1433,12 +1659,10 @@ def _(mo):
         """
     ### Chapter 2 Conclusion
 
-    - Format choice is a trade-off between speed, size, interoperability, and safety.
-    - Use benchmarks from a representative workload to compare latency and storage cost.
-    - CSV keeps values but drops types: dates came back as `str`, store code `007` as `7`.
-      Parquet and Avro carry the schema.
-    - An Avro reader schema with defaults lets last year's files and this year's code agree.
-    - Pickle preserves Python types but should not be used for untrusted data.
+    - Formats trade speed, size, interop and safety: benchmark on your workload.
+    - CSV keeps values, drops types (`str` dates, `007` as `7`); Parquet and Avro carry the schema.
+    - Avro reader defaults let old files and new code agree.
+    - Never load Pickle from a source you do not trust.
             """
     ).callout(kind="success")
     return
@@ -1450,12 +1674,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Now that we know how to serialize data, the next question is **how to lay it out** on disk.
-
-    - Row layout: good when queries read one full record at a time.
-    - Column layout: good when queries scan a few columns across many rows.
-
-    Rule of thumb:
+    Next: **lay the bytes out** on disk, by row or by column.
 
     $$
     \\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
