@@ -1163,8 +1163,9 @@ def _(chapter_intro, mo):
             mo.md("## 2. Serialization & Deserialization Benchmarks"),
             chapter_intro(
                 "data",
-                "Which format gives the best trade-off for this workload: this data, these queries?",
-                "Chapter 1 made the writes correct; now we choose what those bytes look like.",
+                "We send sales files to partners. Which format, and why did the CSV turn store code 007 into 7?",
+                "Chapter 1 made every save land. Now: what the bytes of a sales file look like, and what each format "
+                "costs, keeps and loses on its way to a partner.",
             ),
         ],
         gap=1,
@@ -1173,70 +1174,95 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(diagram, json, mo):
-    _record = {"sale_id": 1, "sale_date": "2024-03-07", "total_price": 4034.91}
-    # The bytes in the middle are the real start of this record's JSON.
-    _hex = json.dumps(_record).encode()[:24].hex(" ").upper()
+def _(diagram, in_plain, json, mo, shop_sales):
+    _sale = shop_sales.iloc[0]
+    _record = {
+        "sale_id": int(_sale["sale_id"]),
+        "sale_date": f"{_sale['sale_date']:%Y-%m-%d}",
+        "product": str(_sale["product"]),
+        "units_sold": int(_sale["units_sold"]),
+        "total_price": float(_sale["total_price"]),
+    }
+    _bytes = json.dumps(_record).encode()
+    _value_bytes = sum(len(json.dumps(_v)) for _v in _record.values())
+    # The bytes in the middle are the real start of this sale's JSON.
+    _hex = _bytes[:24].hex(" ").upper()
 
-    def _object(x, title, cls):
+    def _object(x, title):
         lines = "".join(
-            f'<text x="{x + 125}" y="{104 + _i * 26}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
+            f'<text x="{x + 140}" y="{98 + _i * 25}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
             for _i, (_k, _v) in enumerate(_record.items())
         )
         return (
-            f'<rect class="{cls}" x="{x}" y="30" width="250" height="140" rx="12"/>'
-            f'<text x="{x + 125}" y="64" text-anchor="middle" font-weight="700">{title}</text>{lines}'
+            f'<rect class="dg-tier" x="{x}" y="30" width="280" height="200" rx="12"/>'
+            f'<text x="{x + 140}" y="62" text-anchor="middle" font-weight="700">{title}</text>{lines}'
         )
 
     def _arrow(x, verb, word):
         return (
-            f'<path class="dg-edge dg-flow" d="M{x} 100 H {x + 122}"/>'
-            f'<text x="{x + 60}" y="86" text-anchor="middle" font-weight="700">{verb}</text>'
-            f'<text class="dg-muted" x="{x + 60}" y="126" text-anchor="middle">{word}</text>'
+            f'<path class="dg-edge dg-flow" d="M{x} 130 H {x + 122}"/>'
+            f'<text x="{x + 60}" y="116" text-anchor="middle" font-weight="700">{verb}</text>'
+            f'<text class="dg-muted" x="{x + 60}" y="156" text-anchor="middle">{word}</text>'
         )
 
     _pipeline = diagram(
-        _object(0, "Python object", "dg-tier")
-        + _arrow(258, "serialize", "write")
-        + '<rect class="dg-box" x="390" y="30" width="260" height="140" rx="12"/>'
-        + '<text x="520" y="64" text-anchor="middle" font-weight="700">bytes</text>'
+        _object(0, "a sale in Python")
+        + _arrow(290, "serialize", "write")
+        + '<rect class="dg-box" x="422" y="30" width="276" height="200" rx="12"/>'
+        + '<text x="560" y="62" text-anchor="middle" font-weight="700">bytes</text>'
         + "".join(
-            f'<text x="520" y="{104 + _i * 26}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
+            f'<text x="560" y="{110 + _i * 30}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
             for _i in range(3)
         )
-        + _arrow(660, "deserialize", "read")
-        + _object(790, "Python object", "dg-tier")
-        + '<text class="dg-muted" x="520" y="200" text-anchor="middle">'
-        "on disk or on the wire: files, API payloads, queues, caches</text>",
-        width=1040,
-        height=212,
-        label="A Python record is serialized into bytes for a file or the network, and deserialized back into a Python record.",
+        + '<text class="dg-muted" x="560" y="208" text-anchor="middle">... and so on</text>'
+        + _arrow(708, "deserialize", "read")
+        + _object(840, "the sale again")
+        + '<text class="dg-muted" x="560" y="262" text-anchor="middle">'
+        "on disk or on the wire: files for partners, API answers, queues, caches</text>",
+        width=1120,
+        height=276,
+        label="EdgeWorks' first sale is serialized into bytes for a file or the network, and deserialized back into "
+        "the same sale in Python.",
         tier="data",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Serialization = Bytes on Disk (or Wire)</h3>
-      {_pipeline}
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### Serialization: from a sale to bytes, and back"),
+            in_plain(
+                "**Serialization** turns an object in memory, here one EdgeWorks sale, into bytes that can be saved "
+                "to a file or sent to a partner. **Deserialization** turns the bytes back into an object. The "
+                "**format** (JSON, CSV, Parquet, ...) decides what those bytes look like."
+            ),
+            _pipeline,
+            mo.md(
+                f"**What to notice:** as JSON this sale takes {len(_bytes)} bytes, and only {_value_bytes} of them are "
+                "the values. The rest is field names and punctuation, written again for each of the "
+                f"{len(shop_sales):,} sales."
+            ),
+        ],
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(box, diagram, fastavro, html, io, mo):
-    # The pre-printed form refuses an answer that does not fit its box: the real error from the Avro writer.
+def _(box, diagram, fastavro, html, in_plain, io, mo, shop_sales):
+    _first, _second = shop_sales.iloc[0], shop_sales.iloc[1]
+    _typo = f"about {round(_second['total_price'], -3):,.0f}"  # what a hurried rep types instead of the price
+    # The printed form refuses an answer that does not fit its box: the real error from the Avro writer.
     try:
-        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": "about forty"}])
+        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": _typo}])
         _refusal = "accepted"
     except (TypeError, ValueError) as _exc:
         _refusal = f"{type(_exc).__name__}: {str(_exc).split(': ')[0]}"
 
-    def _sheet(y, sale_id, date, price):
+    def _date(sale):
+        return f"{sale['sale_date']:%Y-%m-%d}"
+
+    def _sheet(y, sale, price):
         return (
             f'<rect class="dg-box" x="0" y="{y}" width="470" height="70" rx="8"/>'
-            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale_id}, "sale_date": "{date}",</text>'
+            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale["sale_id"]}, "sale_date": "{_date(sale)}",</text>'
             f'<text x="18" y="{y + 54}" font-family="monospace"> "total_price": {price}}}</text>'
         )
 
@@ -1250,16 +1276,16 @@ def _(box, diagram, fastavro, html, io, mo):
         return "".join(parts)
 
     _forms = diagram(
-        '<text x="0" y="22" font-weight="700">JSON: longhand on blank paper</text>'
-        + _sheet(40, 1, "2024-03-07", "4034.91")
-        + _sheet(124, 2, "2024-03-08", '<tspan class="dg-hot">"about forty"</tspan>')
-        + '<text class="dg-muted" x="0" y="222">every sheet writes the labels out again</text>'
-        + '<text class="dg-hot" x="0" y="248">and nothing stops "about forty" in the price box</text>'
-        + '<text x="540" y="22" font-weight="700">Avro: a pre-printed form</text>'
+        '<text x="0" y="22" font-weight="700">JSON: answers on blank paper</text>'
+        + _sheet(40, _first, f"{_first['total_price']}")
+        + _sheet(124, _second, f'<tspan class="dg-hot">"{_typo}"</tspan>')
+        + '<text class="dg-muted" x="0" y="222">every sheet writes the field names out again</text>'
+        + f'<text class="dg-hot" x="0" y="248">and nothing stops "{_typo}" in the price box</text>'
+        + '<text x="540" y="22" font-weight="700">Avro: a printed order form</text>'
         + _form_row(40, [_label for _label, _ in _form_cells], "dg-tier")
-        + _form_row(92, ["1", "2024-03-07", "4034.91"], "dg-box")
-        + _form_row(140, ["2", "2024-03-08", '<tspan class="dg-hot" text-decoration="line-through">about forty</tspan>'], "dg-box")
-        + '<text class="dg-muted" x="540" y="222">labels printed once; sheets hold only answers</text>'
+        + _form_row(92, [f"{_first['sale_id']}", _date(_first), f"{_first['total_price']}"], "dg-box")
+        + _form_row(140, [f"{_second['sale_id']}", _date(_second), f'<tspan class="dg-hot" text-decoration="line-through">{_typo}</tspan>'], "dg-box")
+        + '<text class="dg-muted" x="540" y="222">names printed once; each row holds only answers</text>'
         + f'<text class="dg-hot" x="540" y="248" font-size="15">refused: {html.escape(_refusal, quote=False)}</text>'
         + '<text x="0" y="306" font-weight="700">The form comes back:</text>'
         + '<g class="tier-data"><rect class="dg-tier" x="190" y="282" width="250" height="40" rx="12"/>'
@@ -1270,230 +1296,178 @@ def _(box, diagram, fastavro, html, io, mo):
         '<text x="877" y="307" text-anchor="middle">8 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
         width=1040,
         height=330,
-        label="Left: JSON sheets repeat every label, and one has 'about forty' in the price box. Right: an Avro form "
-        "prints the labels once, each row holds only the answers, and the writer refuses 'about forty'. "
+        label=f"Left: JSON sheets repeat every field name, and one has '{_typo}' in the price box. Right: an Avro form "
+        f"prints the names once, each row holds only the answers, and the writer refuses '{_typo}'. "
         "The same form returns in chapters 5, 7 and 8.",
         tier="data",
     )
     _breaks = mo.md(
         """
-    - A paper form is inseparable from its answers: true for Avro, which stores the form in the
-      file, and false for JSON and CSV. There the form exists only in the mind of whoever reads the
-      file, which is why two teams can disagree about what the same sheet means. That is the reason
-      chapter 7 exists.
-    - **Schema evolution** is what happens when the office adds a box to the form: do last year's
-      sheets, printed on the old form, still get read? The last lab of this chapter tests exactly that.
+    - A paper form travels with its answers: true for Avro, which stores the form in the file, and false
+      for JSON and CSV. There the form exists only in the head of whoever reads the file, which is why a
+      partner and EdgeWorks can disagree about what the same file means. That is the reason chapter 7 exists.
+    - **Schema evolution** is what happens when EdgeWorks adds a box to the form: do last year's sales,
+      written on the old form, still get read? A slide later in this chapter tests exactly that.
         """
     )
     mo.vstack(
         [
+            mo.md("### The schema is the blank order form"),
+            in_plain(
+                "A **schema** is the blank form, not the answers: which fields a sale has, in what order, and what "
+                "kind of value goes in each box. JSON and CSV send only filled-in sheets. Avro sends the form inside "
+                "the file, and its writer refuses an answer that does not fit the box."
+            ),
+            _forms,
             mo.md(
-                f"""
-    <div class="section-card">
-      <h3>The Schema Is the Blank Form</h3>
-      <p>Not the answers, the printed boxes: which fields, in what order, what kind of thing goes in each.</p>
-      {_forms}
-    </div>
-                """
+                f"**What to notice:** the price of sale #{_second['sale_id']}. A rep typed \"{_typo}\". JSON keeps "
+                "it without a word; Avro refuses it before it ever reaches a partner."
             ),
             mo.accordion({"Where the picture breaks, and what schema evolution means": _breaks}),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(box, diagram, mo):
-    def _envelope(x, y, w, h):
-        return (
-            f'<rect class="dg-box" x="{x}" y="{y}" width="{w}" height="{h}" rx="3"/>'
-            f'<path d="M{x} {y} L{x + w / 2:.0f} {y + h * 0.6:.0f} L{x + w} {y}" fill="none" stroke="currentColor" opacity="0.5"/>'
-        )
-
-    # Letters handed in through the day; the van leaves with all of them at 22:00.
-    _hours = [8, 10, 12, 14, 16, 18, 20]
-
-    def _at(hour):
-        return 60 + (hour - 8) * 60
-
-    _post = diagram(
-        '<text x="0" y="24" font-weight="700">Latency: how long one thing takes</text>'
-        + _envelope(10, 60, 90, 60)
-        + '<path class="dg-edge" d="M112 90 H 330"/>'
-        + '<text x="220" y="78" text-anchor="middle" font-weight="700">2 days</text>'
-        + box(338, 66, "Vienna", w=110, h=48)
-        + '<text x="560" y="24" font-weight="700">Throughput: how much gets through per night</text>'
-        + '<rect class="dg-tier" x="570" y="46" width="230" height="78" rx="10"/>'
-        + '<text x="685" y="91" text-anchor="middle" font-weight="700">40,000 letters</text>'
-        + '<path class="dg-tier" d="M800 72 H 846 L 872 98 V 124 H 800 Z"/>'
-        + '<circle class="dg-box" cx="620" cy="128" r="14"/><circle class="dg-box" cx="836" cy="128" r="14"/>'
-        # the trade: the van waits for the last letter, so the first one waits longest
-        + '<text x="0" y="214" font-weight="700">They trade:</text>'
-        + f'<path d="M{_at(8)} 262 H {_at(22) - 50}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
-        + "".join(
-            _envelope(_at(_h) - 14, 236, 28, 20)
-            + f'<text class="dg-muted" x="{_at(_h)}" y="284" text-anchor="middle">{_h:02d}:00</text>'
-            for _h in _hours
-        )
-        + f'<rect class="dg-tier" x="{_at(22) - 50}" y="226" width="100" height="40" rx="10"/>'
-        + f'<text x="{_at(22)}" y="251" text-anchor="middle">van 22:00</text>'
-        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 304 H {_at(22) - 54}"/>'
-        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="330" text-anchor="middle">'
-        "the first letter waits 14 hours</text>",
-        width=1040,
-        height=344,
-        label="Latency: one letter takes two days to Vienna. Throughput: a van carries 40,000 letters a night. "
-        "Letters handed in from 08:00 all wait for the 22:00 van, so filling the van raises throughput and "
-        "makes the first letter wait 14 hours.",
-        tier="data",
-    )
-    _more = mo.md(
-        """
-    - A container ship has appalling latency and colossal throughput.
-    - In the benchmark, one round trip is a file written and read back, and what gets through is
-      records, counted like letters rather than by the weight of the paper.
-    - *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Latency vs Throughput</h3>
-      {_post}
-      <p class="vis-caption"><strong>Filling the van raises throughput and hurts the first letter's latency.</strong>
-      Ask which one "fast" means.</p>
-    </div>
-                """
-            ),
-            mo.md(
-                """
-    In the benchmark below:
-    $\\text{Latency} = \\text{write time} + \\text{read time}$ and
-    $\\text{Throughput} = \\text{rows written} / \\text{write time}$.
-                """
-            ),
-            mo.accordion({"Container ships, and how to get both": _more}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
+def _(in_plain, mo):
     _criteria = mo.md(
         """
     - **Speed**: how long writing and reading take
-    - **Size**: how many bytes hit the disk
-    - **Interop**: which languages and tools can read it
-    - **Type fidelity**: do dates and codes come back as dates and codes?
+    - **Size**: how many bytes hit the disk and the network
+    - **Interoperability**: which languages and tools can read it (Excel, R, a partner's script)
+    - **Type fidelity**: do dates and store codes come back as dates and store codes?
     - **Schema evolution**: do old files survive a new field?
     - **Safety**: can loading a file run someone else's code?
         """
     )
     mo.vstack(
         [
+            mo.md("### Five kinds of format, and where EdgeWorks uses each"),
+            in_plain(
+                "Text formats (JSON, CSV) can be read by any tool and by people. Binary formats are smaller and "
+                "faster, but need a library to read. Choose by who reads the file and what they do with it."
+            ),
             mo.md(
                 """
-    ### Format Quick Reference
-
-    **Compare on:** speed · size · interop · type fidelity · schema evolution · safety
-
     <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
       <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
-        <p>JSON and CSV: every tool reads them.</p></div>
+        <p>The sales API answers the dashboard in JSON; a partner opens CSV in Excel.</p></div>
       <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
-        <p>Event streams.</p></div>
+        <p>The order event stream: each booking sent as it happens.</p></div>
       <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
-        <p>Arrow / Feather: hand-over between tools.</p></div>
+        <p>Arrow / Feather: hands the sales table from DuckDB to pandas without converting it.</p></div>
       <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
-        <p>Analytics files.</p></div>
+        <p>EdgeWorks' sales files: <code>data/*.parquet</code>.</p></div>
       <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
-        <p class="tile-bad">Loading it can run code.</p></div>
+        <p>Python only.</p><p class="tile-bad">Loading it can run code: never from a partner.</p></div>
     </div>
                 """
             ),
+            mo.md(
+                "**What to notice:** compare them on speed, size, interoperability, type fidelity, schema evolution "
+                "and safety. The labs in this chapter measure four of the six on EdgeWorks' sales."
+            ),
             mo.accordion({"What each criterion asks": _criteria}),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(mo):
-    format_use_case = mo.ui.dropdown(
-        options=[
-            "Public API payload",
-            "Internal Python checkpoint",
-            "Analytics table",
-            "Streaming event log",
-        ],
-        value="Public API payload",
-        label="Use case",
+def _(box, diagram, in_plain, mo, shop_sales):
+    _files = shop_sales["country"].nunique()
+    _kenya = int((shop_sales["country"] == "Kenya").sum())
+
+    def _doc(x, y, w, h):
+        """A sheet of paper with a folded corner: one sales file."""
+        f = min(w, h) * 0.3
+        return (
+            f'<path class="dg-box" d="M{x} {y} H {x + w - f} L {x + w} {y + f} V {y + h} H {x} Z"/>'
+            f'<path d="M{x + w - f} {y} V {y + f} H {x + w}" fill="none" stroke="currentColor" opacity="0.5"/>'
+        )
+
+    # Sales booked through the day; the nightly export sends them all at 22:00.
+    _hours = [8, 10, 12, 14, 16, 18, 20]
+
+    def _at(hour):
+        return 60 + (hour - 8) * 60
+
+    _picture = diagram(
+        '<text x="0" y="24" font-weight="700">Latency: how long one partner waits</text>'
+        + _doc(10, 50, 70, 84)
+        + f'<text x="45" y="156" text-anchor="middle" class="dg-muted">Kenya: {_kenya} sales</text>'
+        + '<path class="dg-edge" d="M92 92 H 300"/>'
+        + '<text x="196" y="80" text-anchor="middle" font-weight="700">write · send · read</text>'
+        + box(308, 68, "partner in Kenya", w=180, h=48)
+        + '<text x="560" y="24" font-weight="700">Throughput: how much one run gets through</text>'
+        + '<rect class="dg-tier" x="570" y="48" width="300" height="88" rx="10"/>'
+        + '<text x="720" y="84" text-anchor="middle" font-weight="700">nightly export</text>'
+        + f'<text x="720" y="112" text-anchor="middle">{_files} files · {len(shop_sales):,} sales</text>'
+        + '<path class="dg-edge" d="M876 92 H 930"/>'
+        + '<text x="990" y="86" text-anchor="middle" font-weight="700">sales</text>'
+        + '<text x="990" y="108" text-anchor="middle" font-weight="700">per second</text>'
+        # the trade: the export waits for the last sale of the day, so the first one waits longest
+        + '<text x="0" y="214" font-weight="700">They trade:</text>'
+        + f'<path d="M{_at(8)} 262 H {_at(22) - 60}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
+        + "".join(
+            _doc(_at(_h) - 12, 238, 24, 28)
+            + f'<text class="dg-muted" x="{_at(_h)}" y="290" text-anchor="middle">{_h:02d}:00</text>'
+            for _h in _hours
+        )
+        + f'<rect class="dg-tier" x="{_at(22) - 60}" y="232" width="120" height="40" rx="10"/>'
+        + f'<text x="{_at(22)}" y="257" text-anchor="middle">export 22:00</text>'
+        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 310 H {_at(22) - 64}"/>'
+        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="336" text-anchor="middle">'
+        "a sale booked at 08:00 reaches its partner 14 hours later</text>",
+        width=1060,
+        height=350,
+        label=f"Latency: one partner, in Kenya, waits for its file of {_kenya} sales to be written, sent and read. "
+        f"Throughput: the nightly export writes {_files} files with {len(shop_sales):,} sales and is measured in sales "
+        "per second. Sales booked from 08:00 all wait for the 22:00 export, so batching raises throughput and makes "
+        "the first sale wait 14 hours.",
+        tier="data",
     )
-    format_priority = mo.ui.dropdown(
-        options=["Interoperability", "Speed", "Small size", "Safety"],
-        value="Interoperability",
-        label="Priority",
-    )
-    mo.vstack(
-        [mo.md("### Mini-lab: Format Decision Assistant"), mo.hstack([format_use_case, format_priority], justify="start", gap=2)],
-        gap=0.5,
-    ).callout(kind="neutral")
-    return format_priority, format_use_case
-
-
-@app.cell
-def _(format_priority, format_use_case, mo):
-    # one row per use case, one entry per priority in the order of the priority dropdown
-    _recommendations = {
-        "Public API payload": ["JSON", "JSON, or MessagePack if both sides speak it", "Compressed JSON or a binary protocol", "JSON with strict schema validation"],
-        "Internal Python checkpoint": ["Parquet / Arrow", "Pickle (trusted data only)", "Parquet or compressed Pickle", "Parquet / JSON, no untrusted Pickle"],
-        "Analytics table": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
-        "Streaming event log": ["Avro / JSON", "Avro", "Avro with compression", "Avro + schema registry"],
-    }
-    _priorities = list(format_priority.options)
-    _pick = (format_use_case.value, _priorities.index(format_priority.value))
-    def _cell(text, chosen):
-        """A grey grid cell; the chosen use case, priority and recommendation stand out as tiles."""
-        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
-
-    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == format_priority.value) for _p in _priorities]
-    for _use, _row in _recommendations.items():
-        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
-        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
-    mo.md(
-        f"""
-    <div class="section-card tier-data">
-      <div style="display: grid; grid-template-columns: 190px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
-        {"".join(_grid)}
-      </div>
-      <p class="vis-caption">Starting point: <strong>{_recommendations[_pick[0]][_pick[1]]}</strong>.
-      A default to benchmark, not a rule.</p>
-    </div>
+    _more = mo.md(
+        """
+    - A container ship has terrible latency and huge throughput; a bicycle courier is the opposite.
+    - In the benchmark, one round trip is a file written and read back, and throughput counts sales,
+      not bytes.
+    - *Sometimes you get both*, by making the file smaller. That is what chapter 4 is for.
         """
     )
+    mo.vstack(
+        [
+            mo.md("### Latency vs throughput: two meanings of \"fast\""),
+            in_plain(
+                "**Latency** is how long one thing takes: a partner asks for its file, how long until it has it? "
+                "**Throughput** is how much gets through per second: how many sales the nightly export writes. "
+                "Collecting work into one big run raises throughput, and makes each single sale wait longer."
+            ),
+            _picture,
+            mo.md(
+                "**What to notice:** the 08:00 sale. The export sends everything in one efficient run at 22:00, so "
+                "that sale is 14 hours late. When someone asks for \"fast\", ask which one they mean."
+            ),
+            mo.md(
+                "**In one line:** latency = write time + read time of one file; throughput = sales written per second."
+            ),
+            mo.accordion({"Container ships, and how to get both": _more}),
+        ],
+        gap=0.8,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    serial_rows = mo.ui.slider(200, 3000, step=200, value=800, label="Rows", show_value=True)
-    serial_cols = mo.ui.slider(2, 8, value=5, label="Metric columns", show_value=True)
-    run_serial = mo.ui.run_button(label="Run serialization benchmark", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Benchmark: Six Formats, the Same Records"),
-            mo.hstack([serial_rows, serial_cols], widths="equal"),
-            run_serial,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return run_serial, serial_cols, serial_rows
+def _(mo, shop_sales):
+    ch2_rows = mo.ui.slider(
+        140, len(shop_sales), step=140, value=len(shop_sales), label="Sales in the file", show_value=True, debounce=True
+    )
+    ch2_run_bench = mo.ui.run_button(label="Run the format benchmark", kind="success")
+    return ch2_rows, ch2_run_bench
 
 
 @app.cell
@@ -1502,6 +1476,8 @@ def _(
     TIER,
     alt,
     best_seconds,
+    ch2_rows,
+    ch2_run_bench,
     chart_or_table,
     csv,
     fastavro,
@@ -1512,37 +1488,56 @@ def _(
     pd,
     pickle,
     pq,
-    random,
-    run_serial,
-    serial_cols,
-    serial_rows,
+    shop_sales,
     static_table,
     tempfile,
     tier_chart,
 ):
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: six formats, the same EdgeWorks sales"),
+            mo.md(
+                "Each format writes EdgeWorks' first sales to a file and reads them back, the best of 3 tries. The "
+                f"slider sets how many: one month is 140, the whole history {len(shop_sales):,}."
+            ),
+            mo.hstack([ch2_rows, ch2_run_bench], justify="start", align="center", gap=3),
+        ],
+        gap=0.6,
+    )
     mo.stop(
-        not run_serial.value,
-        mo.md(
-            "**Predict first:** is the smallest file also the fastest? Then click **Run serialization benchmark**."
-        ).callout(kind="neutral"),
+        not ch2_run_bench.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** is the smallest file also the fastest? Then click **Run the format benchmark**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
-    _rng = random.Random(42)
+    _cols = ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"]
     _records = [
-        {"id": _i, "city": _rng.choice(["Zurich", "Basel", "Geneva", "Bern", "Lugano"]), "score": round(_rng.random() * 100, 3)}
-        | {f"metric_{_c}": round(_rng.random() * 1000, 5) for _c in range(serial_cols.value)}
-        for _i in range(serial_rows.value)
+        _r | {"sale_date": _r["sale_date"].date()} for _r in shop_sales.head(ch2_rows.value)[_cols].to_dict("records")
     ]
     _avro_schema = {
         "type": "record",
-        "name": "Record",
-        "fields": [{"name": "id", "type": "int"}, {"name": "city", "type": "string"}]
-        + [{"name": _field, "type": "double"} for _field in list(_records[0])[2:]],
+        "name": "Sale",
+        "fields": [
+            {"name": "sale_id", "type": "long"},
+            {"name": "sale_date", "type": {"type": "int", "logicalType": "date"}},
+            {"name": "product", "type": "string"},
+            {"name": "country", "type": "string"},
+            {"name": "units_sold", "type": "long"},
+            {"name": "total_price", "type": "double"},
+            {"name": "customer_rating", "type": "long"},
+        ],
     }
 
     def _csv_write(path):
         with path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=_records[0])
+            writer = csv.DictWriter(f, fieldnames=_cols)
             writer.writeheader()
             writer.writerows(_records)
 
@@ -1560,7 +1555,7 @@ def _(
 
     _formats = {  # label: (write(path), read(path))
         "JSON": (
-            lambda p: p.write_text(json.dumps(_records), encoding="utf-8"),
+            lambda p: p.write_text(json.dumps(_records, default=str), encoding="utf-8"),  # dates as text
             lambda p: json.loads(p.read_text(encoding="utf-8")),
         ),
         "Pickle (unsafe)": (
@@ -1586,7 +1581,7 @@ def _(
                     "read (ms)": round(_read_ms, 2),
                     "latency (ms)": round(_write_ms + _read_ms, 2),
                     "size (KB)": round(_path.stat().st_size / 1024, 1),
-                    "rows/s written": round(len(_records) / _write_ms * 1000),
+                    "sales/s written": round(len(_records) / _write_ms * 1000),
                 }
             )
 
@@ -1616,30 +1611,45 @@ def _(
     _speed = alt.Chart(_df).encode(
         y=alt.Y("format:N", sort="-x", title=None),
         x=alt.X(
-            "rows/s written:Q",
+            "sales/s written:Q",
             axis=None,
-            scale=alt.Scale(domain=[0, _df["rows/s written"].max() * 1.3]),
+            scale=alt.Scale(domain=[0, _df["sales/s written"].max() * 1.3]),
         ),
         tooltip=_tooltip,
     )
     _throughput = (
         _speed.mark_bar(cornerRadiusEnd=4).encode(color=_color)
-        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("rows/s written:Q", format=".2s"))
-    ).properties(width="container", height=300, title="Throughput: rows written per second")
+        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("sales/s written:Q", format=".2s"))
+    ).properties(width="container", height=300, title="Throughput: sales written per second")
 
+    _by = {_r["format"]: _r for _r in _rows}
+
+    def _name(row):
+        return row["format"].removesuffix(" (unsafe)")
+
+    _smallest = min(_rows, key=lambda _r: _r["size (KB)"])
+    _quickest = min(_rows, key=lambda _r: _r["latency (ms)"])
     mo.vstack(
         [
+            _top,
             chart_or_table(
                 mo.hstack([tier_chart(_scatter, "data"), tier_chart(_throughput, "data")], widths=[3, 2], gap=2),
                 _rows,
-                label="Serialization benchmark (best of 3)",
+                label=f"{len(_records):,} sales, best of 3",
             ),
-            mo.md("**Do latency and throughput rank the formats the same way?**"),
+            mo.md(
+                f"**What to notice:** the smallest file is {_name(_smallest)} ({_smallest['size (KB)']:,} KB, "
+                f"against {_by['JSON']['size (KB)']:,} KB for JSON); the quickest round trip is "
+                f"{_name(_quickest)} ({_quickest['latency (ms)']:,} ms)."
+                + (" Quick, and the one format a partner could never safely open." if _quickest["format"].startswith("Pickle") else "")
+                + " Do latency and throughput rank the formats the same way? "
+                + f"Try {140 if len(_records) > 140 else len(shop_sales):,} sales too: does the ranking hold?"
+            ),
             mo.accordion(
                 {
-                    "The records being saved, and why the reads are not quite like for like": mo.vstack(
+                    "The sales being saved, and why the reads are not quite like for like": mo.vstack(
                         [
-                            static_table(_records[:3], label="Sample records"),
+                            static_table(_records[:3], label="The first three sales, as every format receives them"),
                             mo.md(
                                 "Numbers vary by machine and caching, so compare the formats with each other, not with "
                                 "another laptop. Arrow and Parquet stop at a columnar table without building Python "
@@ -1656,10 +1666,12 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
-    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500)
-    # Store codes are the classic case: they look like numbers and are not.
-    _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
+def _(Path, box, diagram, in_plain, mo, pd, shop_sales, tempfile):
+    # Each partner store has a three-digit code. For this demo, the code is the country's number:
+    # South Africa's partner store is 007, the classic case of a code that looks like a number and is not.
+    _src = shop_sales[["sale_id", "sale_date", "total_price"]].copy()
+    _src["store_code"] = [f"{_n:03d}" for _n in shop_sales["country_id"]]
+    _sa_sale = int(shop_sales.loc[shop_sales["country"] == "South Africa", "sale_id"].iloc[0])
 
     with tempfile.TemporaryDirectory() as _td:
         _csv_p = Path(_td) / "sales.csv"
@@ -1686,7 +1698,7 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
     _types = diagram(
         "".join(_parts),
         width=1010,
-        height=270,
+        height=264,
         label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
         "CSV returns sale_date as text and store_code as a whole number.",
     )
@@ -1698,37 +1710,39 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
             return f"TypeError: {_exc}"
 
     def _ask(name, df, kind):
+        _code = df.loc[df["sale_id"] == _sa_sale, "store_code"].tolist()[0]
         return mo.md(
             f"""
     **Ask the {name} copy**
 
     - How long did sales run? `{_span(df)}`
-    - First three store codes: `{df["store_code"].head(3).tolist()}`
+    - South Africa's store code: `{_code!r}`
             """
         ).callout(kind=kind)
 
     _why = mo.md(
         """
     Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not lose the
-    date. They lost **the note saying it was a date**, and that note is what your analysis was standing
+    date. They lost **the note saying it was a date**, and that note is what the analysis was standing
     on. Parquet stores the date as a plain number and keeps the note in its schema, which is why it came
-    back as `datetime64`.
+    back as a date.
         """
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Same 500 Sales, Written Two Ways and Read Back</h3>
-      {_types}
-    </div>
-                """
+            mo.md("### Why the CSV turned store code 007 into 7"),
+            in_plain(
+                "CSV is plain text with no note of what type each column is, so the reader guesses. "
+                "`2024-03-07` stays text, and `007` looks like a number, so it becomes `7`. Parquet stores the "
+                f"type next to the data. Here all {len(_src):,} sales, with each partner store's code (for this demo, "
+                "the country number: South Africa is 007), go into both files and come back out."
             ),
+            _types,
             mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
             mo.md(
-                "The date failure shouted; the store codes failed silently. **That one ends up in a report.**"
-            ).callout(kind="warn"),
+                "**What to notice:** the date failure shouted (a `TypeError`); the store code failed silently. "
+                "**That one ends up in a partner's report.**"
+            ),
             mo.accordion({"What the CSV actually lost": _why}),
         ],
         gap=0.6,
@@ -1737,22 +1751,21 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
 
 
 @app.cell
-def _(csv, diagram, fastavro, html, io, mo):
-    # It is next March. Your team adds a `channel` field to the sales event.
-    # Two years of old files sit on disk, and one old program nobody redeployed
-    # is still running in production. What happens?
+def _(csv, diagram, fastavro, html, in_plain, io, mo, shop_sales):
+    # Next March, EdgeWorks starts recording each sale's channel: online or partner. Two years of old files sit
+    # on disk, and one old program nobody redeployed is still running. What happens?
     _v1 = {
         "type": "record",
         "name": "Sale",
-        "fields": [{"name": "sale_id", "type": "int"}, {"name": "total_price", "type": "double"}],
+        "fields": [{"name": "sale_id", "type": "long"}, {"name": "total_price", "type": "double"}],
     }
     _v2 = {
         "type": "record",
         "name": "Sale",
         "fields": [
-            {"name": "sale_id", "type": "int"},
+            {"name": "sale_id", "type": "long"},
             {"name": "total_price", "type": "double"},
-            {"name": "channel", "type": "string", "default": "in-store"},
+            {"name": "channel", "type": "string", "default": "unknown"},
         ],
     }
 
@@ -1761,13 +1774,16 @@ def _(csv, diagram, fastavro, html, io, mo):
         fastavro.writer(_buf, _schema, _rows)
         return _buf.getvalue()
 
-    _old_file = _avro_bytes(_v1, [{"sale_id": 1, "total_price": 4034.91}])
-    _new_file = _avro_bytes(_v2, [{"sale_id": 3, "total_price": 99.0, "channel": "online"}])
+    _first, _last = shop_sales.iloc[0], shop_sales.iloc[-1]
+    _old_file = _avro_bytes(_v1, [{"sale_id": int(_first["sale_id"]), "total_price": float(_first["total_price"])}])
+    _new_file = _avro_bytes(
+        _v2, [{"sale_id": int(_last["sale_id"]), "total_price": float(_last["total_price"]), "channel": "online"}]
+    )
 
     _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
     _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
 
-    _csv_row = next(csv.DictReader(io.StringIO("sale_id,total_price\n1,4034.91\n")))
+    _csv_row = next(csv.DictReader(io.StringIO(f"sale_id,total_price\n{_first['sale_id']},{_first['total_price']}\n")))
     try:
         _csv_row["channel"]
         _csv_result = "no error"
@@ -1814,16 +1830,84 @@ def _(csv, diagram, fastavro, html, io, mo):
         "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
         tier="data",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Schema Evolution: the Office Adds a Box to the Form</h3>
-      <p>A <code>channel</code> box is added (default <code>in-store</code>), while old files and one old
-      program live on.</p>
-      {_lanes_svg}
-      <p class="vis-caption">CSV ships without the form, so the agreement lives only in someone's memory.</p>
+    mo.vstack(
+        [
+            mo.md("### Schema evolution: EdgeWorks adds a channel box to the form"),
+            in_plain(
+                "**Schema evolution** means changing the form while old files and old programs live on. EdgeWorks "
+                "starts recording each sale's `channel`: `online` or `partner`. Old sales have no such box, so the "
+                "new form gives it a **default**, `unknown`, for any sale written without it."
+            ),
+            _lanes_svg,
+            mo.md(
+                "**What to notice:** the bottom row. CSV ships without the form, so the agreement lives only in "
+                "someone's memory, and every reader has to be changed by hand."
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    ch2_use_case = mo.ui.dropdown(
+        options=["Sales files for partners", "Dashboard cache", "Sales history for analysis", "Order event stream"],
+        value="Sales files for partners",
+        label="EdgeWorks job",
+    )
+    ch2_priority = mo.ui.dropdown(
+        options=["Interoperability", "Speed", "Small size", "Safety"],
+        value="Interoperability",
+        label="What matters most",
+    )
+    return ch2_priority, ch2_use_case
+
+
+@app.cell
+def _(ch2_priority, ch2_use_case, mo):
+    # one row per job, one entry per priority in the order of the priority dropdown
+    _recommendations = {
+        "Sales files for partners": ["CSV for spreadsheets, Parquet for data teams", "Parquet", "Parquet, compressed with zstd (chapter 4)", "CSV or Parquet; never Pickle"],
+        "Dashboard cache": ["Parquet / Arrow", "Arrow (Feather), or Pickle we wrote ourselves", "Parquet", "Arrow or Parquet; no Pickle from outside"],
+        "Sales history for analysis": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
+        "Order event stream": ["Avro / JSON", "Avro", "Avro with compression", "Avro + a schema registry: one shared copy of every form"],
+    }
+    _priorities = list(ch2_priority.options)
+    _pick = (ch2_use_case.value, _priorities.index(ch2_priority.value))
+
+    def _cell(text, chosen):
+        """A grey grid cell; the chosen job, priority and recommendation stand out as tiles."""
+        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
+
+    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == ch2_priority.value) for _p in _priorities]
+    for _use, _row in _recommendations.items():
+        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
+        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
+    mo.vstack(
+        [
+            mo.md("### Try it: which format for which EdgeWorks job?"),
+            mo.md(
+                "Pick a job and what matters most for it. **Interoperability** means how many tools can read the "
+                "file: Excel, R, a partner's script. A **cache** is a saved copy the dashboard reloads instead of "
+                "asking again."
+            ),
+            mo.hstack([ch2_use_case, ch2_priority], justify="start", gap=2),
+            mo.md(
+                f"""
+    <div class="section-card tier-data">
+      <div style="display: grid; grid-template-columns: 230px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
+        {"".join(_grid)}
+      </div>
     </div>
-        """
+                """
+            ),
+            mo.md(
+                f"**Starting point: {_recommendations[_pick[0]][_pick[1]]}.** A default to benchmark on EdgeWorks' own "
+                "files, not a rule."
+            ),
+        ],
+        gap=0.6,
     )
     return
 
@@ -1832,20 +1916,21 @@ def _(csv, diagram, fastavro, html, io, mo):
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — Serialization Choices</h3>
+      <h3>Discussion: Serialization Choices</h3>
       <details>
-        <summary><strong>Q1:</strong> JSON, Avro or Parquet: how do you choose?</summary>
-        <p><strong>Answer:</strong> JSON for the widest tool support, Avro for event streams whose schema
-        changes, Parquet for analytics.</p>
+        <summary><strong>Q1:</strong> A partner in Japan asks for "the sales as a file". CSV, JSON or Parquet?</summary>
+        <p><strong>Answer:</strong> Ask what they open it with. Excel: CSV, with the column types written down
+        (store codes are text). A data team: Parquet, which carries the types itself. A web app: JSON.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
-        <p><strong>Answer:</strong> If so, never unpickle it, and validate it strictly.</p>
+        <summary><strong>Q2:</strong> A partner sends us their sales as a Pickle file. Do we load it?</summary>
+        <p><strong>Answer:</strong> No. Loading Pickle can run any code the sender put in it. Ask for Parquet or
+        CSV, and validate whatever comes in.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Where should size vs speed trade‑offs be measured?</summary>
-        <p><strong>Answer:</strong> In staging, then on a canary: the new format serving a small share of
-        real traffic.</p>
+        <summary><strong>Q3:</strong> Before switching the nightly export to a new format, where do we measure size and speed?</summary>
+        <p><strong>Answer:</strong> On the real export in a test setup (staging), then on a canary: one partner gets
+        the new format first, while the others keep the old one.</p>
       </details>
     </div>
     """)
@@ -1853,33 +1938,38 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(mo, shop_sales):
+    _fields = 7  # sale_id, sale_date, product_id, country_id, units_sold, total_price, customer_rating
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 2 Conclusion
 
-    - Formats trade speed, size, interop and safety: benchmark on your workload.
-    - CSV keeps values, drops types (`str` dates, `007` as `7`); Parquet and Avro carry the schema.
-    - Avro reader defaults let old files and new code agree.
-    - Never load Pickle from a source you do not trust.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Formats trade speed, size, interoperability and safety: benchmark on EdgeWorks' own sales.
+    - CSV keeps the values and drops the types (dates come back as text, store code `007` as `7`);
+      Parquet and Avro carry the schema with the data.
+    - Avro's reader defaults let old files and new code agree when the form changes.
+    - Never load Pickle from a partner, or from anyone you do not trust.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                f"""
     ### Bridge to Next Chapter
 
-    Next: **lay the bytes out** on disk, by row or by column.
-
+    Next: **lay the bytes out** on disk, by row or by column. Mia's "total revenue" needs one field of
+    the {_fields} in each sale. A file laid out row by row still passes through all {_fields} fields of every
+    sale: {_fields * len(shop_sales):,} values read to use {len(shop_sales):,}.
+                """
+                + """
     $$
     \\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
     $$
-            """
-    ).callout(kind="neutral")
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
