@@ -411,27 +411,9 @@ def _(chapter_intro, mo):
             mo.md("## 1. File Locks vs Databases (ACID)"),
             chapter_intro(
                 "data",
-                "When many users update shared data at the same time, does it stay correct?",
-                "The very bottom of the data tier: before a format or a layout, writes have to be correct.",
-            ),
-            mo.md(
-                """
-    **ACID**: what a database promises, and what a plain file gives you instead.
-
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity</div>
-        <p>All or nothing.</p><p class="tile-bad">File: a crash leaves half a change.</p></div>
-      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency</div>
-        <p>Rules hold before and after every change.</p><p class="tile-bad">File: no rules at all.</p></div>
-      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation</div>
-        <p>Concurrent changes act as if run one at a time.</p><p class="tile-bad">File: writers overwrite each other.</p></div>
-      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability</div>
-        <p>Committed data survives a crash.</p><p class="tile-bad">File: only after flush + fsync.</p></div>
-    </div>
-
-    **The signal to watch:** $W$ workers adding $I$ increments each should reach $E = W \\times I$.
-    The shortfall is the number of lost updates, $L = E - A$, with $A$ the value actually reached.
-                """
+                "Two reps booked an order at the same moment. Why is today's order count too low?",
+                "The very bottom of the data tier: before any format or layout, every save has to land. We lose an "
+                "order on purpose, then keep it: first with a lock, then with a database.",
             ),
         ],
         gap=1,
@@ -440,171 +422,378 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
+def _(in_plain, mo, shop_sales):
+    # The story's day: EdgeWorks' busiest day of January 2026, its last two orders booked at the same moment.
+    _per_day = shop_sales[shop_sales["sale_date"].dt.to_period("M") == "2026-01"].groupby("sale_date").size()
+    _day, ch1_day_orders = _per_day.idxmax(), int(_per_day.max())
+    _before = ch1_day_orders - 2
+    mo.vstack(
+        [
+            mo.md("### How an order goes missing from the count"),
+            in_plain(
+                "Mia's dashboard shows **orders booked today**, a number kept in one file. Every booking updates "
+                "it in three steps: **read** the number, **add** one, **save** it back. If two reps both read "
+                "before either one saves, both save the same number, and one order drops out of the count. "
+                "This is called a **lost update**."
+            ),
+            mo.md(
+                f"""
     <div class="section-card flow-card">
-      <h3>Lost Update: Who Does What, When</h3>
       <div class="lost-update-wrap">
         <div class="lost-update-grid">
           <div class="lu-header">Step</div>
-          <div class="lu-header">Worker A</div>
-          <div class="lu-header">Worker B</div>
-          <div class="lu-header">Shared counter</div>
+          <div class="lu-header">Rep A books order {_before + 1}</div>
+          <div class="lu-header">Rep B books order {_before + 2}</div>
+          <div class="lu-header">Orders today (the file)</div>
 
           <div class="lu-step">1</div>
-          <div class="lu-event lu-read">reads 41 into local copy</div>
-          <div class="lu-event lu-read">reads 41 into local copy</div>
-          <div class="lu-state">41</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-state">{_before}</div>
 
           <div class="lu-step">2</div>
-          <div class="lu-event lu-write">writes 42</div>
-          <div class="lu-event">adds 1 to its stale 41</div>
-          <div class="lu-state">42</div>
+          <div class="lu-event lu-write">saves {_before} + 1 = {_before + 1}</div>
+          <div class="lu-event">adds 1 to the {_before} it read</div>
+          <div class="lu-state">{_before + 1}</div>
 
           <div class="lu-step">3</div>
           <div class="lu-event lu-idle">done</div>
-          <div class="lu-event lu-stale">writes stale 42</div>
-          <div class="lu-state lu-problem">42 (A's +1 overwritten)</div>
+          <div class="lu-event lu-stale">saves {_before} + 1 = {_before + 1}</div>
+          <div class="lu-state lu-problem">{_before + 1} (A's order overwritten)</div>
         </div>
       </div>
-      <div class="flow-note"><strong>Expected after 2 increments: 43.</strong> Observed: 42, so one update was lost.</div>
+      <div class="flow-note"><strong>{_day.day} {_day:%B %Y}, the busiest day that month: {ch1_day_orders} orders
+      booked, {ch1_day_orders - 1} counted.</strong> Both orders are in the order book; only the count lost one.</div>
     </div>
-    """)
+                """
+            ),
+            mo.md(
+                "**What to notice:** nobody saw an error. Each rep did the right thing; the timing did the damage. "
+                "B's save is **stale**: it is based on a number that changed after B read it."
+            ),
+            mo.md(
+                f"**In one line:** lost orders = orders booked − orders counted, here {ch1_day_orders} − "
+                f"{ch1_day_orders - 1} = 1."
+            ),
+        ],
+        gap=0.8,
+    )
+    return (ch1_day_orders,)
+
+
+@app.cell
+def _(mo):
+    ch1_sim_orders = mo.ui.slider(1, 6, value=2, label="Orders each rep books", show_value=True, debounce=True)
+    ch1_sim_timing = mo.ui.slider(1, 999, value=7, label="Timing (try another)", show_value=True, debounce=True)
+    return ch1_sim_orders, ch1_sim_timing
+
+
+@app.cell
+def _(
+    TIER,
+    alt,
+    ch1_day_orders,
+    ch1_sim_orders,
+    ch1_sim_timing,
+    chart_or_table,
+    mo,
+    pd,
+    random,
+    tier_chart,
+):
+    _start = ch1_day_orders - 2  # where the story above left the count
+    _rng = random.Random(ch1_sim_timing.value)
+    _ops = {_rep: ["read", "save"] * ch1_sim_orders.value for _rep in "AB"}
+    _read, _count, _log = {}, _start, []
+    while _ops["A"] or _ops["B"]:
+        _rep = _rng.choice([_r for _r in "AB" if _ops[_r]])
+        _action = _ops[_rep].pop(0)
+        _before = _count
+        if _action == "read":
+            _read[_rep] = _count
+        else:
+            _count = _read[_rep] + 1
+        _log.append(
+            {
+                "step": len(_log) + 1,
+                "rep": f"rep {_rep}",
+                "action": _action,
+                "count before": _before,
+                "number the rep read": _read[_rep],
+                "count after": _count,
+                "note": "stale save" if _action == "save" and _read[_rep] != _before else "",
+            }
+        )
+
+    _booked = _start + 2 * ch1_sim_orders.value
+    _df = pd.DataFrame(_log)
+    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
+    # A read shows the number it got, a save the number it left; short labels once the steps get narrow.
+    _short = len(_df) > 12
+    _df["label"] = [
+        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
+        for _a, _v in zip(_df["action"], _df["count after"], strict=True)
+    ]
+    _df["orders booked"] = _start + (_df["action"] == "save").cumsum()
+    _df["orders counted"] = _df["count after"]
+    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
+    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("rep:N", title=None, axis=alt.Axis(minExtent=60)))
+    _lanes = (
+        _lane.mark_rect(cornerRadius=8).encode(
+            color=alt.Color(
+                "kind:N",
+                title=None,
+                scale=alt.Scale(domain=["read", "save", "stale save"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
+            )
+        )
+        # fixed text colours: the fills above are the same in both themes
+        + _lane.mark_text().encode(
+            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
+        )
+    ).properties(width="container", height=110)
+    _series = ["orders counted", "orders booked"]
+    _counter = (
+        alt.Chart(_df)
+        .transform_fold(_series, as_=["series", "value"])
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=_x,
+            y=alt.Y("value:Q", title="orders today", scale=alt.Scale(zero=False), axis=alt.Axis(minExtent=60)),
+            color=alt.Color("series:N", title=None, scale=alt.Scale(domain=_series, range=[TIER["data"], TIER["muted"]])),
+            strokeDash=alt.StrokeDash("series:N", title=None, scale=alt.Scale(domain=_series, range=[[1, 0], [6, 4]])),
+        )
+        .properties(width="container", height=170)
+    )
+    _stale = int((_df["note"] == "stale save").sum())
+
+    mo.vstack(
+        [
+            mo.md("### Try it: rep A and rep B, step by step"),
+            mo.md(
+                f"Both reps start from the count of {_start} and book their orders. Every booking is two steps, "
+                "**read** the count, then **save** it plus one. The timing slider shuffles who moves when, as on "
+                "a real day: neither rep sees the other's screen."
+            ),
+            mo.hstack([ch1_sim_orders, ch1_sim_timing], widths="equal", gap=2),
+            mo.hstack(
+                [
+                    mo.stat(_booked, label="orders booked", bordered=True),
+                    mo.stat(_count, label="orders counted", bordered=True),
+                    mo.stat(_booked - _count, label="lost from the count", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(
+                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
+                _log,
+                label="Every step, in order",
+            ),
+            mo.md(
+                f"**What to notice:** {_stale} red stale save{'s' if _stale != 1 else ''}. A save turns red when the "
+                "other rep saved between its read and its save, and it erases every order saved in that gap. "
+                "Try other timings: the count is only right when no save is stale."
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
-def _(box, diagram, mo):
-    # Three flatmates who ask for the key, one script that never does.
-    _workers = "".join(
-        box(0, _y, _label, w=300, cls=_cls)
+def _(box, diagram, in_plain, mo):
+    # Three reps who ask for the pen, one script that never does.
+    _people = "".join(
+        box(0, _y, _label, w=330, cls=_cls)
         for _y, _label, _cls in [
-            (20, "worker 1 · holds the key", "dg-tier"),
-            (92, "worker 2 · waits at the hook", "dg-box"),
-            (164, "worker 3 · waits at the hook", "dg-box"),
-            (240, "script · never asks for the key", "dg-box dg-hot"),
+            (20, "rep 1 · holds the pen, books", "dg-tier"),
+            (92, "rep 2 · waits for the pen", "dg-box"),
+            (164, "rep 3 · waits for the pen", "dg-box"),
+            (240, "import script · never asks", "dg-box dg-hot"),
         ]
     )
     _lock_map = diagram(
-        _workers
-        + box(410, 64, "one key per file", w=250, h=104, cls="dg-tier")
-        + '<text class="dg-muted" x="535" y="194" text-anchor="middle">flock(LOCK_EX): the hook</text>'
-        + box(780, 92, "counter.txt", w=200, h=48)
-        + '<path class="dg-edge dg-ok" d="M300 42 C 360 42, 350 92, 404 92"/>'
-        + '<path class="dg-edge" d="M300 114 H 404"/>'
-        + '<path class="dg-edge" d="M300 186 C 360 186, 350 140, 404 140"/>'
-        + '<path class="dg-edge dg-ok dg-flow" d="M660 116 H 774"/>'
-        + '<path class="dg-edge dg-hot" d="M300 262 H 880 V 146"/>'
-        + '<text class="dg-hot" x="590" y="250" text-anchor="middle">no flock call: walks straight in</text>',
-        width=980,
+        _people
+        + box(440, 64, "one pen per file", w=250, h=104, cls="dg-tier")
+        + '<text class="dg-muted" x="565" y="194" text-anchor="middle">the OS hands it out: flock</text>'
+        + box(820, 92, "orders_today.txt", w=200, h=48)
+        + '<path class="dg-edge dg-ok" d="M330 42 C 390 42, 380 92, 434 92"/>'
+        + '<path class="dg-edge" d="M330 114 H 434"/>'
+        + '<path class="dg-edge" d="M330 186 C 390 186, 380 140, 434 140"/>'
+        + '<path class="dg-edge dg-ok dg-flow" d="M690 116 H 814"/>'
+        + '<path class="dg-edge dg-hot" d="M330 262 H 920 V 146"/>'
+        + '<text class="dg-hot" x="625" y="250" text-anchor="middle">no flock call: saves straight away</text>',
+        width=1020,
         height=290,
-        label="Three workers queue for one key on a hook (the OS file lock); only the key holder writes to "
-        "counter.txt. A fourth script never asks for the key and writes to the file directly.",
+        label="Three reps queue for one pen (the OS file lock); only the rep holding it saves to orders_today.txt. "
+        "An import script never asks for the pen and saves to the file directly.",
         tier="data",
     )
     _more = mo.md(
         """
-    - The OS empties the pockets of anyone who leaves: a program that crashes while holding the
-      key does **not** wedge the file forever.
-    - There is a second kind of key many may hold at once, for looking but not touching
-      (`LOCK_SH`). The lab below asks for the exclusive one, `LOCK_EX`.
-    - The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
-      which is why file locks are unreliable across a network filesystem.
-    - **Where it breaks:** the rule is only as good as the flatmates. A database does not rely on
-      an agreement: every write goes through its lock, whether the program asked or not.
+    - The OS takes the pen back from a program that crashes, so a crash in the middle of a booking does
+      **not** block the file forever.
+    - There is a second kind of lock that many may hold at once, for reading but not saving (`LOCK_SH`).
+      The lab below asks for the exclusive one, `LOCK_EX`.
+    - The pen lies on *one* desk. Two computers sharing a network drive each have their own desk, which is
+      why file locks are unreliable on a network filesystem.
+    - **Where it breaks:** the rule is only as good as the people. A database does not rely on an
+      agreement: every write goes through its lock, whether the program asked or not.
         """
     )
     mo.vstack(
         [
+            mo.md("### A file lock is one booking pen at the sales desk"),
+            in_plain(
+                "A **file lock** lets one program at a time work on a file. Picture one pen at the sales desk: "
+                "only the rep holding it may update the count, and the others wait for it. The operating system "
+                "(OS) hands out the pen when a program calls `flock`, and only to programs that ask."
+            ),
+            _lock_map,
             mo.md(
-                f"""
-    <div class="section-card">
-      <h3>What a Lock Actually Is</h3>
-      <p>Four flatmates, one bathroom, <strong>no lock on the door</strong>: one key on a hook in the
-      hall, and a house rule to take it before going in.</p>
-      {_lock_map}
-      <p class="vis-caption"><strong>A file lock is an agreement, not a door.</strong> The OS hands out
-      one key per file and makes everyone else wait. A program that never asks walks straight in.</p>
-    </div>
-                """
+                "**What to notice:** the import script at the bottom. A file lock is an agreement, not a door: "
+                "a program that never asks for the pen saves anyway."
             ),
             mo.accordion({"Where the picture holds, and where it breaks": _more}),
         ],
-        gap=0.6,
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### What a database promises: ACID"),
+            in_plain(
+                "A database groups changes into a **transaction**: a few steps it carries out as one unit, then "
+                "**commits** them (keeps them all) or **rolls them back** (undoes them all). ACID names four "
+                "promises a database makes about every transaction. A plain file makes none of them."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity: all or nothing</div>
+        <p>Moving a sale from Europe to Africa changes both region totals, or neither.</p>
+        <p class="tile-bad">File: a crash in between drops the sale from total revenue.</p></div>
+      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency: rules always hold</div>
+        <p>A rule such as "units sold is at least 1" is checked on every save.</p>
+        <p class="tile-bad">File: nothing checks; a sale with 0 units is saved.</p></div>
+      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation: one after the other</div>
+        <p>Two reps booking at once both get counted, as if one booked after the other.</p>
+        <p class="tile-bad">File: one save overwrites the other; the count is too low.</p></div>
+      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability: saved stays saved</div>
+        <p>A booking the rep saw confirmed survives a power cut a second later.</p>
+        <p class="tile-bad">File: only after flush and fsync, which force the bytes onto the disk.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**What to notice:** the next lab tests **I**, reps booking at once. The one after it tests **A**, "
+                "a crash halfway through a change."
+            ),
+        ],
+        gap=0.8,
     )
     return
 
 
 @app.cell
 def _(mo):
-    # Checkboxes, not a multiselect: the room sees every strategy and whether it is on.
-    STRATEGY_LABELS = {
+    # Checkboxes, not a multiselect: the room sees every way of counting and whether it is on.
+    ch1_strategy_labels = {
         "no_lock": "file, no lock",
-        "thread_lock": "file + Python lock",
-        "file_lock": "file + flock",
-        "sqlite_naive": "SQLite: read, +1, write",
-        "sqlite": "SQLite: one UPDATE",
+        "thread_lock": "file + lock in one program",
+        "file_lock": "file + OS lock (the pen)",
+        "sqlite_naive": "database: read, +1, save",
+        "sqlite": "database: one UPDATE",
     }
-    strategies = mo.ui.dictionary(
-        {key: mo.ui.checkbox(value=key != "thread_lock", label=label) for key, label in STRATEGY_LABELS.items()}
+    ch1_strategies = mo.ui.dictionary(
+        {_key: mo.ui.checkbox(value=_key != "thread_lock", label=_label) for _key, _label in ch1_strategy_labels.items()}
     )
-    workers = mo.ui.slider(2, 8, value=4, label="Workers", show_value=True)
+    ch1_reps = mo.ui.slider(2, 8, value=4, label="Sales reps booking at once", show_value=True, debounce=True)
     # Capped so the slowest setting (8 x 120 x 2 ms, paid in a queue by flock) stays near 3 s in all.
-    iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments each", show_value=True)
-    jitter = mo.ui.slider(0, 2, value=1, step=1, label="Jitter (ms)", show_value=True)
-    run_race = mo.ui.run_button(label="Run counter experiment", kind="success")
-    _notes = mo.md(
-        """
-    - **file, no lock**: plain file writes; nothing stops two workers from overlapping.
-    - **file + Python lock**: a `threading.Lock`, which only works inside one process.
-    - **file + flock**: the OS key from above, held from the read to the write.
-    - **SQLite: read, +1, write**: a real database, used the way most people first use one.
-    - **SQLite: one UPDATE**: `UPDATE counter SET value = value + 1` inside a transaction.
-
-    **Jitter** is a pause between the read and the write. It widens the gap the race lives in,
-    and a locked strategy pays it one worker at a time.
-        """
+    ch1_orders_per_rep = mo.ui.slider(10, 120, step=5, value=35, label="Orders each rep books", show_value=True, debounce=True)
+    ch1_pause = mo.ui.slider(0, 2, value=1, step=1, label="Pause between reading and saving (ms)", show_value=True, debounce=True)
+    ch1_run_race = mo.ui.run_button(label="Run the bookings", kind="success")
+    return (
+        ch1_orders_per_rep,
+        ch1_pause,
+        ch1_reps,
+        ch1_run_race,
+        ch1_strategies,
+        ch1_strategy_labels,
     )
-
-    mo.vstack(
-        [
-            mo.md("### Concurrency Demo: File vs Locks vs Database"),
-            mo.hstack([workers, iterations, jitter], widths="equal"),
-            strategies.hstack(justify="start", gap=1.5, wrap=True),
-            mo.accordion({"What each strategy does": _notes}),
-            run_race,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return STRATEGY_LABELS, iterations, jitter, run_race, strategies, workers
 
 
 @app.cell
 def _(
     Path,
-    STRATEGY_LABELS,
     TIER,
     alt,
+    ch1_orders_per_rep,
+    ch1_pause,
+    ch1_reps,
+    ch1_run_race,
+    ch1_strategies,
+    ch1_strategy_labels,
     chart_or_table,
-    iterations,
-    jitter,
     mo,
     pd,
-    run_race,
+    shop_sales,
     sqlite3,
-    strategies,
     tempfile,
     threading,
     tier_chart,
     time,
-    workers,
 ):
+    _notes = mo.md(
+        """
+    - **file, no lock**: every rep reads and saves the count file whenever they like.
+    - **file + lock in one program**: a Python `threading.Lock`, a pen only the reps inside this one program
+      can see. A second program would not wait for it.
+    - **file + OS lock (the pen)**: `flock`, held from the read to the save.
+    - **database: read, +1, save**: SQLite, but the rep reads the count, adds one in Python and saves the
+      result: the same gap as the file.
+    - **database: one UPDATE**: `UPDATE counter SET value = value + 1` in a transaction: the database reads
+      and saves in one step.
+
+    The **pause** is the time between reading the count and saving it. It widens the gap the race lives in,
+    and a locked strategy pays it one rep at a time.
+        """
+    )
+    _target = ch1_reps.value * ch1_orders_per_rep.value
+    _january = int((shop_sales["sale_date"].dt.to_period("M") == "2026-01").sum())
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: reps booking at once, five ways to keep the count"),
+            mo.md(
+                "Every rep books their orders as fast as they can, all at the same time, and each booking adds one "
+                f"to the same count. The start setting replays January 2026: 4 reps share its {_january} orders, "
+                "35 each. Tick the ways of keeping the count to compare."
+            ),
+            mo.hstack([ch1_reps, ch1_orders_per_rep, ch1_pause], widths="equal", gap=2),
+            mo.hstack(
+                [ch1_strategies.hstack(justify="start", gap=1.5, wrap=True), ch1_run_race],
+                justify="space-between",
+                align="center",
+            ),
+            mo.accordion({"What each way of keeping the count does": _notes}),
+        ],
+        gap=0.6,
+    )
     mo.stop(
-        not run_race.value,
-        mo.md(
-            "**Predict first:** which strategies will reach the dashed target line? "
-            "Then click **Run counter experiment**."
-        ).callout(kind="neutral"),
+        not ch1_run_race.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    f"**Predict first:** {ch1_reps.value} reps × {ch1_orders_per_rep.value} orders = {_target:,} "
+                    "bookings. Which ways of keeping the count reach that number? Then click **Run the bookings**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
     from concurrent.futures import ThreadPoolExecutor as _Pool
@@ -615,34 +804,34 @@ def _(
     except ImportError:  # Windows has no flock
         _fcntl = None
 
-    _workers, _increments, _jitter_s = workers.value, iterations.value, jitter.value / 1000
+    _reps, _orders, _pause_s = ch1_reps.value, ch1_orders_per_rep.value, ch1_pause.value / 1000
 
-    def _race(worker):
-        """Run `worker` in every thread at once; return the seconds until the last one finished."""
+    def _race(rep):
+        """Run `rep` in every thread at once; return the seconds until the last one finished."""
         start = time.perf_counter()
-        with _Pool(_workers) as pool:
-            for future in [pool.submit(worker) for _ in range(_workers)]:
-                future.result()  # a worker that crashed raises here instead of passing as a lost update
+        with _Pool(_reps) as pool:
+            for future in [pool.submit(rep) for _ in range(_reps)]:
+                future.result()  # a rep that crashed raises here instead of passing as a lost booking
         return time.perf_counter() - start
 
     def _file_counter(path, mode):
         # Fixed width: nobody ever reads an empty or half-written number, so the only race
-        # left is the read-modify-write gap this demo is about.
+        # left is the read-then-save gap this demo is about.
         path.write_text(f"{0:010d}")
         guard = threading.Lock() if mode == "thread_lock" else _nullcontext()
 
-        def worker():
-            for _ in range(_increments):
+        def rep():
+            for _ in range(_orders):
                 with guard, path.open("r+") as f:
                     if mode == "file_lock" and _fcntl:
                         _fcntl.flock(f, _fcntl.LOCK_EX)  # released when the file closes
                     current = int(f.read())
-                    if _jitter_s:
-                        time.sleep(_jitter_s)
+                    if _pause_s:
+                        time.sleep(_pause_s)
                     f.seek(0)
                     f.write(f"{current + 1:010d}")
 
-        return _race(worker), int(path.read_text())
+        return _race(rep), int(path.read_text())
 
     def _sqlite_counter(path, one_statement):
         con = sqlite3.connect(path)
@@ -651,93 +840,99 @@ def _(
         )
         con.close()
 
-        def worker():
+        def rep():
             conn = sqlite3.connect(path, timeout=30, isolation_level=None)
             conn.execute("PRAGMA synchronous=OFF")  # this demo is about isolation, not durability
-            for _ in range(_increments):
+            for _ in range(_orders):
                 if one_statement:
                     conn.execute("BEGIN IMMEDIATE")
                     conn.execute("UPDATE counter SET value = value + 1")
                     conn.execute("COMMIT")
                 else:
                     (current,) = conn.execute("SELECT value FROM counter").fetchone()
-                    if _jitter_s:
-                        time.sleep(_jitter_s)
+                    if _pause_s:
+                        time.sleep(_pause_s)
                     conn.execute("UPDATE counter SET value = ?", (current + 1,))
             conn.close()
 
-        seconds = _race(worker)
+        seconds = _race(rep)
         con = sqlite3.connect(path)
         (value,) = con.execute("SELECT value FROM counter").fetchone()
         con.close()
         return seconds, value
 
-    _labels = dict(STRATEGY_LABELS)
+    _labels = dict(ch1_strategy_labels)
     if not _fcntl:
-        _labels["file_lock"] = "file, no flock on this OS"
-    _expected = _workers * _increments
+        _labels["file_lock"] = "file, no OS lock on Windows"
     _rows = []
     # No mo.status.spinner here: as a slide, a cell whose output blanks while it runs drops into marimo's edit preview.
     with tempfile.TemporaryDirectory() as _tmp:
         for _key, _label in _labels.items():
-            if not strategies.value[_key]:
+            if not ch1_strategies.value[_key]:
                 continue
             if _key.startswith("sqlite"):
-                _seconds, _actual = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
+                _seconds, _counted = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
             else:
-                _seconds, _actual = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
+                _seconds, _counted = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
             _rows.append(
                 {
-                    "strategy": _label,
-                    "expected": _expected,
-                    "actual": _actual,
-                    "lost updates": _expected - _actual,
-                    "duration (ms)": round(_seconds * 1000, 1),
+                    "way of keeping the count": _label,
+                    "orders booked": _target,
+                    "orders counted": _counted,
+                    "lost from the count": _target - _counted,
+                    "time taken (ms)": round(_seconds * 1000, 1),
                 }
             )
+    mo.stop(not _rows, mo.vstack([_top, mo.md("Tick at least one way of keeping the count.").callout(kind="warn")]))
 
     _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all kept" for _lost in _df["lost updates"]]
-    _y = alt.Y("strategy:N", sort=None, title=None)
-    _reached = alt.Chart(_df).encode(y=_y, x=alt.X("actual:Q", title="counter reached"))
+    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all counted" for _lost in _df["lost from the count"]]
+    _y = alt.Y("way of keeping the count:N", sort=None, title=None)
+    # room to the right of the longest bar for its "all counted" label
+    _x = alt.X("orders counted:Q", title="orders counted", scale=alt.Scale(domain=[0, _target * 1.2], nice=False))
+    _reached = alt.Chart(_df).encode(y=_y, x=_x)
     _counts = (
         _reached.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum['lost updates'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+            color=alt.condition("datum['lost from the count'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
         )
         + _reached.mark_text(align="left", dx=6).encode(text="verdict:N")
-        + alt.Chart(pd.DataFrame({"target": [_expected]}))
+        + alt.Chart(pd.DataFrame({"target": [_target]}))
         .mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"])
         .encode(x="target:Q")
-    ).properties(width="container", height=48 * len(_df), title=f"Counter reached (target {_expected:,})")
+    ).properties(width="container", height=42 * len(_df), title=f"Orders counted (dashed line: {_target:,} booked)")
     _durations = (
         alt.Chart(_df)
-        .encode(y=alt.Y("strategy:N", sort=None, title=None, axis=None), x=alt.X("duration (ms):Q", title=None))
+        .encode(y=alt.Y("way of keeping the count:N", sort=None, title=None, axis=None), x=alt.X("time taken (ms):Q", title=None))
         .mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
-        .properties(width="container", height=48 * len(_df), title="Time taken (ms)")
+        .properties(width="container", height=42 * len(_df), title="Time taken (ms)")
     )
+    _lost = {_r["way of keeping the count"]: _r["lost from the count"] for _r in _rows}
+    _worst = max(_lost, key=_lost.get)
 
     mo.vstack(
         [
+            _top,
             chart_or_table(
                 mo.hstack([tier_chart(_counts, "data"), tier_chart(_durations, "data")], widths=[3, 1], gap=1),
                 _rows,
-                label="Concurrency results",
+                label="Bookings, counted five ways",
             ),
             mo.md(
-                "**Compare the two SQLite bars.** Same database, but only the one-statement transaction keeps "
-                "every increment: a transaction protects the steps you put inside it, and nothing else."
-            ).callout(kind="info"),
+                f"**What to notice:** *{_worst}* lost {_lost[_worst]:,} of {_target:,} orders, without a single error. "
+                "Compare the two database bars: same database, but only the one-statement UPDATE counts every "
+                "order. A transaction protects the steps you put inside it, and nothing else."
+            ),
             mo.accordion(
                 {
-                    "Why the unlocked bars stop near one worker's total": mo.md(
+                    "Why the unlocked bars stop near one rep's total": mo.md(
                         """
-    With jitter, the unlocked workers fall into step: all read the same value, all pause, all write
-    the same +1. So they end near *one* worker's total, as if the others never ran. Set jitter to 0
-    and the file race turns messy: its count changes from run to run.
+    With a pause, the unlocked reps fall into step: all read the same count, all pause, all save the same
+    +1. So they end near *one* rep's total, as if the others never booked. Set the pause to 0 and the file
+    race turns messy: its count changes from run to run.
 
-    The file lock is correct but slow: writers queue, so every millisecond of jitter is paid one
-    worker at a time. The one-statement transaction is quick too: there is no gap for the jitter to
-    widen, and the lock is held for microseconds.
+    The OS lock is correct but slow: reps queue, so every millisecond of pause is paid one rep at a time.
+    The one-statement UPDATE is quick too: there is no gap for the pause to widen, and the lock is held for
+    microseconds.
                         """
                     )
                 }
@@ -750,245 +945,143 @@ def _(
 
 @app.cell
 def _(mo):
-    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker", show_value=True, debounce=True)
-    interleave_seed = mo.ui.slider(1, 999, value=7, label="Interleaving seed", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Interleaving Simulator: Why Lost Updates Happen
-
-    Each increment is two steps: **read** the shared value, then **write** copy + 1. The seed shuffles
-    the order of A's and B's steps. A write from an out-of-date copy is a **stale write**: it erases
-    every increment made since that copy was read.
-                """
-            ),
-            mo.hstack([interleave_steps, interleave_seed], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return interleave_seed, interleave_steps
+    ch1_crash = mo.ui.switch(value=True, label="Crash between the two saves")
+    return (ch1_crash,)
 
 
 @app.cell
-def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, random, tier_chart):
-    _rng = random.Random(interleave_seed.value)
-    _ops = {w: ["read", "write"] * interleave_steps.value for w in "AB"}
-    _local, _shared, _log = {}, 0, []
-    while _ops["A"] or _ops["B"]:
-        _worker = _rng.choice([w for w in "AB" if _ops[w]])
-        _action = _ops[_worker].pop(0)
-        _before = _shared
-        if _action == "read":
-            _local[_worker] = _shared
-        else:
-            _shared = _local[_worker] + 1
-        _log.append(
+def _(Path, ch1_crash, chart_or_table, diagram, json, mia_asks, mo, shop_sales, sqlite3, tempfile):
+    # The move: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
+    _sale = shop_sales.loc[shop_sales.loc[shop_sales["country"] == "Germany", "total_price"].idxmax()]
+    # Money in whole cents: an integer never picks up float rounding, so "the total held" is exact.
+    _move = int(round(float(_sale["total_price"]) * 100))
+    _initial = {_r: int(round(_v * 100)) for _r, _v in shop_sales.groupby("region")["total_price"].sum().items()}
+    _expected = sum(_initial.values())
+    _timeline = []
+
+    def _add_timeline(system, step, totals, note):
+        _timeline.append(
             {
-                "step": len(_log) + 1,
-                "worker": _worker,
-                "action": _action,
-                "shared before": _before,
-                "local copy": _local[_worker],
-                "shared after": _shared,
-                "note": "stale write" if _action == "write" and _local[_worker] != _before else "",
+                "system": system,
+                "step": step,
+                "Europe (CHF)": totals["Europe"] / 100,
+                "Africa (CHF)": totals["Africa"] / 100,
+                "total revenue (CHF)": sum(totals.values()) / 100,
+                "note": note,
             }
         )
 
-    _expected = interleave_steps.value * 2
-    _df = pd.DataFrame(_log)
-    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
-    # A read shows the value it copied, a write the value it left; short labels once the steps get narrow.
-    _short = len(_df) > 12
-    _df["label"] = [
-        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
-        for _a, _v in zip(_df["action"], _df["shared after"], strict=True)
-    ]
-    _df["if no update were lost"] = (_df["action"] == "write").cumsum()
-    _df["shared counter"] = _df["shared after"]
-    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
-    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("worker:N", title=None, axis=alt.Axis(minExtent=40)))
-    _lanes = (
-        _lane.mark_rect(cornerRadius=8).encode(
-            color=alt.Color(
-                "kind:N",
-                title=None,
-                scale=alt.Scale(domain=["read", "write", "stale write"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
-            )
-        )
-        # fixed text colours: the fills above are the same in both themes
-        + _lane.mark_text().encode(
-            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
-        )
-    ).properties(width="container", height=110)
-    _counter = (
-        alt.Chart(_df)
-        .transform_fold(["shared counter", "if no update were lost"], as_=["series", "value"])
-        .mark_line(point=True, strokeWidth=3)
-        .encode(
-            x=_x,
-            y=alt.Y("value:Q", title="counter", axis=alt.Axis(minExtent=40)),
-            color=alt.Color(
-                "series:N",
-                title=None,
-                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[TIER["data"], TIER["muted"]]),
-            ),
-            strokeDash=alt.StrokeDash(
-                "series:N",
-                legend=None,
-                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[[1, 0], [6, 4]]),
-            ),
-        )
-        .properties(width="container", height=170)
-    )
-
-    mo.vstack(
-        [
-            mo.hstack(
-                [
-                    mo.stat(_expected, label="expected", bordered=True),
-                    mo.stat(_shared, label="actual", bordered=True),
-                    mo.stat(_expected - _shared, label="lost updates", bordered=True),
-                ],
-                widths="equal",
-            ),
-            chart_or_table(
-                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
-                _log,
-                label="Interleaving trace",
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount", show_value=True, debounce=True)
-    atomic_fail = mo.ui.switch(value=True, label="Crash after the debit")
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Atomicity Demo: a Transfer That Crashes
-
-    Atomicity means **all or nothing**. A transfer must keep $B_{\\text{Alice}} + B_{\\text{Bob}}$
-    constant; crash between **debit** and **credit**, and only a transaction puts the money back.
-    One transfer, no concurrent writers: flip the switch and watch both totals.
-                """
-            ),
-            mo.hstack([atomic_amount, atomic_fail], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return atomic_amount, atomic_fail
-
-
-@app.cell
-def _(Path, atomic_amount, atomic_fail, chart_or_table, diagram, json, mo, sqlite3, tempfile):
-    _initial = {"Alice": 1000, "Bob": 500}
-    _expected = sum(_initial.values())
-    _amount = atomic_amount.value
-    _timeline = []
-
-    def _add_timeline(system, step, state, note):
-        _timeline.append({"system": system, "step": step, **state, "total": sum(state.values()), "note": note})
-
     with tempfile.TemporaryDirectory() as _tmp:
-        # File ledger: debit and credit are two separate writes, and nothing ties them together.
-        _file_path = Path(_tmp) / "ledger.json"
-        _ledger = dict(_initial)
-        _file_path.write_text(json.dumps(_ledger))
-        _add_timeline("file (JSON)", "start", _ledger, "initial balances")
-        _ledger["Alice"] -= _amount
-        _file_path.write_text(json.dumps(_ledger))
-        _add_timeline("file (JSON)", "debit", _ledger, "Alice debited")
-        if atomic_fail.value:
-            _add_timeline("file (JSON)", "crash", _ledger, "crash before credit")
+        # File: the region totals in one JSON file; the two saves are separate and nothing ties them together.
+        _file_path = Path(_tmp) / "region_totals.json"
+        _totals = dict(_initial)
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "start", _totals, "region totals before the move")
+        _totals["Europe"] -= _move
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "take off Europe", _totals, "first save")
+        if ch1_crash.value:
+            _add_timeline("file (JSON)", "crash", _totals, "crash before the second save")
         else:
-            _ledger["Bob"] += _amount
-            _file_path.write_text(json.dumps(_ledger))
-            _add_timeline("file (JSON)", "credit", _ledger, "Bob credited")
+            _totals["Africa"] += _move
+            _file_path.write_text(json.dumps(_totals))
+            _add_timeline("file (JSON)", "add to Africa", _totals, "second save")
         _file_total = sum(json.loads(_file_path.read_text()).values())
 
-        # SQLite ledger: both updates inside one transaction.
-        _con = sqlite3.connect(Path(_tmp) / "ledger.db", isolation_level=None)
-        _con.execute("CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)")
-        _con.executemany("INSERT INTO accounts VALUES (?, ?)", _initial.items())
+        # SQLite: both saves inside one transaction.
+        _con = sqlite3.connect(Path(_tmp) / "region_totals.db", isolation_level=None)
+        _con.execute("CREATE TABLE region_totals (region TEXT PRIMARY KEY, cents INTEGER)")
+        _con.executemany("INSERT INTO region_totals VALUES (?, ?)", _initial.items())
 
-        def _balances():
-            return dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
+        def _db_totals():
+            return dict(_con.execute("SELECT region, cents FROM region_totals").fetchall())
 
-        _add_timeline("sqlite", "start", _balances(), "initial balances")
+        _add_timeline("SQLite", "start", _db_totals(), "region totals before the move")
         _con.execute("BEGIN")
-        _con.execute("UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'", (_amount,))
-        _add_timeline("sqlite", "debit (txn)", _balances(), "uncommitted debit")
+        _con.execute("UPDATE region_totals SET cents = cents - ? WHERE region = 'Europe'", (_move,))
+        _add_timeline("SQLite", "take off Europe", _db_totals(), "inside the transaction, not committed")
         try:
-            if atomic_fail.value:
-                raise RuntimeError("simulated crash after debit")
-            _con.execute("UPDATE accounts SET balance = balance + ? WHERE name = 'Bob'", (_amount,))
+            if ch1_crash.value:
+                raise RuntimeError("simulated crash between the two saves")
+            _con.execute("UPDATE region_totals SET cents = cents + ? WHERE region = 'Africa'", (_move,))
             _con.execute("COMMIT")
-            _add_timeline("sqlite", "commit", _balances(), "transaction committed")
+            _add_timeline("SQLite", "commit", _db_totals(), "both saves kept")
         except RuntimeError:
             _con.execute("ROLLBACK")
-            _add_timeline("sqlite", "rollback", _balances(), "transaction rolled back")
-        _db_total = sum(_balances().values())
+            _add_timeline("SQLite", "roll back", _db_totals(), "first save undone")
+        _db_total = sum(_db_totals().values())
         _con.close()
 
-    # One lane per system, one box per step: the balances after it, and the total at the end.
-    _style = {"crash": "dg-box dg-hot", "credit": "dg-box dg-ok", "commit": "dg-box dg-ok", "rollback": "dg-box dg-ok"}
+    # One lane per system, one box per step: the two region totals after it, and total revenue at the end.
+    _style = {"crash": "dg-box dg-hot", "add to Africa": "dg-box dg-ok", "commit": "dg-box dg-ok", "roll back": "dg-box dg-ok"}
 
     def _lane(y, system, label, total):
         steps = [_row for _row in _timeline if _row["system"] == system]
-        parts = [f'<text x="0" y="{y + 38}" font-weight="700">{label}</text>']
+        parts = [f'<text x="0" y="{y + 50}" font-weight="700">{label}</text>']
         for _i, _row in enumerate(steps):
-            x = 120 + _i * 250
+            x = 110 + _i * 270
             parts.append(
-                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="210" height="72" rx="12"/>'
-                f'<text x="{x + 105}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
-                f'<text class="dg-muted" x="{x + 105}" y="{y + 54}" text-anchor="middle">'
-                f"Alice {_row['Alice']:,} · Bob {_row['Bob']:,}</text>"
+                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
+                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_row["Europe (CHF)"]:,.0f}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_row["Africa (CHF)"]:,.0f}</text>'
             )
             if _i:
-                parts.append(f'<path class="dg-edge" d="M{x - 40} {y + 36} H {x - 6}"/>')
+                parts.append(f'<path class="dg-edge" d="M{x - 36} {y + 48} H {x - 6}"/>')
         _ok = total == _expected
         parts.append(
-            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="870" y="{y + 44}" font-size="22">'
-            f"{'&#10003;' if _ok else '&#10007;'} total {total:,}</text>"
+            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="930" y="{y + 44}" font-size="22">'
+            f"{'&#10003;' if _ok else '&#10007;'} {total / 100:,.0f}</text>"
         )
+        if not _ok:
+            parts.append(f'<text class="dg-hot" x="930" y="{y + 72}">{(_expected - total) / 100:,.2f} missing</text>')
         return "".join(parts)
 
     _picture = diagram(
-        _lane(20, "file (JSON)", "file", _file_total)
-        + '<rect x="356" y="134" width="488" height="92" rx="16" fill="none" stroke="currentColor"'
+        '<text x="930" y="18" font-weight="700">total revenue (CHF)</text>'
+        + _lane(36, "file (JSON)", "file", _file_total)
+        + '<rect x="370" y="176" width="520" height="120" rx="16" fill="none" stroke="currentColor"'
         ' stroke-dasharray="8 6" opacity="0.45"/>'
-        + '<text class="dg-muted" x="593" y="256" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
-        + _lane(144, "sqlite", "SQLite", _db_total),
-        width=1080,
-        height=270,
-        label=f"Transfer of {_amount}: the file keeps a total of {_file_total}, SQLite a total of {_db_total}; "
-        f"both should be {_expected}.",
+        + '<text class="dg-muted" x="630" y="322" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
+        + _lane(188, "SQLite", "SQLite", _db_total),
+        width=1160,
+        height=334,
+        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa: the file ends with total revenue CHF {_file_total / 100:,.2f}, "
+        f"SQLite with CHF {_db_total / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
     )
 
     _file_ok = _file_total == _expected
     _file_callout = mo.md(
-        "**File:** debit and credit are two separate writes. "
+        "**File:** the two saves are separate. "
         + (
             "Both landed, because nothing crashed."
             if _file_ok
-            else f"The crash came between them: {_amount:,} left Alice and never reached Bob."
+            else f"The crash came between them: CHF {_move / 100:,.2f} left Europe and never reached Africa."
         )
     ).callout(kind="success" if _file_ok else "danger")
     _db_callout = mo.md(
-        "**SQLite:** both updates sit in one transaction. "
-        + ("The crash rolled the debit back, so the total holds." if atomic_fail.value else "They committed together.")
+        "**SQLite:** both saves sit in one transaction. "
+        + ("The crash rolled the first one back, so total revenue holds." if ch1_crash.value else "They committed together.")
     ).callout(kind="success" if _db_total == _expected else "danger")
 
     mo.vstack(
         [
-            chart_or_table(_picture, _timeline, label="Step-by-step timeline"),
+            mo.md("### Try it: move a sale between regions, and crash halfway"),
+            mia_asks(
+                f"We moved one sale to the right region, and total revenue dropped by CHF {_move / 100:,.2f}. "
+                "Where did the money go?"
+            ),
+            mo.md(
+                f"Sale #{_sale['sale_id']} ({_sale['product']}, CHF {_sale['total_price']:,.2f}) was booked under "
+                "Germany, but say it belongs to Kenya. Moving it takes two saves to the region totals (in CHF) that "
+                "Mia's dashboard reads: **take it off Europe**, then **add it to Africa**. Moving a sale must never "
+                "change total revenue."
+            ),
+            ch1_crash,
+            chart_or_table(_picture, _timeline, label="Every step, in order"),
             mo.hstack([_file_callout, _db_callout], widths="equal"),
+            mo.md("**What to notice:** the total revenue column. With the crash on, only the transaction keeps it at "
+                  f"CHF {_expected / 100:,.2f}."),
         ],
         gap=0.6,
     )
@@ -999,20 +1092,23 @@ def _(Path, atomic_amount, atomic_fail, chart_or_table, diagram, json, mo, sqlit
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — Atomicity & Concurrency</h3>
+      <h3>Discussion: Atomicity & Concurrency</h3>
       <details>
-        <summary><strong>Q1:</strong> With only files (no database), how can a transfer be made all‑or‑nothing?</summary>
-        <p><strong>Answer:</strong> Write a small log entry first (a write‑ahead log, WAL), or write a temp file and
-        rename it over the old one (an atomic rename). On restart, replay or roll back the log.</p>
+        <summary><strong>Q1:</strong> With only files (no database), how could moving a sale between regions be made all-or-nothing?</summary>
+        <p><strong>Answer:</strong> Write the new totals to a temporary file, then rename it over the old one: a rename is
+        atomic, so a reader sees the old totals or the new ones, never half a move. Or write a small log entry first
+        (a write-ahead log, WAL), and replay or roll it back on restart.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
-        <p><strong>Answer:</strong> The total balance never changes. Check that invariant after crashes and retries.</p>
+        <summary><strong>Q2:</strong> What must always stay true here, and how would we notice it breaking?</summary>
+        <p><strong>Answer:</strong> Orders counted equals orders booked, and moving a sale never changes total revenue.
+        Check both after crashes and retries: counting the order book every night and comparing it with the counter
+        catches a lost update.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Should a system stop on error or allow a temporary mismatch?</summary>
-        <p><strong>Answer:</strong> Finance usually fails fast; analytics may accept a temporary mismatch and repair
-        it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
+        <summary><strong>Q3:</strong> Should a system stop on an error, or allow a short mismatch?</summary>
+        <p><strong>Answer:</strong> Invoices and payments fail fast. Mia's dashboard may show a count a minute behind and
+        repair it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
       </details>
     </div>
     """)
@@ -1020,36 +1116,43 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(SALES_SEED, format_bytes, mo, shop_sales):
+    _raw = ["sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"]
+    _csv_bytes = len(shop_sales[_raw].to_csv(index=False).encode())
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 1 Conclusion
 
-    - Unsynchronised writes lose updates; a lock or a transaction stops it.
-    - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Make the read
-      and the write one statement, or one transaction.
-    - A transaction makes a multi-step change all-or-nothing: the crashed transfer rolled back.
-    - Check invariants (expected vs actual, the total balance) to catch these bugs early.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Two reps who both read before either saves lose an order: no error, just a count too low.
+    - A lock (the booking pen) or a database transaction closes the gap between reading and saving.
+    - A database is not magic: read, +1 in Python, save loses orders in SQLite too. Make the read and the
+      save one statement, or one transaction.
+    - A transaction makes a two-step change all or nothing: the crashed move rolled back, and total revenue held.
+    - Check what must stay true (orders counted = orders booked; a move leaves total revenue alone) to catch
+      these bugs early.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                f"""
     ### Bridge to Next Chapter
 
-    Correct data still has to be stored and sent, and every byte of it is waited for:
-
+    The counted sales now have to be saved to files and sent to partners. A partner waits for every byte,
+    then for reading it: EdgeWorks' {len(shop_sales):,} sales take {format_bytes(_csv_bytes)} as CSV and
+    {format_bytes(SALES_SEED.stat().st_size)} as the Parquet file in `data/seed/`.
+                """
+                + """
     $$
     \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
     $$
 
-    Better formats cut the wait by shrinking the bytes or speeding up the parse.
-            """
-    ).callout(kind="neutral")
+    Better formats cut the wait by shrinking the bytes or speeding up the reading.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
