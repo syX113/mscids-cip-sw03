@@ -3541,65 +3541,155 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 8. FastAPI Demo + Automatic Docs
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 8. FastAPI Demo + Automatic Docs"),
+            chapter_intro(
+                "logic",
+                "How do we keep implementation and API documentation in sync?",
+                "Last stop in the logic tier: the rules from chapter 7 become a running server.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md(
+def _(box, diagram, mo):
+    def _menu_item(y, title, note):
+        """One thing FastAPI prints from the type hints, with its edge from the FastAPI box."""
+        return (
+            f'<rect class="dg-box" x="600" y="{y}" width="396" height="58" rx="12"/>'
+            f'<text x="620" y="{y + 24}" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="620" y="{y + 46}">{note}</text>'
+            f'<path class="dg-edge" d="M500 150 C 550 150, 550 {y + 29}, 594 {y + 29}"/>'
+        )
+
+    _menu = diagram(
+        '<rect class="dg-tier" x="0" y="60" width="340" height="180" rx="16"/>'
+        '<text x="20" y="94" font-weight="700">the recipe, written once</text>'
+        '<text x="20" y="134" font-family="monospace" font-size="15">Rating = Annotated[int,</text>'
+        '<text x="44" y="158" font-family="monospace" font-size="15">Field(ge=1, le=5)]</text>'
+        '<text class="dg-muted" x="20" y="196">used by SaleCreate, SaleUpdate</text>'
+        '<text class="dg-muted" x="20" y="220">and the rating filters</text>'
+        '<path class="dg-edge" d="M340 150 H 374"/>'
+        + box(380, 122, "FastAPI", w=120, h=56, cls="dg-tier")
+        + '<text class="dg-muted" x="440" y="204" text-anchor="middle">reads the hints</text>'
+        + _menu_item(0, "422 for a rating of 9", "the rule, enforced before your code runs")
+        + _menu_item(76, "/openapi.json", "the menu, for programs to read")
+        + _menu_item(152, "/redoc", "the menu, as a reference manual")
+        + _menu_item(228, "/docs (Swagger UI)", "the menu, with Try it out buttons")
+        + '<rect class="dg-box dg-hot" x="0" y="300" width="340" height="64" rx="12"/>'
+        '<text x="20" y="326">docstring: "recomputes total_price"</text>'
+        '<text class="dg-muted" x="20" y="350">a behaviour, not a type</text>'
+        '<path class="dg-edge dg-hot" d="M340 332 H 800 V 292"/>'
+        '<text class="dg-hot" x="570" y="322" text-anchor="middle">typed by hand: nothing checks it</text>',
+        width=1000,
+        height=370,
+        label="One line, Rating = Annotated[int, Field(ge=1, le=5)], goes into FastAPI, which prints four things from it: "
+        "the 422 for a rating of 9, /openapi.json, /redoc and /docs. A hand-written docstring about recomputing "
+        "total_price reaches /docs too, but nothing checks it.",
+        tier="logic",
+    )
+    _more = mo.md(
         """
-    ### Chapter 8 Introduction
-
-    > **Key Question:** How do we keep implementation and API documentation in sync?
-
-    *Last stop in the **logic tier**. We turn the rules from chapter 7 into a running server.*
-
-    FastAPI turns validated models into running endpoints *and* the documentation for them, so
-    the two drift apart far less.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
+    - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint an API
+      has, for other programs to read. FastAPI writes it for you.
+    - **Swagger UI** (`/docs`) reads that file and turns it into buttons: open it and press *Try it out*.
+    - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual.
+    - The rating rule is written once in `sw03_demo_api.py` and used for new sales, for edits and for
+      the `min_rating`/`max_rating` filters. The schema can say `units_sold` must be at least 1; it
+      cannot say that changing it recomputes `total_price`.
+    - The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
+      *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
         """
-    ### FastAPI = Type Hints → OpenAPI
-
-    Most restaurants write the menu by hand. Then the kitchen changes a recipe and the menu
-    quietly starts lying, and every customer who orders from it is disappointed. FastAPI does not
-    let that happen, because **the menu is printed from the recipes**. `sw03_demo_api.py` writes
-    the rating rule exactly once, `Rating = Annotated[int, Field(ge=1, le=5)]`, and uses it for new
-    sales, for edits and for the `min_rating`/`max_rating` filters. That one line becomes the
-    machine-readable menu, the buttons a human clicks, and the rule the server enforces. Change
-    the 5 to a 10 and all of them change together, because there is only one 5.
-
-    *What the menu cannot enforce* is behaviour. The schema can say `units_sold` must be at least
-    1; it cannot say that changing it recomputes `total_price`. That rule reaches `/docs` only
-    because somebody wrote it into a docstring by hand, and nothing checks that the docstring is
-    still true.
-
-    - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint
-      an API has, in a way other programs can read. FastAPI writes it for you.
-    - **Swagger UI** (`/docs`) is a web page that reads that file and turns it into buttons
-      you can click to try each endpoint. Open it and press *Try it out*.
-    - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual instead.
-
-    The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
-    *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
-            """
-    ).callout(kind="neutral")
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>FastAPI = Type Hints → OpenAPI</h3>
+      <p>A hand-written menu starts lying the day the kitchen changes a recipe. FastAPI prints the menu from the recipes.</p>
+      {_menu}
+      <p class="vis-caption"><strong>Change the 5 to a 10 and all four change together</strong>, because there is
+      only one 5. A rule about behaviour is not a type: it reaches <code>/docs</code> only as hand-written text.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"The three doc pages, and the server behind them": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md("""
+def _(diagram, html, mo):
+    _cw = 9.6  # px per character of 16 px monospace; textLength pins every piece of code to it
+
+    def _code(y, parts):
+        """One line of code from (text, label) pieces: a labelled piece gets a bracket and its label below it."""
+        svg, col = [], 0
+        for text, label in parts:
+            x, w = col * _cw, len(text) * _cw
+            svg.append(
+                f'<text x="{x:.0f}" y="{y}" font-family="monospace" font-size="16" textLength="{w:.0f}"'
+                f' lengthAdjust="spacingAndGlyphs" style="white-space: pre">{html.escape(text)}</text>'
+            )
+            if label:
+                svg.append(
+                    f'<path style="fill: none; stroke: var(--tier); stroke-width: 2.5"'
+                    f' d="M{x + 2:.0f} {y + 9} v 8 H {x + w - 2:.0f} v -8"/>'
+                    f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 40}" text-anchor="middle">{label}</text>'
+                )
+            col += len(text)
+        return "".join(svg)
+
+    _sentence = diagram(
+        _code(
+            24,
+            [
+                ("@app.post", "verb"),
+                ("(", None),
+                ('"/sales"', "path"),
+                (", ", None),
+                ("response_model=Sale", "the answer's shape"),
+                (", ", None),
+                ("status_code=201", "code on success"),
+                (", ", None),
+                ('tags=["Sales"]', "group in /docs"),
+                (", ", None),
+                ("responses=BAD_REQUEST", "the errors it adds"),
+                (")", None),
+            ],
+        )
+        + _code(
+            114,
+            [
+                ("def create_sale(", None),
+                ("payload: SaleCreate", "the model the client fills: checked first, 422 if not"),
+                (") -> dict[str, Any]:", None),
+            ],
+        )
+        + _code(
+            204,
+            [
+                ("    ", None),
+                ('"""Record a sale. The server computes total_price as units_sold x the product\'s price."""',
+                 "its description in /docs, written by hand"),
+            ],
+        ),
+        width=940,
+        height=260,
+        label="The decorator of POST /sales read as a sentence: verb, path, the shape of the answer, the status code "
+        "on success, its group in /docs and the errors it adds. The payload's type is the model checked first; "
+        "the docstring becomes the description in /docs.",
+        tier="logic",
+    )
+    _source = mo.md("""
     ```python
     # file: sw03_demo_api.py (abridged)
     # Every rule is written once, here, and reused wherever the field appears.
@@ -3638,31 +3728,27 @@ def _(mo):
         ...
     ```
 
-    Read each decorator as a sentence: *verb*, *path*, the shape of the answer, and the errors it
-    can return. The docstring under each function becomes its description in `/docs`; the second
-    one is the hand-written recompute rule from above. `SaleCreate` has no `total_price`, and
-    `Input` refuses fields it does not know, so a client cannot set its own price.
-
-    Sales are the resource this chapter follows, so every verb is written out. The four lookup
-    tables (regions, countries, categories, products) share one generic set of five endpoints,
-    registered by `add_lookup_endpoints`. Nothing else had to be written to get documentation.
+    The second docstring is the hand-written recompute rule from the drawing above. Sales are the
+    resource this chapter follows, so every verb is written out; the four lookup tables (regions,
+    countries, categories, products) share one generic set of five endpoints, registered by
+    `add_lookup_endpoints`. Nothing else had to be written to get documentation.
     """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Live API Workflow
-
-    1. Start the API in a terminal: `uvicorn sw03_demo_api:app`
-    2. Click **1) Check API status** to verify the server is reachable.
-    3. Edit the JSON payload and click **2) POST /products**. Click it again: the name is taken
-       now, so the server answers `400` (the widget stays until the API restarts).
-    4. Choose a product id and click **3) GET /products/{id}** to compare results.
-            """
-    ).callout(kind="info")
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Read a Decorator as a Sentence</h3>
+      {_sentence}
+      <p class="vis-caption">Everything <code>/docs</code> shows about this endpoint comes from these three lines.
+      <code>SaleCreate</code> has no <code>total_price</code>, so a client cannot set its own price.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"The abridged source: the model and two endpoints": _source}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -3686,6 +3772,11 @@ def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload
     # Display only, so editing the shared URL re-renders these widgets instead of rebuilding them.
     mo.vstack(
         [
+            mo.md(
+                "### Live API Workflow\n\n"
+                "Start the API (`uvicorn sw03_demo_api:app`), then press the buttons in order. Press **2)** "
+                "twice: the name is taken, so the second answer is `400`."
+            ),
             mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
             fastapi_payload,
             mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
@@ -3697,6 +3788,8 @@ def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload
 
 @app.cell
 def _(api_base_url, call_api, mo, requests):
+    from http.client import responses as ch8_phrases  # 201 -> "Created", for the answers below
+
     def ch8_api(method, path, body=None):
         """call_api against the base URL above. Stops the cell with a hint if nothing answers, or not with JSON."""
         base = api_base_url.value.rstrip("/")
@@ -3716,11 +3809,11 @@ def _(api_base_url, call_api, mo, requests):
 
     # The sale the chapter 8 labs send: 10 units of product 1, sold in country 3.
     sale_slip = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
-    return ch8_api, sale_slip
+    return ch8_api, ch8_phrases, sale_slip
 
 
 @app.cell
-def _(api_base_url, ch8_api, fastapi_check, mo):
+def _(api_base_url, box, ch8_api, diagram, fastapi_check, mo):
     mo.stop(
         not fastapi_check.value,
         mo.md("Start `uvicorn sw03_demo_api:app` in a terminal, then click **1) Check API status**.").callout(kind="neutral"),
@@ -3731,48 +3824,75 @@ def _(api_base_url, ch8_api, fastapi_check, mo):
         _status != 200,
         mo.md(f"`{_base}/openapi.json` answered `{_status}`. Is that the sales API?").callout(kind="danger"),
     )
-    _routes = [
-        f"- `{_path}`: {', '.join(_verb.upper() for _verb in _ops)}"
-        for _path, _ops in _schema["paths"].items()
-        if _path.startswith(("/products", "/sales"))
+    # The API describes itself: one row per path this chapter uses, one box per verb it accepts.
+    _paths = {_p: _ops for _p, _ops in _schema["paths"].items() if _p.startswith(("/products", "/sales"))}
+    _verbs = ("get", "post", "put", "delete")
+    _parts = [
+        f'<text x="{300 + _j * 120}" y="20" text-anchor="middle" font-weight="700">{_v.upper()}</text>'
+        for _j, _v in enumerate(_verbs)
     ]
-    mo.md(
-        "\n".join(
-            [
-                f"**{_schema['info']['title']} {_schema['info']['version']} is running.** "
-                f"Docs: [{_base}/docs]({_base}/docs)",
-                "",
-                f"The paths this chapter uses, read from `/openapi.json` ({len(_schema['paths'])} paths in all):",
-                "",
-                *_routes,
-            ]
+    for _i, (_path, _ops) in enumerate(_paths.items()):
+        _y = 40 + _i * 52
+        _parts.append(
+            f'<text x="0" y="{_y + 20}" font-family="monospace" dominant-baseline="central">{_path}</text>'
         )
+        for _j, _v in enumerate(_verbs):
+            if _v in _ops:
+                _parts.append(box(248 + _j * 120, _y, "&#10003;", w=104, h=40, cls="dg-tier"))
+            else:
+                _parts.append(
+                    f'<rect x="{248 + _j * 120}" y="{_y}" width="104" height="40" rx="12" fill="none"'
+                    ' stroke="currentColor" stroke-dasharray="6 6" opacity="0.3"/>'
+                )
+    _matrix = diagram(
+        "".join(_parts),
+        width=720,
+        height=40 + 52 * len(_paths),
+        label="The paths this chapter uses and the verbs each accepts, read from /openapi.json: "
+        + "; ".join(f"{_p}: {', '.join(_o).upper()}" for _p, _o in _paths.items()),
+        tier="logic",
+    )
+    mo.vstack(
+        [
+            mo.hstack(
+                [
+                    mo.stat(f"{_status} OK", label="GET /openapi.json", caption=f"{_schema['info']['title']} "
+                            f"{_schema['info']['version']} is running", bordered=True),
+                    mo.stat(len(_schema["paths"]), label="paths it describes", bordered=True),
+                    mo.md(f"**[Open {_base}/docs]({_base}/docs)**"),
+                ],
+                widths=[2, 1, 2],
+                align="center",
+            ),
+            _matrix,
+        ],
+        gap=0.8,
     ).callout(kind="success")
     return
 
 
 @app.cell
-def _(ch8_api, fastapi_payload, fastapi_post, json, mo):
+def _(ch8_api, ch8_phrases, fastapi_payload, fastapi_post, json, mo):
     mo.stop(not fastapi_post.value, mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral"))
     try:
         _payload = json.loads(fastapi_payload.value)
     except json.JSONDecodeError as _exc:
         mo.stop(True, mo.md(f"The payload is not valid JSON: `{_exc}`").callout(kind="danger"))
     _status, _answer = ch8_api("POST", "/products", _payload)
-    mo.md(f"`POST /products` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
-        kind="success" if _status < 400 else "danger"
-    )
+    mo.md(
+        f"`POST /products` → **{_status} {ch8_phrases.get(_status, '')}**\n\n```json\n{json.dumps(_answer, indent=2)}\n```"
+    ).callout(kind="success" if _status < 400 else "danger")
     return
 
 
 @app.cell
-def _(ch8_api, fastapi_get, fastapi_item_id, json, mo):
+def _(ch8_api, ch8_phrases, fastapi_get, fastapi_item_id, json, mo):
     mo.stop(not fastapi_get.value, mo.md("Pick a product id, then click **3) GET /products/{id}**.").callout(kind="neutral"))
     _path = f"/products/{fastapi_item_id.value}"
     _status, _answer = ch8_api("GET", _path)
-    mo.md(f"`GET {_path}` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
-        kind="success" if _status < 400 else "danger"
-    )
+    mo.md(
+        f"`GET {_path}` → **{_status} {ch8_phrases.get(_status, '')}**\n\n```json\n{json.dumps(_answer, indent=2)}\n```"
+    ).callout(kind="success" if _status < 400 else "danger")
     return
 
 
@@ -3781,17 +3901,14 @@ def _(mo):
     run_gates = mo.ui.run_button(label="Send seven slips through both gates", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Seven Sale Slips, One Model, Two Gates"),
             mo.md(
                 """
-    Chapter 7 validated a payload on your laptop with no network at all, because Pydantic is just
-    Python. This chapter put the very same kind of model on a server. So what is the difference?
+    ### Mini-lab: Seven Sale Slips, One Model, Two Gates
 
-    **Gate 1** is the API's own `SaleCreate`, imported from `sw03_demo_api.py` and run right here
-    in the notebook. **Gate 2** is the running API. Seven slips go through both. Read the table
-    across.
+    What does a server add? **Gate 1** is the API's own `SaleCreate`, run right here in the
+    notebook. **Gate 2** is the running API.
                 """
-            ).callout(kind="info"),
+            ),
             run_gates,
         ],
         gap=0.6,
@@ -3800,8 +3917,14 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
-    mo.stop(not run_gates.value, mo.md("Click **Send seven slips through both gates** to compare them.").callout(kind="neutral"))
+def _(box, ch8_api, diagram, mo, pydantic, run_gates, sale_slip, static_table):
+    mo.stop(
+        not run_gates.value,
+        mo.md(
+            "**Predict first:** which slips does your laptop catch, and which only the server? "
+            "Then click **Send seven slips through both gates**."
+        ).callout(kind="neutral"),
+    )
     from sw03_demo_api import SaleCreate as _SaleCreate  # gate 1: the server's own model, no network
 
     _ok = sale_slip
@@ -3814,14 +3937,14 @@ def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
         "its own total_price of 0.01": {**_ok, "total_price": 0.01},
         "product 9999": {**_ok, "product_id": 9999},
     }
-    _rows, _good = [], None
+    _rows, _cells, _good = [], [], None
     for _name, _slip in _slips.items():
         try:
             _SaleCreate.model_validate(_slip)
-            _gate1 = "passes"
+            _gate1, _short1 = "passes", "&#10003; passes"
         except pydantic.ValidationError as _exc:
             _err = _exc.errors()[0]
-            _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
+            _gate1, _short1 = f"rejected: {_err['loc'][0]} — {_err['msg']}", f"&#10007; {_err['loc'][0]}"
         _status, _answer = ch8_api("POST", "/sales", _slip)
         mo.stop(
             not (isinstance(_answer, dict) and ("detail" in _answer or "sale_id" in _answer)),
@@ -3830,44 +3953,74 @@ def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
         if _status == 201:
             _good = _answer
             ch8_api("DELETE", f"/sales/{_good['sale_id']}")  # leave the file as we found it
-            _gate2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}"
+            _gate2, _short2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}", "&#10003; 201 created"
         else:
             _detail = _answer["detail"]
-            _gate2 = f"{_status} — {_detail if isinstance(_detail, str) else _detail[0]['msg']}"
+            _why = _detail if isinstance(_detail, str) else _detail[0]["msg"]
+            _gate2 = f"{_status} — {_why}"
+            _short2 = f"&#10007; {_status} " + (_why if isinstance(_detail, str) else _detail[0]["loc"][-1])
         _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+        _cells.append((_name, _gate1 == "passes", _short1, _status, _short2))
     mo.stop(_good is None, mo.md("Even the good sale was refused. Restart the API to reseed its data.").callout(kind="danger"))
 
-    _note = mo.md(
-        f"""
-    **Read the last column down.** Five slips die at gate 1 and die again at gate 2, with `422`
-    and the *same message*, because both gates run the same model. One slip, `product 9999`,
-    passes gate 1 and dies at gate 2 with `400`. And one gets `201`.
-
-    That difference is the whole lesson. Gate 1 can check **shape**: is this a date, is the rating
-    between 1 and 5. Only gate 2 can check **facts**, because only the server can open the filing
-    cabinet and discover there is no product 9999. Your laptop had no way to know.
-
-    **Then look at the successful row.** We sent {len(_ok)} fields and got {len(_good)} back, and we never
-    sent `total_price`: the server computed {_good["units_sold"]} x
-    {_good["total_price"] / _good["units_sold"]:.2f} itself. The slip that brought its own
-    `total_price` was refused at both gates, because `SaleCreate` has no such field and refuses
-    fields it does not know. A price the client is allowed to invent is a price the client can
-    lie about, so this API does not allow one.
-
-    Two fences. Validating on the laptop is a **courtesy** to the user, instant feedback with no
-    round trip, and never a substitute for the server's check, because anyone can bypass this
-    notebook and post directly with `curl`. And the split between 422 and 400 is this API's
-    convention, not a law of HTTP: FastAPI produces the 422 automatically from the model, while
-    the 400s are business rules somebody wrote by hand.
-            """
-    ).callout(kind="info")
+    # One row per slip, one box per gate: teal got through, red was turned away.
+    _svg = [
+        '<text x="430" y="16" text-anchor="middle" font-weight="700">gate 1: your laptop</text>'
+        '<text x="805" y="16" text-anchor="middle" font-weight="700">gate 2: the server</text>'
+    ]
+    for _i, (_name, _pass1, _short1, _status, _short2) in enumerate(_cells):
+        _y = 36 + _i * 48
+        _svg.append(
+            f'<text x="250" y="{_y + 20}" text-anchor="end" dominant-baseline="central">{_name}</text>'
+            + box(270, _y, _short1, w=320, h=40, cls="dg-box dg-ok" if _pass1 else "dg-box dg-hot")
+            + box(610, _y, _short2, w=386, h=40, cls="dg-box dg-ok" if _status == 201 else "dg-box dg-hot")
+        )
+    _matrix = diagram(
+        "".join(_svg),
+        width=1000,
+        height=36 + 48 * len(_cells),
+        label="Seven slips, each checked by the model on the laptop and by the running server. "
+        + "; ".join(f"{_r['the slip']}: {_r['gate 1: your laptop']}, then {_r['gate 2: the server']}" for _r in _rows),
+    )
     _table = static_table(
         _rows,
         label="The same seven slips, checked twice",
         wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
         column_widths={"gate 1: your laptop": 410, "gate 2: the server": 410},
     )
-    mo.vstack([_table, _note], gap=0.6)
+
+    def _count(status):
+        n = sum(1 for _c in _cells if _c[3] == status)
+        return f"{n} slip{'' if n == 1 else 's'}"
+
+    _tiles = mo.md(
+        f"""
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">422</div><div class="tile-title">{_count(422)}: the wrong shape</div>
+        <p>Caught at both gates with the same message: both run the same model.</p></div>
+      <div class="tile"><div class="tile-key">400</div><div class="tile-title">{_count(400)}: a fact</div>
+        <p>A well-formed id. Only the server can open the filing cabinet and find no product 9999.</p></div>
+      <div class="tile"><div class="tile-key">201</div><div class="tile-title">{_count(201)}: booked</div>
+        <p>{len(_ok)} fields sent, {len(_good)} back. The server computed <code>total_price</code> =
+        {_good["units_sold"]} &times; {_good["total_price"] / _good["units_sold"]:.2f} itself.</p></div>
+    </div>
+        """
+    )
+    _why = mo.md(
+        """
+    A price the client is allowed to invent is a price the client can lie about. `SaleCreate` has no
+    `total_price` field, and `Input` refuses fields it does not know, so the slip that brought its
+    own `total_price` was refused at both gates.
+        """
+    )
+    mo.vstack(
+        [
+            mo.ui.tabs({"Chart": _matrix, "Table": _table}),
+            _tiles,
+            mo.accordion({"Why the client may not send total_price": _why}),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -3876,12 +4029,14 @@ def _(mo):
     run_twice = mo.ui.run_button(label="Press every verb twice", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Press It Twice"),
             mo.md(
-                "The lift button or the ticket dispenser? Chapter 6 had you press them by hand; here "
-                "all four verbs go to the running API **twice in a row**, against one sale, side by "
-                "side. Needs the running API."
-            ).callout(kind="info"),
+                """
+    ### Mini-lab: Press It Twice
+
+    The lift button or the ticket dispenser? All four verbs go to the running API **twice in a
+    row**, against one sale.
+                """
+            ),
             run_twice,
         ],
         gap=0.6,
@@ -3890,8 +4045,14 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, run_twice, sale_slip, static_table):
-    mo.stop(not run_twice.value, mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral"))
+def _(box, ch8_api, chart_or_table, diagram, mo, run_twice, sale_slip):
+    mo.stop(
+        not run_twice.value,
+        mo.md(
+            "**Predict first:** which verb changes the world again on the second press? "
+            "Then click **Press every verb twice**."
+        ).callout(kind="neutral"),
+    )
 
     _post1, _first = ch8_api("POST", "/sales", sale_slip)
     mo.stop(_post1 != 201, mo.md(f"`POST /sales` answered `{_post1}`: `{_first}`").callout(kind="danger"))
@@ -3935,22 +4096,52 @@ def _(ch8_api, mo, run_twice, sale_slip, static_table):
             "lift button?": "yes",
         },
     ]
-    _note = mo.md(
+    # One row per verb: the two status codes, then what the world looks like after both presses.
+    _svg = [
+        '<text x="235" y="20" text-anchor="middle" font-weight="700">first press</text>'
+        '<text x="405" y="20" text-anchor="middle" font-weight="700">second press</text>'
+        '<text x="748" y="20" text-anchor="middle" font-weight="700">what changed in the world</text>'
+    ]
+    for _i, _row in enumerate(_rows):
+        _y, _lift = 40 + _i * 58, _row["lift button?"] == "yes"
+        _svg.append(
+            f'<text x="0" y="{_y + 20}" font-weight="700">{_row["verb"]}</text>'
+            f'<text class="dg-muted" x="0" y="{_y + 42}">{"lift button" if _lift else "ticket dispenser"}</text>'
+            + box(160, _y, str(_row["first press"]), w=150, h=48)
+            + box(330, _y, str(_row["second press"]), w=150, h=48, cls="dg-box" if _lift else "dg-box dg-hot")
+            + box(500, _y, _row["what changed in the world"], w=496, h=48, cls="dg-box dg-ok" if _lift else "dg-box dg-hot")
+        )
+    _matrix = diagram(
+        "".join(_svg),
+        width=1000,
+        height=40 + 58 * len(_rows),
+        label="Each verb sent twice. "
+        + "; ".join(
+            f"{_r['verb']}: {_r['first press']} then {_r['second press']}, {_r['what changed in the world']}" for _r in _rows
+        ),
+    )
+    _more = mo.md(
         """
-    **GET, PUT and DELETE are safe to press twice. The world ends up the same.** POST is not: the
-    second press booked a second sale. That is exactly why a checkout page begs you not to hit
-    refresh, and why a payment that times out is frightening in a way a profile edit is not.
+    That is exactly why a checkout page begs you not to hit refresh, and why a payment that times
+    out is frightening in a way a profile edit is not.
 
-    **The 404 from chapter 6 is back.** The second DELETE answered `404`, not `204`, and the sale
-    is just as gone. Idempotent is a promise about the **effect on the world**, not about the
-    status code; only the answer to "did *you* delete it" changed.
-
-    One more honest note: idempotence is a promise the API author makes, not something HTTP
-    enforces. A carelessly written `PUT` can behave exactly like `POST`. It holds here because
-    this server updates a row you named by id, not because the word PUT is magic.
+    Idempotence is a promise the API author makes, not something HTTP enforces. A carelessly
+    written `PUT` can behave exactly like `POST`. It holds here because this server updates a row
+    you named by id, not because the word PUT is magic.
         """
-    ).callout(kind="info")
-    mo.vstack([static_table(_rows, label="Each verb, sent twice"), _note], gap=0.6)
+    )
+    mo.vstack(
+        [
+            chart_or_table(_matrix, _rows, label="Each verb, sent twice"),
+            mo.md(
+                f"**GET, PUT and DELETE are lift buttons:** the world ends up the same. **POST is a ticket "
+                f"dispenser:** the second press booked a second sale. The second DELETE's `{_del2}` changes "
+                "nothing: idempotent is about the effect, not the status code."
+            ).callout(kind="info"),
+            mo.accordion({"Idempotence is a promise, not a law": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -3959,12 +4150,14 @@ def _(mo):
     run_follow = mo.ui.run_button(label="Follow the sale into the file", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Where Does a POST Actually Go?"),
             mo.md(
-                "We count the rows in `data/sales.parquet`, POST one sale through the API, count "
-                "again, and then put the row that landed in the file next to the JSON that came "
-                "back. Needs the running API, started from this folder."
-            ).callout(kind="info"),
+                """
+    ### Mini-lab: Where Does a POST Actually Go?
+
+    POST one sale, watch `data/sales.parquet` grow, and compare the stored row with the JSON
+    answer. Needs the API started from this folder.
+                """
+            ),
             run_follow,
         ],
         gap=0.6,
@@ -3973,8 +4166,14 @@ def _(mo):
 
 
 @app.cell
-def _(Path, ch8_api, duckdb, mo, run_follow, sale_slip, static_table):
-    mo.stop(not run_follow.value, mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral"))
+def _(Path, box, ch8_api, chart_or_table, diagram, duckdb, mo, run_follow, sale_slip):
+    mo.stop(
+        not run_follow.value,
+        mo.md(
+            "**Predict first:** does the file store the product's name, or only its id? "
+            "Then click **Follow the sale into the file**."
+        ).callout(kind="neutral"),
+    )
     _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
     mo.stop(
         not _sales_file.exists(),
@@ -4005,31 +4204,66 @@ def _(Path, ch8_api, duckdb, mo, run_follow, sale_slip, static_table):
         {"field": _k, "in the file": str(_file_row.get(_k, "—")), "in the API answer": str(_v)}
         for _k, _v in _created.items()
     ]
-    _note = mo.md(
+
+    def _band(y, tier, name, note):
+        return (
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="2" y="{y}" width="996" height="88" rx="16"/>'
+            f'<text x="20" y="{y + 38}" font-weight="700">{name}</text>'
+            f'<text class="dg-muted" x="20" y="{y + 62}">{note}</text></g>'
+        )
+
+    # The request goes down the left column, the answer comes back up the right, like the tier map.
+    _trip = diagram(
+        _band(0, "presentation", "client", "this notebook")
+        + _band(120, "logic", "logic tier", "sw03_demo_api.py")
+        + _band(240, "data", "data tier", "data/sales.parquet")
+        + '<text x="402" y="110" class="dg-muted">request</text>'
+        + '<text x="822" y="110" class="dg-muted">answer</text>'
+        + box(220, 20, f"POST /sales · {len(sale_slip)} fields, no price", w=340, h=48)
+        + box(220, 140, "check · price it · lock · append", w=340, h=48)
+        + box(220, 260, f"{_before:,} rows &#8594; {_after:,} rows", w=340, h=48)
+        + box(640, 260, f"row stored: {len(_stored.columns)} columns, ids only", w=340, h=48)
+        + box(640, 140, "joins product, country, region names", w=340, h=48)
+        + box(640, 20, f"{_status} · {len(_created)} fields, names spelled out", w=340, h=48)
+        + '<path class="dg-edge" d="M390 68 V 134"/><path class="dg-edge" d="M390 188 V 254"/>'
+        + '<path class="dg-edge" d="M560 284 H 634"/>'
+        + '<path class="dg-edge" d="M810 260 V 194"/><path class="dg-edge" d="M810 140 V 74"/>',
+        width=1000,
+        height=330,
+        label=f"The POST goes down: the notebook sends {len(sale_slip)} fields, the API checks, prices and appends it, "
+        f"and the file grows from {_before:,} to {_after:,} rows. The answer comes up: the stored row has "
+        f"{len(_stored.columns)} columns of ids, the API joins the names and answers {_status} with {len(_created)} fields.",
+        tier="logic",
+    )
+    _caption = mo.md(
         f"""
-    **The file grew by one: {_before:,} rows to {_after:,}.**
-
+    <p class="vis-caption">The <strong>file</strong> keeps <code>product_id {_created["product_id"]}</code> and
+    <code>country_id {_created["country_id"]}</code>: ids, every fact written once. The <strong>answer</strong> spells
+    out "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}": the logic tier
+    did the joining, so the dashboard does not have to.</p>
+        """
+    )
+    _more = mo.md(
+        """
     The logic tier did not invent a database. It wrote to `data/sales.parquet`, a working copy of
-    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/`
-    into `data/` on every start). Your POST travelled all the way down.
-
-    Now read the table across, because this is what a tier is *for*. The **file** keeps
-    {len(_stored.columns)} columns and stores `product_id {_created["product_id"]}`,
-    `country_id {_created["country_id"]}`: ids, no names, every fact written exactly once. That is
-    the normalisation the data tier cares about. The **response** has {len(_created)} fields, with
-    "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}"
-    spelled out. The logic tier did the joining, so the dashboard in `sw03_demo_streamlit.py` does not have to. Even
-    the date changes shape: the file keeps a timestamp, the API sends a plain date.
+    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/` into
+    `data/` on every start). Even the date changes shape: the file keeps a timestamp, the API sends a
+    plain date.
 
     **One honest callback.** We just read that file behind the API's back. The API takes a lock
-    around every write, but like the key on the hook in chapter 1, a lock only protects those who
-    ask for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong
-    instant could catch it half-written. That is precisely the isolation problem from chapter 1,
-    and it is the reason a real system puts a database at the bottom of the data tier rather than
-    a file.
+    around every write, but like the key on the hook in chapter 1, a lock only protects those who ask
+    for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant
+    could catch it half-written. That is chapter 1's isolation problem, and the reason a real system
+    puts a database at the bottom of the data tier rather than a file.
         """
-    ).callout(kind="info")
-    mo.vstack([static_table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6)
+    )
+    mo.vstack(
+        [
+            chart_or_table(mo.vstack([_trip, _caption], gap=0.4), _rows, label="Same sale, two tiers, two shapes"),
+            mo.accordion({"Where the file came from, and one honest callback": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -4038,18 +4272,14 @@ def _(mo):
     run_two_analysts = mo.ui.run_button(label="Run the two-analyst test", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Two People, One Product, Both Click Save"),
             mo.md(
                 """
-    **Predict first, then run it.**
+    ### Mini-lab: Two People, One Product, Both Click Save
 
-    Anna and Ben both open product 1 in a browser tab, at the same starting price. Anna applies a
-    10% raise. Ben adds a 20-franc surcharge. Both click save. Both see "saved", and both get
-    `200 OK` from the API you built.
-
-    **What is the price afterwards?**
+    Anna and Ben open product 1 at the same price. Anna saves a **10% raise**, Ben a
+    **CHF 20 surcharge**. Both get `200 OK`.
                 """
-            ).callout(kind="info"),
+            ),
             run_two_analysts,
         ],
         gap=0.6,
@@ -4058,10 +4288,12 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, run_two_analysts, static_table):
+def _(ch8_api, chart_or_table, mo, run_two_analysts):
     mo.stop(
         not run_two_analysts.value,
-        mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral"),
+        mo.md(
+            "**Predict first:** what is the price afterwards? Write it down, then click **Run the two-analyst test**."
+        ).callout(kind="neutral"),
     )
 
     def _price(method, body=None):
@@ -4076,8 +4308,10 @@ def _(ch8_api, mo, run_two_analysts, static_table):
         _anna_sees = _price("GET")
         _ben_sees = _price("GET")
         # Both save, strictly one after the other.
-        _after_anna = _price("PUT", {"price": round(_anna_sees * 1.10, 2)})
-        _after_ben = _price("PUT", {"price": round(_ben_sees + 20, 2)})
+        _anna_sends = round(_anna_sees * 1.10, 2)
+        _ben_sends = round(_ben_sees + 20, 2)
+        _after_anna = _price("PUT", {"price": _anna_sends})
+        _after_ben = _price("PUT", {"price": _ben_sends})
         _final = _price("GET")
     finally:
         ch8_api("PUT", "/products/1", {"price": _start})  # put the price back, like the other labs tidy up
@@ -4092,36 +4326,95 @@ def _(ch8_api, mo, run_two_analysts, static_table):
         {"step": "6. price afterwards", "price": _final, "server said": "-"},
         {"step": "what it should have been", "price": _correct, "server said": "-"},
     ]
-    _note = mo.md(
+    # Chapter 1's lost-update grid, with people instead of workers and a price instead of a counter.
+    _grid = mo.Html(
         f"""
-    **Anna's raise is gone. {_correct - _final:.2f} of it, and nobody was told.**
+    <div class="section-card flow-card">
+      <div class="lost-update-wrap">
+        <div class="lost-update-grid">
+          <div class="lu-header">Step</div>
+          <div class="lu-header">Anna</div>
+          <div class="lu-header">Ben</div>
+          <div class="lu-header">Price on the server</div>
 
-    Look at what did *not* happen. No error. No warning. No conflict. Two `200 OK` responses, two
-    users who saw "saved", and a price that is simply wrong.
+          <div class="lu-step">1</div>
+          <div class="lu-event lu-read">GET: sees {_anna_sees:.2f}</div>
+          <div class="lu-event lu-read">GET: sees {_ben_sees:.2f}</div>
+          <div class="lu-state">{_start:.2f}</div>
 
-    Now look back at **chapter 1**. This is the same lost update as the shared counter, the one we
-    watched disappear from a text file, and it survived everything we have built since. It is not
-    a threading accident either: these six requests ran strictly one after another, so this fails
-    identically every single time you click the button. The bug is structural, not a timing fluke.
+          <div class="lu-step">2</div>
+          <div class="lu-event lu-write">PUT {_anna_sends:.2f} (+10%): 200 OK</div>
+          <div class="lu-event">adds CHF 20 to his stale {_ben_sees:.2f}</div>
+          <div class="lu-state">{_after_anna:.2f}</div>
 
-    Why did the lock not save us? Every write in `sw03_demo_api.py` runs inside one `lock`,
-    chapter 1's own fix, so each single request is safe. But *there is no lock around what
-    actually happened here*. The read and the write were two separate HTTP requests, minutes apart
-    in real life, and the API has no idea they were meant to belong together. Ben's `PUT` carried
-    a price computed from a page he opened before Anna saved. Chapter 1's lesson holds exactly as
-    stated: a lock, like a transaction, protects the steps you put inside it, and nothing else.
-
-    **The fix is not more locking.** It is to stop sending *the answer* and start sending *the
-    change* (`{{"raise_percent": 10}}`), or to make the client say which version it read and let
-    the server refuse if that version is stale. HTTP has that second option built in: `If-Match`
-    with an ETag, answered by `412 Precondition Failed`. Correctness is a property of the design,
-    not of the tools.
+          <div class="lu-step">3</div>
+          <div class="lu-event lu-idle">done</div>
+          <div class="lu-event lu-stale">PUT stale {_ben_sends:.2f}: 200 OK</div>
+          <div class="lu-state lu-problem">{_after_ben:.2f} (Anna's raise overwritten)</div>
+        </div>
+      </div>
+      <div class="flow-note"><strong>Should be {_correct:.2f}.</strong> Observed: {_final:.2f}, and both saves
+      answered 200 OK.</div>
+    </div>
         """
-    ).callout(kind="danger")
+    )
+    _more = mo.md(
+        """
+    Every write in `sw03_demo_api.py` runs inside one `lock`, chapter 1's own fix, so each single
+    request is safe. But *there is no lock around what actually happened here*. The read and the
+    write were two separate HTTP requests, minutes apart in real life, and the API has no idea they
+    were meant to belong together. Ben's `PUT` carried a price computed from a page he opened
+    before Anna saved. Chapter 1's lesson holds exactly as stated: a lock, like a transaction,
+    protects the steps you put inside it, and nothing else. Correctness is a property of the
+    design, not of the tools.
+        """
+    )
     mo.vstack(
-        [static_table(_steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"), _note],
+        [
+            mo.hstack(
+                [
+                    mo.stat(f"{_correct:.2f}", label="should be", bordered=True),
+                    mo.stat(f"{_final:.2f}", label="is", bordered=True),
+                    mo.stat(f"{_correct - _final:.2f}", label="lost, and nobody was told", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(_grid, _steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"),
+            mo.md(
+                "**Chapter 1's lost update, over HTTP.** No error, two `200 OK`s. The requests ran one after "
+                "another, so it fails on every click: a design bug, not a timing fluke."
+            ).callout(kind="danger"),
+            mo.accordion({"Why the API's lock did not save Anna": _more}),
+        ],
         gap=0.6,
     )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — FastAPI</h3>
+      <details>
+        <summary><strong>Q1:</strong> Gate 1 already checked the slip on your laptop. Why check it again at the server?</summary>
+        <p><strong>Answer:</strong> Anyone can bypass this notebook and post directly with <code>curl</code>.
+        Validating on the laptop is a courtesy to the user, instant feedback with no round trip, never a
+        substitute for the server's check.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> Is the split between 422 and 400 a law of HTTP?</summary>
+        <p><strong>Answer:</strong> No, it is this API's convention. FastAPI produces the 422 automatically from
+        the model; the 400s are business rules somebody wrote by hand.</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> How should Ben's save have failed?</summary>
+        <p><strong>Answer:</strong> Loudly. Send <em>the change</em> (<code>{"raise_percent": 10}</code>) instead of
+        the answer, so both changes apply. Or make the client say which version it read (<code>If-Match</code>
+        with an ETag) and let the server refuse a stale write with <code>412 Precondition Failed</code>.</p>
+      </details>
+    </div>
+    """)
     return
 
 
@@ -4131,13 +4424,10 @@ def _(mo):
         """
     ### Chapter 8 Conclusion
 
-    - One model drives the validation, the endpoint and `/docs`, so the documentation cannot drift
-      from the rules. A hand-written docstring still can.
-    - Shape can be checked anywhere, on your laptop or at the server (422); facts only at the
-      server (400). Only the server computes `total_price`.
+    - One model drives validation, endpoint and `/docs`: the docs cannot drift. A hand-written docstring can.
+    - Shape is checked anywhere (422), facts only at the server (400). Only the server computes `total_price`.
     - GET, PUT and DELETE are safe to press twice; POST books a second sale.
-    - A lock per request cannot stop a lost update split over two requests: send the change, or
-      make the client say which version it read (`If-Match`).
+    - A lock per request cannot stop a lost update split over two requests: send the change, or `If-Match`.
             """
     ).callout(kind="success")
     return
@@ -4149,8 +4439,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Backend answers are useful, but users still need a clear interface.
-    Next we compare frontend options and what each one trades away: speed, control or simplicity.
+    Next: the interface people actually use, and what each frontend trades away.
 
     $$
     \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
