@@ -2390,74 +2390,40 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 5. DuckDB Example (SQL on Files)
-    """)
-    return
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 5. DuckDB Example (SQL on Files)"),
+            chapter_intro(
+                "data",
+                "How can DuckDB answer a query while reading much less data?",
+                "Last stop in the data tier: chapters 1-4 built the files, now something reads them back.",
+            ),
+            mo.md(
+                """
+    **DuckDB**: an embedded analytical database, fast because it reads less.
 
-
-@app.cell
-def _(mo):
-    mo.Html(
-        """
-    <div class="disclaimer-red">
-      Disclaimer: Databases will be discussed in depth later in the semester in the
-      <strong>Database Management for Data Scientists (DBM)</strong> module.
-      Here we focus only on practical intuition for analytics workflows.
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">import</div><div class="tile-title">Embedded</div>
+        <p>Runs inside your Python process. No server.</p></div>
+      <div class="tile"><div class="tile-key">GROUP BY</div><div class="tile-title">Analytical</div>
+        <p>Scans, filters, joins and aggregates over many rows, column by column.</p></div>
+      <div class="tile"><div class="tile-key">WHERE</div><div class="tile-title">Predicate pushdown</div>
+        <p>Filters inside the scan; skips blocks whose min/max rule out a match.</p>
+        <p><em>Chapter 3's index card.</em></p></div>
+      <div class="tile"><div class="tile-key">SELECT</div><div class="tile-title">Projection pushdown</div>
+        <p>Only the columns the query names are read.</p>
+        <p><em>Chapter 3's ledger.</em></p></div>
     </div>
-            """
+                """
+            ),
+            mo.Html(
+                '<div class="disclaimer-red">Databases get their own module later: '
+                "<strong>Database Management for Data Scientists (DBM)</strong>. Here: intuition only.</div>"
+            ),
+        ],
+        gap=1,
     )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 5 Introduction
-
-    > **Key Question:** How can DuckDB answer a query while reading much less data?
-
-    *Last stop in the **data tier**. Chapters 1-4 built the files; now something has to read them back.*
-
-    Two ideas you already met in chapter 3, the index card and the ledger, by their proper names:
-
-    - **Predicate pushdown**: the filter runs inside the scan, so non-matching rows are dropped
-      before any other work, and whole blocks whose min/max rule out a match are not read at all.
-    - **Projection pushdown**: only the columns the query needs are read; the others are skipped.
-
-    Main idea:
-
-    $$
-    \\text{work units} \\approx N \\times \\text{selectivity} \\times C_{\\text{needed}}
-    $$
-
-    Lower selectivity and fewer needed columns usually mean less total work. It is a toy model:
-    the filter column itself is still read for every row unless whole blocks can be skipped, which
-    needs data sorted or clustered on that column.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### DuckDB: SQL on Files, Zero Server
-
-    DuckDB is an **embedded analytical database**:
-
-    - **Embedded**: it runs inside your Python process, like a library. There is no server to start.
-    - **Analytical**: it is built for scans, filters, `GROUP BY`, joins and aggregates over many
-      rows, stored column by column.
-
-    It is fast because it reads less, pushing the filter and the column list into the scan as
-    defined above. The first mini-lab estimates how much that can skip; the second times one real
-    query on three sources.
-            """
-    ).callout(kind="neutral")
     return
 
 
@@ -2469,7 +2435,10 @@ def _(mo):
     push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query", show_value=True, debounce=True)
     mo.vstack(
         [
-            mo.md("### Mini-lab: Pushdown Intuition (What Work Gets Skipped?)"),
+            mo.md(
+                "### Mini-lab: Pushdown Intuition (What Work Gets Skipped?)\n\n"
+                "A toy model: $\\text{cells read} \\approx N \\times \\text{selectivity} \\times C_{\\text{needed}}$"
+            ),
             mo.hstack([push_rows, push_selectivity], widths="equal"),
             mo.hstack([push_cols_total, push_cols_needed], widths="equal"),
         ],
@@ -2479,42 +2448,72 @@ def _(mo):
 
 
 @app.cell
-def _(
-    mo,
-    push_cols_needed,
-    push_cols_total,
-    push_rows,
-    push_selectivity,
-    static_table,
-):
+def _(diagram, mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
     _n, _kept, _total = push_rows.value, push_selectivity.value, push_cols_total.value
     _needed = min(push_cols_needed.value, _total)  # a query cannot use more columns than the table has
     _without, _with = _n * _total, _n * _kept * _needed
+    _tall = 220  # px for all N rows
+
+    def _grid(x, title, sub, read_height):
+        """The table as one strip per column, N rows tall: cells read in the tier hue, cells skipped grey."""
+        step = 440 / _total
+        width = step - (2 if step > 8 else 1)
+        parts = [f'<text x="{x + 220}" y="22" text-anchor="middle" font-weight="700">{title}</text>']
+        for column in range(_total):
+            cx = x + column * step
+            parts.append(
+                f'<rect x="{cx:.1f}" y="40" width="{width:.1f}" height="{_tall}"'
+                ' style="fill: color-mix(in srgb, var(--ink) 9%, transparent)"/>'
+            )
+            if height := read_height(column):
+                parts.append(f'<rect x="{cx:.1f}" y="40" width="{width:.1f}" height="{height:.1f}" style="fill: var(--tier)"/>')
+        parts.append(f'<text class="dg-muted" x="{x + 220}" y="{_tall + 68}" text-anchor="middle">{sub}</text>')
+        return "".join(parts)
+
+    _picture = diagram(
+        _grid(0, "without pushdown", f"{_n:,} rows × {_total} columns", lambda _c: _tall)
+        + '<text class="dg-muted" x="490" y="138" text-anchor="middle">pushdown</text>'
+        + '<path class="dg-edge" d="M452 150 H 526"/>'
+        # at least a sliver, so a selectivity of 0.001 still shows where the work is
+        + _grid(
+            540,
+            "with pushdown",
+            f"{_kept:.1%} of the rows × {_needed} of {_total} columns",
+            lambda _c: max(_tall * _kept, 1.5) if _c < _needed else 0,
+        ),
+        width=980,
+        height=300,
+        label=f"The table as {_total} column strips. Without pushdown every cell is read; with pushdown only "
+        f"the {_needed} needed columns of the {_kept:.1%} of rows the filter keeps.",
+        tier="data",
+    )
     mo.vstack(
         [
-            static_table(
+            mo.hstack(
                 [
-                    {
-                        "estimate": "without pushdown",
-                        "rows (N)": _n,
-                        "share of rows kept": 1.0,
-                        "columns read": _total,
-                        "work units": _without,
-                    },
-                    {
-                        "estimate": "with pushdown",
-                        "rows (N)": _n,
-                        "share of rows kept": _kept,
-                        "columns read": _needed,
-                        "work units": round(_with),
-                    },
+                    mo.stat(f"{_without:,}", label="cells read without pushdown", bordered=True),
+                    mo.stat(f"{round(_with):,}", label="cells read with pushdown", bordered=True),
+                    mo.stat(f"{_without / _with:,.1f}x", label="less work", bordered=True),
                 ],
-                label="Predicate + projection pushdown estimate (toy model, not a runtime)",
+                widths="equal",
             ),
-            mo.md(
-                f"Reduction factor: **{_without / _with:,.1f}x** less work. The bigger it is, the more "
-                "there is for pushdown to skip. The next mini-lab times a real query."
-            ).callout(kind="info"),
+            _picture,
+            mo.Html(
+                '<p class="vis-caption"><strong>Blue: cells read. Grey: work skipped.</strong> The kept rows are drawn '
+                "at the top; in a real file they are scattered.</p>"
+            ),
+            mo.accordion(
+                {
+                    "Where the toy model is too kind": mo.md(
+                        """
+    It counts only the needed columns of the kept rows. The filter column itself is still read
+    for every row, unless whole blocks can be skipped by their min/max, and that needs the data
+    sorted or clustered on that column (chapter 3). It shows what *can* be skipped, not a
+    runtime: the next mini-lab times a real query.
+                        """
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -2530,10 +2529,8 @@ def _(mo):
         [
             mo.md(
                 "### Mini-lab: One Query, Three Sources\n\n"
-                "DuckDB can query a file by its name: `SELECT ... FROM 'orders.csv'`. The same "
-                "`GROUP BY` (orders and average amount per region, above the threshold) runs on a "
-                "CSV file, a Parquet file and a table loaded into DuckDB. Compare what each costs "
-                "per query and what loading costs once."
+                "One `GROUP BY` (orders and average amount per region above the threshold) on three sources. "
+                "DuckDB reads a file by its name: `FROM 'orders.csv'`."
             ),
             mo.hstack([duck_rows, duck_threshold], widths="equal"),
             run_duck,
@@ -2546,7 +2543,10 @@ def _(mo):
 @app.cell
 def _(
     Path,
+    TIER,
+    alt,
     best_seconds,
+    chart_or_table,
     duck_rows,
     duck_threshold,
     duckdb,
@@ -2558,8 +2558,14 @@ def _(
     run_duck,
     static_table,
     tempfile,
+    tier_chart,
 ):
-    mo.stop(not run_duck.value, mo.md("Click **Run DuckDB demo** to time one query on three sources.").callout(kind="neutral"))
+    mo.stop(
+        not run_duck.value,
+        mo.md(
+            "**Predict first:** which source answers fastest, and which file is the smallest? Then click **Run DuckDB demo**."
+        ).callout(kind="neutral"),
+    )
 
     _n = duck_rows.value
     _rng = np.random.default_rng(33)
@@ -2594,63 +2600,85 @@ def _(
             _block = _con.execute("SELECT block_size FROM pragma_database_size()").fetchone()[0]
         _csv_size, _parquet_size, _db_size = (_p.stat().st_size for _p in (_csv, _parquet, _db))
 
-    _timings = static_table(
+    _sources = [
+        # name, file, size, per query, load into a table once
+        ("CSV file", "orders.csv", _csv_size, _query_csv, _load_csv),
+        ("Parquet file", "orders.parquet", _parquet_size, _query_parquet, _load_parquet),
+        ("DuckDB table", "analytics.duckdb", _db_size, _query_table, None),
+    ]
+    _rows = [
+        {
+            "source": f"{_name} ({_file})",
+            "size": format_bytes(_size),
+            "per query": format_ms(_query),
+            "load into a table, once": format_ms(_load) if _load else "-",
+        }
+        for _name, _file, _size, _query, _load in _sources
+    ]
+    _names = [_source[0] for _source in _sources]
+    _order = ["per query", "load into a table, once"]
+    _costs = pd.DataFrame(
         [
-            {
-                "source": "CSV file (orders.csv)",
-                "size": format_bytes(_csv_size),
-                "per query": format_ms(_query_csv),
-                "load into a table, once": format_ms(_load_csv),
-            },
-            {
-                "source": "Parquet file (orders.parquet)",
-                "size": format_bytes(_parquet_size),
-                "per query": format_ms(_query_parquet),
-                "load into a table, once": format_ms(_load_parquet),
-            },
-            {
-                "source": "DuckDB table (analytics.duckdb)",
-                "size": format_bytes(_db_size),
-                "per query": format_ms(_query_table),
-                "load into a table, once": "-",
-            },
-        ],
-        label="One query, three sources (best of 3 runs)",
+            {"source": _name, "cost": _cost, "ms": _seconds * 1000}
+            for _name, _file, _size, *_times in _sources
+            for _cost, _seconds in zip(_order, _times, strict=True)
+            if _seconds is not None
+        ]
     )
+    _costs["label"] = [f"{_ms:,.1f} ms" for _ms in _costs["ms"]]
+    _timed = alt.Chart(_costs).encode(
+        y=alt.Y("source:N", sort=_names, title=None),
+        yOffset=alt.YOffset("cost:N", sort=_order),
+        x=alt.X("ms:Q", title="milliseconds", scale=alt.Scale(domain=[0, _costs["ms"].max() * 1.3])),
+    )
+    _time = (
+        _timed.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.Color("cost:N", title=None, sort=_order, scale=alt.Scale(domain=_order, range=[TIER["data"], TIER["muted"]]))
+        )
+        + _timed.mark_text(align="left", dx=6).encode(text="label:N")
+    ).properties(width=500, height=250, title="Time (best of 3 runs)")
+    _sized = alt.Chart(
+        pd.DataFrame({"source": _names, "bytes": [_s[2] for _s in _sources], "label": [format_bytes(_s[2]) for _s in _sources]})
+    ).encode(
+        y=alt.Y("source:N", sort=_names, title=None, axis=None),
+        x=alt.X("bytes:Q", axis=None, scale=alt.Scale(domain=[0, max(_s[2] for _s in _sources) * 1.6])),
+    )
+    _size = (
+        _sized.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _sized.mark_text(align="left", dx=6).encode(text="label:N")
+    ).properties(width=240, height=250, title="File size")
+
     _size_note = (
         "Push Rows up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
     )
-    _note = mo.md(
-        f"""
-    **Here the gap is mostly parsing.** CSV is text, so every query re-reads and re-converts it;
-    Parquet and the DuckDB table are already typed columns. Predicate pushdown has next to
-    nothing to skip: the amounts are random, so every block spans roughly 0 to 1000.
+    mo.vstack(
+        [
+            chart_or_table(tier_chart(alt.hconcat(_time, _size, spacing=40), "data"), _rows, label="One query, three sources (best of 3 runs)"),
+            mo.md(
+                f"**Here the gap is mostly parsing:** CSV is text, re-converted on every query; Parquet and the "
+                f"table are typed columns. Loading the CSV once cost {_load_csv / _query_csv:.1f} CSV queries' worth."
+            ).callout(kind="info"),
+            mo.accordion(
+                {
+                    "Why pushdown skips little here, and why the DuckDB file can be the biggest": mo.md(
+                        f"""
+    Predicate pushdown has next to nothing to skip: the amounts are random, so every block spans
+    roughly 0 to 1000 and none can be ruled out by its min/max.
 
-    Loading the CSV into a table cost {format_ms(_load_csv)}, about
-    {_load_csv / _query_csv:.1f} CSV queries' worth. Every query after that runs at table speed,
-    which is the case for loading data you query again and again.
-
-    **Why can `analytics.duckdb` be bigger than the CSV?** DuckDB grows its file in
-    {_block // 1024} KiB blocks, so a small table still fills whole blocks. {_size_note}
-            """
-    ).callout(kind="info")
-    mo.vstack([_timings, static_table(_result.to_dict("records"), label=f"Query result (amount > {duck_threshold.value})"), _note], gap=0.6)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Indexing Demo: Full Scan vs Indexed Search
-
-    Pushdown skips work *during* a scan; an index avoids the scan: a sorted copy of some columns
-    that lets the engine jump to the matching rows. DuckDB relies on automatic min/max zone maps
-    rather than hand-made indexes, so we switch to SQLite, the row-store database Python ships
-    with. One query, three states of the same table: no index, an index on `category`, an index on
-    `(category, value)`, plus the plan SQLite chose for each.
-            """
-    ).callout(kind="neutral")
+    DuckDB grows `analytics.duckdb` in {_block // 1024} KiB blocks, so a small table still fills
+    whole blocks. {_size_note}
+                        """
+                    ),
+                    "The query and its answer": mo.vstack(
+                        [
+                            mo.md(f"```sql\n{_sql.format('orders')}\n```"),
+                            static_table(_result.to_dict("records"), label=f"Query result (amount > {duck_threshold.value})"),
+                        ]
+                    ),
+                }
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -2663,6 +2691,14 @@ def _(mo):
     run_index = mo.ui.run_button(label="Run indexing demo", kind="success")
     mo.vstack(
         [
+            mo.md(
+                """
+    ### Indexing Demo: Full Scan vs Indexed Search
+
+    An **index** avoids the scan: a sorted copy of some columns, to jump to the matching rows.
+    DuckDB keeps min/max zone maps instead, so this lab uses SQLite.
+                """
+            ),
             mo.hstack([idx_rows, idx_selectivity], widths="equal"),
             mo.hstack([idx_threshold, idx_seed], widths="equal"),
             run_index,
@@ -2674,18 +2710,28 @@ def _(mo):
 
 @app.cell
 def _(
+    TIER,
+    alt,
     best_seconds,
+    chart_or_table,
     idx_rows,
     idx_seed,
     idx_selectivity,
     idx_threshold,
     mo,
+    pd,
     random,
     run_index,
     sqlite3,
-    static_table,
+    tier_chart,
 ):
-    mo.stop(not run_index.value, mo.md("Click **Run indexing demo** to time one query on three states of the same table.").callout(kind="neutral"))
+    mo.stop(
+        not run_index.value,
+        mo.md(
+            "**Predict first:** no index, `(category)` or `(category, value)`: which is fastest? "
+            "Then click **Run indexing demo**."
+        ).callout(kind="neutral"),
+    )
 
     _rng = random.Random(idx_seed.value)
     _con = sqlite3.connect(":memory:")  # in memory, so the timings measure SQLite and not the disk
@@ -2714,108 +2760,114 @@ def _(
 
     _scan = _states["no index"][1]
     _narrow = _scan / _states["index on (category)"][1]
-    _table = static_table(
-        [
-            {
-                "state": _state,
-                "build (ms)": round(_build * 1000, 1),
-                "query (ms)": round(_query_s * 1000, 3),
-                "speed-up vs scan": f"{_scan / _query_s:.1f}x",
-                "SQLite plan": _plan,
-            }
-            for _state, (_build, _query_s, _plan) in _states.items()
-        ],
-        label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
-        wrapped_columns=["SQLite plan"],
+    _rows = [
+        {
+            "state": _state,
+            "build (ms)": round(_build * 1000, 1),
+            "query (ms)": round(_query_s * 1000, 3),
+            "speed-up vs scan": f"{_scan / _query_s:.1f}x",
+            "SQLite plan": _plan,
+        }
+        for _state, (_build, _query_s, _plan) in _states.items()
+    ]
+    _df = pd.DataFrame(_rows)
+    _df["speed-up"] = _scan / (_df["query (ms)"] / 1000)
+    _df["label"] = [
+        f"{_ms:.2f} ms (the scan)" if _state == "no index" else f"{_ms:.2f} ms · {_up:.1f}x"
+        for _state, _ms, _up in zip(_df["state"], _df["query (ms)"], _df["speed-up"], strict=True)
+    ]
+    _df["kind"] = ["scan" if _state == "no index" else ("slower" if _up < 1 else "faster") for _state, _up in zip(_df["state"], _df["speed-up"], strict=True)]
+    _y = alt.Y("state:N", sort=None, title=None)
+    _timed = alt.Chart(_df).encode(y=_y, x=alt.X("query (ms):Q", title=None, scale=alt.Scale(domain=[0, _df["query (ms)"].max() * 1.45])))
+    _query_chart = (
+        _timed.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.Color(
+                "kind:N", legend=None, scale=alt.Scale(domain=["scan", "faster", "slower"], range=[TIER["muted"], TIER["data"], TIER["hot"]])
+            )
+        )
+        + _timed.mark_text(align="left", dx=6).encode(text="label:N")
+    ).properties(width=480, height=180, title="Query time (ms), best of 5")
+    _built = alt.Chart(_df).encode(
+        y=alt.Y("state:N", sort=None, title=None, axis=None),
+        x=alt.X("build (ms):Q", title=None, scale=alt.Scale(domain=[0, max(_df["build (ms)"].max(), 1) * 1.5])),
     )
+    _build_chart = (
+        _built.mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
+        + _built.mark_text(align="left", dx=6).encode(text=alt.Text("build (ms):Q", format=".1f"))
+    ).properties(width=200, height=180, title="Build, once (ms)")
+
     if round(_narrow, 1) < 1:
-        _planner = (
-            f"Here that is exactly what happened: the `(category)` row is at {_narrow:.1f}x, slower than "
-            "the scan, and the plan still says USING INDEX."
-        )
+        _planner = f"Here <code>(category)</code> ran at {_narrow:.1f}x, slower than the scan, and still USING INDEX."
     elif round(idx_selectivity.value, 2) < 0.7:
-        _planner = (
-            "Push the share of C to 0.7 or more and run again: the `(category)` row drops below 1.0x "
-            "and the plan still says USING INDEX."
-        )
+        _planner = "Set the share of C to 0.7 or more and run again: <code>(category)</code> drops below 1.0x."
     else:
-        _planner = (
-            f"At this share the narrow index still just held on ({_narrow:.1f}x); timings wobble, so run "
-            "again and it drops below 1.0x while the plan still says USING INDEX."
-        )
-    _note = mo.md(
+        _planner = f"Here <code>(category)</code> just held on ({_narrow:.1f}x); timings wobble, so run again."
+    _wide_build = _states["index on (category, value)"][0] * 1000
+    _tiles = mo.md(
         f"""
-    **An index is not a speed setting.** It is a second copy of some of your columns, and this
-    table shows three consequences.
-
-    - **It is not free.** Look at the build column. That cost is paid once here, but in a real
-      system it is paid again on **every insert, update and delete**, forever. A table with six
-      indexes is a table where every write does seven pieces of work.
-    - **Width matters more than existence.** The narrow index knows only the category, so once it
-      has found the matching rows it must still visit the table to read each `value`. The wide one
-      contains both columns the query asked for, so the answer never touches the table at all.
-      Watch the plan say **COVERING INDEX**: that word is the whole difference.
-    - **The planner guesses.** SQLite does not know how many rows are C (even `ANALYZE` only
-      stores averages), so it assumes an equality match is rare and takes the index even when
-      that is slower than scanning. {_planner}
-
-    So the honest rule is not "add an index to make it fast". It is: an index pays when it holds
-    what the query asks for, and the query asks for **few** rows.
-            """
-    ).callout(kind="info")
-    mo.vstack([_table, _note], gap=0.6)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    ### Schema-on-Read vs Schema-on-Write (DuckDB)
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">+1</div><div class="tile-title">It is not free</div>
+        <p>Built here in {_wide_build:.0f} ms, then paid again on <strong>every insert, update and delete</strong>.
+        Six indexes: every write does seven pieces of work.</p></div>
+      <div class="tile"><div class="tile-key">COVERING</div><div class="tile-title">Width matters</div>
+        <p><code>(category)</code> finds the C rows, then fetches each <code>value</code> from the table.
+        <code>(category, value)</code> holds both: its plan says COVERING INDEX, the table is never touched.</p></div>
+      <div class="tile"><div class="tile-key">?</div><div class="tile-title">The planner guesses</div>
+        <p>SQLite assumes few rows match and takes the index even when a scan is faster.</p>
+        <p>{_planner}</p></div>
+    </div>
         """
-    Two ways to deal with the fact that a file has no types of its own.
-
-    **Schema-on-read** means you point a tool at the file and let it guess. DuckDB looks at the
-    values and picks `BIGINT`, `DOUBLE`, `DATE` or `VARCHAR`. Fast to start, and forgiving: one
-    bad value in a column and the whole column becomes text.
-
-    **Schema-on-write** means you declare the blank form *first*, with its types and its rules,
-    and then load into it. Slower to start, and unforgiving on purpose.
-
-    The difference is not which one uses a cast. It is **when the check happens, and who gets
-    told.** Below, the same messy export goes down both lanes. Watch what each one reports.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    run_schema = mo.ui.run_button(label="Run schema demo", kind="success")
+    )
     mo.vstack(
         [
+            chart_or_table(
+                tier_chart(alt.hconcat(_query_chart, _build_chart, spacing=40), "data"),
+                _rows,
+                label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
+            ),
+            _tiles,
             mo.md(
-                "We take 400 real sales, export them to CSV, and corrupt 5% of `total_price` with "
-                "the things that actually appear in real exports: `n/a`, an empty cell, a European "
-                "decimal comma (`1 234,50`), and a currency inside the value (`EUR 900`)."
+                "**The honest rule:** an index pays when it holds what the query asks for, and the query asks for **few** rows."
             ).callout(kind="info"),
-            run_schema,
+            mo.accordion(
+                {
+                    "The plan SQLite chose for each state": mo.md(
+                        "\n".join(f"- **{_state}:** `{_plan}`" for _state, (_b, _q, _plan) in _states.items())
+                        + "\n\nSQLite cannot know how many rows are C: even `ANALYZE` stores only averages."
+                    )
+                }
+            ),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return (run_schema,)
+    )
+    return
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, static_table, tempfile):
-    mo.stop(not run_schema.value, mo.md("Click **Run schema demo** to send one messy file down both lanes.").callout(kind="neutral"))
+def _(mo):
+    def ch5_card(x, y, title, sub, cls="dg-box", w=235, h=72):
+        """SVG for a two-line box at (x, y): a bold title over a muted line."""
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 29}" text-anchor="middle" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 53}" text-anchor="middle">{sub}</text>'
+        )
 
+    mo.md(
+        """
+    ### Schema-on-Read vs Schema-on-Write
+
+    A CSV file has no types. **Schema-on-read** guesses them while reading; **schema-on-write**
+    declares the blank form first and loads into it. What differs is **when the check happens,
+    and who gets told**. The file: 400 real sales, 5% of `total_price` broken like real exports
+    (`n/a`, empty, `1 234,50`, `EUR 900`).
+        """
+    ).callout(kind="neutral")
+    return (ch5_card,)
+
+
+@app.cell
+def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, random, re, static_table, tempfile):
     _src = pd.read_parquet(SALES_SEED).head(400)
     _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype({"total_price": str})
     _bad_rows = random.Random(5).sample(range(len(_export)), 20)
@@ -2848,13 +2900,43 @@ def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, static_table, tempfi
         )
         try:
             _con.execute("INSERT INTO sales_clean FROM read_csv(?)", [_csv])
-            _told = "loaded without complaint"
+            _told, _refused = "loaded without complaint", ("loaded", "no complaint")
         except duckdb.Error as _exc:
             _lines = str(_exc).splitlines()
             _told = f"{type(_exc).__name__}: {_lines[0]}. {_lines[2]}"
+            _line = re.search(r"Line: (\d+)", _told)
+            _value = re.search(r'string "([^"]*)"', _told)
+            _refused = (
+                "INSERT refused",
+                f'line {_line[1]}: "{_value[1]}"' if _line and _value else type(_exc).__name__,
+            )
         _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
 
     _true = _src["total_price"].sum()
+    _low = 1 - _revenue / _true
+    _lanes = diagram(
+        '<rect class="dg-box" x="0" y="72" width="190" height="156" rx="12"/>'
+        '<text x="95" y="122" text-anchor="middle" font-weight="700">sales_export.csv</text>'
+        f'<text class="dg-muted" x="95" y="152" text-anchor="middle">{_rows:,} rows</text>'
+        f'<text class="dg-hot" x="95" y="180" text-anchor="middle">{len(_bad_rows)} bad prices</text>'
+        '<path class="dg-edge" d="M190 120 C 215 120, 215 76, 234 76"/>'
+        '<path class="dg-edge" d="M190 180 C 215 180, 215 226, 234 226"/>'
+        '<text x="240" y="24" font-weight="700">schema-on-read: <tspan class="dg-muted" font-weight="400">guess the type, find out later (or never)</tspan></text>'
+        + ch5_card(240, 40, "DuckDB guesses", f"total_price: {html.escape(_inferred)}")
+        + ch5_card(505, 40, "TRY_CAST to DOUBLE", f"{_parsed:,} of {_rows:,} rows survive")
+        + ch5_card(770, 40, f"revenue {_revenue:,.0f}", f"{_low:.1%} too low · no warning", cls="dg-box dg-hot")
+        + '<text x="240" y="174" font-weight="700">schema-on-write: <tspan class="dg-muted" font-weight="400">declare the form, reject at the door</tspan></text>'
+        + ch5_card(240, 190, "declared first", "DOUBLE NOT NULL CHECK (&gt; 0)")
+        + ch5_card(505, 190, _refused[0], html.escape(_refused[1]), cls="dg-box dg-ok")
+        + ch5_card(770, 190, f"{_loaded:,} rows loaded", "a problem you know about", cls="dg-box dg-ok")
+        + '<path class="dg-edge" d="M475 76 H 499"/><path class="dg-edge" d="M740 76 H 764"/>'
+        + '<path class="dg-edge" d="M475 226 H 499"/><path class="dg-edge" d="M740 226 H 764"/>',
+        width=1010,
+        height=270,
+        label=f"One messy CSV, two lanes. Schema-on-read guesses {_inferred}, keeps {_parsed} of {_rows} rows and reports "
+        f"a revenue {_low:.1%} too low without a warning. Schema-on-write refuses the load and names the bad line.",
+        tier="data",
+    )
     _read, _write = "schema-on-read (guess the types)", "schema-on-write (declare, then load)"
     _table = static_table(
         {
@@ -2866,111 +2948,136 @@ def _(Path, SALES_SEED, duckdb, mo, pd, random, run_schema, static_table, tempfi
         wrapped_columns=[_read, _write],
         column_widths={_read: 400, _write: 440},
     )
-    _note = mo.md(
-        f"""
-    **Same file. Same {len(_bad_rows)} bad values. Two completely different days at work.**
+    mo.vstack(
+        [
+            mo.ui.tabs({"Diagram": _lanes, "Table": _table}),
+            mo.md(
+                f"**Same file, same {len(_bad_rows)} bad values.** Read gave a wrong number that looks ordinary. "
+                "Write gave no number: a problem you know about, not an answer you trust by mistake."
+            ).callout(kind="warn"),
+            mo.accordion(
+                {
+                    "Where the rows went, and which lane to use when": mo.md(
+                        f"""
+    `TRY_CAST` turns anything it cannot convert into `NULL`, and `SUM` skips nulls: {_rows - _parsed}
+    of {_rows} rows silently left the total. Nothing raised, nothing warned.
 
-    Schema-on-read gave you a number, and it is wrong: {1 - _revenue / _true:.1%} below the true
-    total. {_rows - _parsed} of {_rows} rows were silently discarded, because `TRY_CAST` turns
-    anything it cannot convert into `NULL` and `SUM` skips nulls. Nothing raised, nothing warned.
-    The figure looks completely ordinary and would go straight into a report.
-
-    Schema-on-write refused to load and named the line it choked on. You have no number yet, and
-    that is the point: you have a **problem you know about** instead of an answer you trust by
-    mistake.
-
-    Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you
-    have just been handed. Schema-on-write is right for anything a decision rests on.
-            """
-    ).callout(kind="warn")
-    mo.vstack([_table, _note], gap=0.6)
+    Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you have
+    just been handed; schema-on-write is right for anything a decision rests on.
+                        """
+                    )
+                }
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    run_evolution = mo.ui.run_button(label="Run schema evolution demo", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: Add One Column, Then Read Last Year's Files"),
-            mo.md(
-                "Chapter 2 showed a *format* handling a changed form. This is the same problem one "
-                "level up: a folder with one file per year, read together. "
-                "We split the real sales by year: `sales_2024.parquet` was written **before** anyone "
-                "thought of `customer_rating`; `sales_2025.parquet` and `sales_2026.parquet` have it."
-            ).callout(kind="info"),
-            run_evolution,
-        ],
-        gap=0.6,
+    mo.md(
+        """
+    ### Mini-lab: Add One Column, Then Read Last Year's Files
+
+    Chapter 2's changed form, one level up: one file per year. `sales_2024.parquet` predates
+    `customer_rating`; the 2025 and 2026 files have it.
+        """
     ).callout(kind="neutral")
-    return (run_evolution,)
+    return
 
 
 @app.cell
-def _(Path, SALES_SEED, duckdb, mo, pd, run_evolution, static_table, tempfile):
-    mo.stop(not run_evolution.value, mo.md("Click **Run schema evolution demo** to read one folder three ways.").callout(kind="neutral"))
-
+def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, static_table, tempfile):
     _all = pd.read_parquet(SALES_SEED)
     with tempfile.TemporaryDirectory() as _td:
         _dir = Path(_td).as_posix()
-        _files = []
+        _files = {}
         for _year, _part in _all.groupby(_all["sale_date"].dt.year):
-            _files.append(f"{_dir}/sales_{_year}.parquet")
+            _files[_year] = f"{_dir}/sales_{_year}.parquet"
             # customer_rating joined the form in 2025, so the 2024 file never had it
-            (_part.drop(columns="customer_rating") if _year < 2025 else _part).to_parquet(_files[-1], index=False)
+            (_part.drop(columns="customer_rating") if _year < 2025 else _part).to_parquet(_files[_year], index=False)
+        _sizes = _all.groupby(_all["sale_date"].dt.year).size()
         _con = duckdb.connect()
 
         def _read(sql, params):
+            """What one reading of the folder gives back: (dg class, outcome, the same in words for the table)."""
             try:
                 _df = _con.execute(sql, params).df()
             except duckdb.Error as _exc:
-                return f"{type(_exc).__name__}: {str(_exc).splitlines()[0].replace(_dir + '/', '')}"
+                _text = f"{type(_exc).__name__}: {str(_exc).splitlines()[0].replace(_dir + '/', '')}"
+                return "dg-box", f"refused: {type(_exc).__name__}", _text
             if "customer_rating" not in _df:
-                return f"{len(_df):,} rows, {_df.shape[1]} columns, no customer_rating, no error"
-            return f"{len(_df):,} rows, rating on {_df['customer_rating'].count():,}, average {_df['customer_rating'].mean():.3f}"
+                _text = f"{len(_df):,} rows, {_df.shape[1]} columns, no customer_rating, no error"
+                return "dg-box dg-hot", f"{len(_df):,} rows, customer_rating gone", _text
+            _rated = _df["customer_rating"]
+            _text = f"{len(_df):,} rows, rating on {_rated.count():,}, average {_rated.mean():.3f}"
+            return "dg-box dg-ok", f"{len(_df):,} rows, {_rated.count():,} rated, average {_rated.mean():.2f}", _text
 
         _glob = f"{_dir}/sales_*.parquet"
-        _rows = [
-            {
-                "how you read the folder": "read_parquet('sales_*.parquet')",
-                "what happens": _read("FROM read_parquet(?)", [_glob]),
-                "why": "the glob lists files alphabetically, so the oldest file sets the shape and the newer column is dropped",
-            },
-            {
-                "how you read the folder": "the same files, newest first",
-                "what happens": _read("FROM read_parquet(?)", [_files[::-1]]),
-                "why": "now the first file has the column and a later one does not, so the read is refused",
-            },
-            {
-                "how you read the folder": "read_parquet('sales_*.parquet', union_by_name = true)",
-                "what happens": _read("FROM read_parquet(?, union_by_name = true)", [_glob]),
-                "why": "columns are matched by name, and the missing ones are filled with NULL",
-            },
+        _readings = [
+            (
+                "read_parquet('sales_*.parquet')",
+                "the glob reads A to Z: 2024 first",
+                _read("FROM read_parquet(?)", [_glob]),
+                "the oldest file sets the shape: the new column is dropped",
+            ),
+            (
+                "the same files, newest first",
+                "2026 first: it has the column",
+                _read("FROM read_parquet(?)", [list(_files.values())[::-1]]),
+                "the first file has the column and a later one does not",
+            ),
+            (
+                "read_parquet(..., union_by_name = true)",
+                "match columns by name",
+                _read("FROM read_parquet(?, union_by_name = true)", [_glob]),
+                "missing columns are filled with NULL",
+            ),
         ]
 
-    _note = mo.md(
-        """
-    **Same folder, three readings, and only one is right.**
-
-    The first is the dangerous one. Nothing failed: you read the folder and `customer_rating` had
-    quietly vanished, because the first file read decided what the shape was. The second at least
-    had the decency to shout. Only the third gives the honest answer, over the rows that actually
-    have a rating.
-
-    This is what "schema evolution" means once your data lives in more than one file. The rule to
-    take away: **when a folder of files has grown new columns over time, say so when you read
-    it.** The default is not to guess kindly.
-            """
-    ).callout(kind="warn")
+    _files_row = "".join(
+        ch5_card(
+            _i * 345,
+            0,
+            f"sales_{_year}.parquet",
+            f"{_sizes[_year]:,} rows · " + ("no customer_rating" if _year < 2025 else "+ customer_rating"),
+            cls="dg-box" if _year < 2025 else "dg-tier",
+            w=320,
+        )
+        for _i, _year in enumerate(_files)
+    )
+    _reading_rows = "".join(
+        f'<text x="0" y="{_y + 30}" style="font-family: var(--monospace-font, monospace); font-size: 15px">{html.escape(_how)}</text>'
+        f'<text class="dg-muted" x="0" y="{_y + 54}">{_hint}</text>'
+        f'<path class="dg-edge" d="M440 {_y + 36} H 494"/>'
+        + ch5_card(500, _y, html.escape(_outcome), _why, cls=_cls, w=510)
+        for _y, (_how, _hint, (_cls, _outcome, _text), _why) in zip((120, 210, 300), _readings, strict=True)
+    )
+    _picture = diagram(
+        _files_row + _reading_rows,
+        width=1010,
+        height=380,
+        label="Three yearly files, only the newer two with customer_rating, read three ways: the glob silently drops "
+        "the column, newest first is refused, union_by_name keeps every row and fills the gap with NULL.",
+        tier="data",
+    )
+    _table = static_table(
+        [
+            {"how you read the folder": _how, "what happens": _text, "why": _why}
+            for _how, _hint, (_cls, _outcome, _text), _why in _readings
+        ],
+        label="One folder, two file shapes, three readings",
+        wrapped_columns=["how you read the folder", "what happens", "why"],
+        column_widths={"how you read the folder": 250, "what happens": 480, "why": 330},
+    )
     mo.vstack(
         [
-            static_table(
-                _rows,
-                label="One folder, two file shapes, three readings",
-                wrapped_columns=["how you read the folder", "what happens", "why"],
-                column_widths={"how you read the folder": 250, "what happens": 480, "why": 330},
-            ),
-            _note,
+            mo.ui.tabs({"Diagram": _picture, "Table": _table}),
+            mo.md(
+                "**Only the third reading is right.** The first is the dangerous one: nothing failed, and "
+                "`customer_rating` quietly vanished. When a folder's files grew columns, say so when you read it."
+            ).callout(kind="warn"),
         ],
         gap=0.6,
     )
@@ -3005,13 +3112,11 @@ def _(mo):
         """
     ### Chapter 5 Conclusion
 
-    - DuckDB runs SQL directly on files; typed columns (Parquet, a loaded table) answer far faster
-      than CSV, which is re-parsed on every query.
-    - Schema-on-write catches type issues earlier; schema-on-read is flexible but riskier.
-    - An index is a second copy of some columns: it pays when it covers the query and the query
-      asks for few rows, and every write pays for it.
-    - Reading a folder whose files grew columns: say `union_by_name=true`, or the first file
-      decides the shape.
+    - DuckDB runs SQL on files; typed columns (Parquet, a table) beat CSV, re-parsed every query.
+    - Pushdown reads only the rows and columns a query needs.
+    - An index pays when it covers the query and few rows match; every write pays for it.
+    - Schema-on-read fails silently later; schema-on-write rejects at the door.
+    - A folder whose files grew columns: `union_by_name = true`, or the first file sets the shape.
             """
     ).callout(kind="success")
     return
@@ -3023,12 +3128,8 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    So far, we worked locally with files and SQL.
-    Now we expose data to other programs through APIs.
-
-    API exchange model:
-    - request = client-sent input message
-    - response = server-returned output message
+    So far everything ran locally. Next, other programs ask for the data over an API: a
+    **request** goes out, a **response** comes back.
 
     $$
     \\text{API latency} = \\text{network} + \\text{server processing}
