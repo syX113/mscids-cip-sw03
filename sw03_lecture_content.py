@@ -5211,7 +5211,7 @@ def _(
     plain date.
 
     **One honest callback.** We just read that file behind the API's back. The API takes a lock
-    around every write, but like the key on the hook in chapter 1, a lock only protects those who ask
+    around every write, but like the booking pen in chapter 1, a lock only protects those who ask
     for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant
     could catch it half-written. That is chapter 1's isolation problem, and the reason a real system
     puts a database at the bottom of the data tier rather than a file.
