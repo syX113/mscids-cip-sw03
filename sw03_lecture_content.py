@@ -4450,82 +4450,135 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 9. Frontend Framework Comparison
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 9 Introduction
-
-    > **Key Question:** What does the frontend need to know about everything behind it?
-
-    *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
-
-    Framework choice is a product decision, not a matter of taste: match the tool to your team's skills and
-    to how much UI control the product needs. The usual trade-off:
-
-    $$
-    \\text{Iteration Speed} \\uparrow \\;\\Rightarrow\\; \\text{UI Control} \\downarrow
-    $$
-    """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo, static_table):
-    _framework_note = mo.md(
-        """
-    ### Choosing a Frontend Stack
-
-    **First, what a frontend actually is.** A restaurant has three rooms. The **cold store** holds
-    the ingredients, keeps them correct and gets them out fast: chapters 1 to 5. The
-    **kitchen** holds the recipes and the rules, and nothing leaves without being checked, whether
-    the order came from a table, a phone or a delivery app: chapters 6 to 8. The **dining room**
-    is what the guest sees, the tables, the plating and the waiter: chapters 9 and 10.
-
-    A frontend is the dining room. It owns no ingredients and no recipes. It writes an order slip,
-    which is an HTTP request to a path, hands it through the hatch, and arranges whatever comes
-    back so a human can decide something.
-
-    This is the payoff for splitting the tiers at all. Change supplier, Parquet for DuckDB, and no
-    guest notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not
-    change one line. **This repo already contains that dining room:** `sw03_demo_streamlit.py`,
-    talking to the API you started in chapter 6.
-
-    *Where the picture breaks.* A waiter cannot cook, but a frontend **does** compute: it sorts,
-    formats, aggregates and draws every chart in that dashboard. So do not read this as "the
-    frontend is dumb". Read it as **the frontend owns no rules**. Anyone can telephone the kitchen
-    directly, with `curl` or a script or another team's app, so a rule that lives only in the
-    dining room is not a rule at all. That is why this repo deliberately states the same rule
-    twice: the Streamlit form sets `min_value=1` for units sold, and the API states it again as
-    `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
-    limit; only the kitchen knows it. The dining room may repeat a rule for politeness. Never instead.
-
-    Showcases: [Marimo gallery](https://marimo.io/gallery) ·
-    [Dash gallery](https://dash.gallery/Portal/) ·
-    [React community](https://react.dev/community) ·
-    [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
-    """
-    ).callout(kind="neutral")
-    _columns = ("framework", "you write", "strengths", "trade-offs", "use case")
-    _frameworks = [
-        ("Marimo", "Python", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps", "Labs, teaching, analysis apps"),
-        ("Dash", "Python", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps", "Interactive analytics"),
-        ("Streamlit", "Python", "Fastest prototyping, simple widgets", "Less layout and state control in big apps", "Dashboards, internal tools"),
-        ("Flask", "Python + HTML templates, some JS", "Full control, templates + APIs", "More setup, no built-in UI", "Custom web apps + APIs"),
-        ("React", "JavaScript / TypeScript", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling", "Production web apps"),
-    ]
-    _framework_table = static_table(
-        [dict(zip(_columns, _row, strict=True)) for _row in _frameworks], label="Framework comparison"
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 9. Frontend Framework Comparison"),
+            chapter_intro(
+                "presentation",
+                "What does the frontend need to know about everything behind it?",
+                "The API from chapter 8 has the data; something has to show it.",
+            ),
+        ],
+        gap=1,
     )
-    mo.vstack([_framework_note, _framework_table], gap=0.6)
+    return
+
+
+@app.cell
+def _(box, diagram, mo):
+    def _room(x, tier, name, note, file, rule=None, why=None):
+        """One room of the restaurant: its tier colour, what it holds, and the units rule if it states one."""
+        parts = [
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="{x}" y="110" width="280" height="220" rx="16"/></g>',
+            f'<text x="{x + 20}" y="144" font-size="20" font-weight="700">{name}</text>',
+            f'<text class="dg-muted" x="{x + 20}" y="170">{note}</text>',
+            box(x + 20, 188, file, w=240, h=44),
+        ]
+        if rule:
+            parts.append(
+                f'<rect class="dg-box" x="{x + 20}" y="250" width="240" height="62" rx="12"/>'
+                f'<text x="{x + 140}" y="276" text-anchor="middle" font-family="monospace" font-size="15">{rule}</text>'
+                f'<text class="dg-muted" x="{x + 140}" y="300" text-anchor="middle">{why}</text>'
+            )
+        return "".join(parts)
+
+    _restaurant = diagram(
+        _room(2, "presentation", "dining room", "ch. 9-10: what the guest sees", "sw03_demo_streamlit.py",
+              "min_value=1", "repeated for politeness")
+        + _room(360, "logic", "kitchen", "ch. 6-8: recipes and rules", "sw03_demo_api.py",
+                "ge=1, le=100_000", "the rule")
+        + _room(718, "data", "cold store", "ch. 1-5: ingredients", "data/*.parquet", "sales, products, ...", "five tables, ids only")
+        # the hatches: a request goes right, the answer comes back left
+        + '<path class="dg-edge" d="M284 206 H 354"/><path class="dg-edge" d="M358 250 H 288"/>'
+        + '<path class="dg-edge" d="M642 206 H 712"/><path class="dg-edge" d="M716 250 H 646"/>'
+        + '<text class="dg-muted" x="321" y="196" text-anchor="middle">request</text>'
+        + '<text class="dg-muted" x="321" y="274" text-anchor="middle">answer</text>'
+        + '<text class="dg-muted" x="679" y="196" text-anchor="middle">query</text>'
+        + '<text class="dg-muted" x="679" y="274" text-anchor="middle">rows</text>'
+        # the phone line: anyone can call the kitchen without passing the dining room
+        + box(340, 10, "curl · a script · another team's app", w=320, h=48, cls="dg-box dg-hot")
+        + '<path class="dg-edge dg-hot" d="M500 58 V 104"/>'
+        + '<text class="dg-hot" x="512" y="88">no dining room in between</text>',
+        width=1000,
+        height=340,
+        label="Three rooms: the dining room (Streamlit, chapters 9 and 10) sends requests to the kitchen (the API, "
+        "chapters 6 to 8), which queries the cold store (Parquet files, chapters 1 to 5). The units rule sits in the "
+        "kitchen; the form repeats only its lower bound. curl, a script or another app can call the kitchen directly.",
+    )
+    _more = mo.md(
+        """
+    - **The payoff for splitting the tiers.** Change supplier, Parquet for DuckDB, and no guest
+      notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not change one line.
+    - **What a frontend does.** It writes an order slip, an HTTP request to a path, hands it through
+      the hatch, and arranges whatever comes back so a human can decide something.
+    - **Where the picture breaks.** A waiter cannot cook, but a frontend *does* compute: it sorts,
+      formats, aggregates and draws every chart in the dashboard. So do not read this as "the frontend
+      is dumb". Read it as **the frontend owns no rules**.
+    - **The same rule, twice, on purpose.** The Streamlit form sets `min_value=1` for units sold; the API
+      states `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
+      limit: only the kitchen knows it.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>A Frontend Is the Dining Room</h3>
+      {_restaurant}
+      <p class="vis-caption"><strong>The frontend owns no rules.</strong> Anyone can phone the kitchen directly,
+      so a rule that lives only in the dining room is not a rule at all. The dining room may repeat a rule for
+      politeness. Never instead.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"Where the restaurant picture holds, and where it breaks": _more}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(diagram, mo):
+    # Ordered by the fit assistant's iteration-speed weight, fastest first.
+    _frameworks = [
+        ("Streamlit", "Py", "Dashboards, internal tools", "Fastest prototyping, simple widgets", "Less layout and state control in big apps"),
+        ("Marimo", "Py", "Labs, teaching, analysis apps", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps"),
+        ("Dash", "Py", "Interactive analytics", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps"),
+        ("Flask", "Py+JS", "Custom web apps + APIs", "Full control, templates + APIs", "More setup, no built-in UI"),
+        ("React", "JS", "Production web apps", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling"),
+    ]
+    _tiles = "".join(
+        f'<div class="tile"><div class="tile-key">{_lang}</div><div class="tile-title">{_name}</div>'
+        f"<p><strong>{_use}</strong></p><p>{_good}</p><p class=\"tile-bad\">{_bad}</p></div>"
+        for _name, _lang, _use, _good, _bad in _frameworks
+    )
+    _tradeoff = diagram(
+        '<text x="0" y="26" font-weight="700">faster iteration</text>'
+        '<path class="dg-edge" d="M400 20 H 150"/>'
+        '<text class="dg-muted" x="500" y="26" text-anchor="middle">the usual trade-off</text>'
+        '<path class="dg-edge" d="M600 20 H 850"/>'
+        '<text x="1000" y="26" text-anchor="end" font-weight="700">more UI control</text>',
+        width=1000,
+        height=40,
+        label="The usual trade-off: the further left, the faster you iterate; the further right, the more UI control you get.",
+    )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Choosing a Frontend Stack</h3>
+      {_tradeoff}
+      <div class="tiles tier-presentation" style="grid-template-columns: repeat(5, 1fr); margin-top: 12px">{_tiles}</div>
+      <p class="vis-caption">Py: Python only. JS: JavaScript, the language browsers run.
+      Showcases: <a href="https://marimo.io/gallery">Marimo gallery</a> ·
+      <a href="https://dash.gallery/Portal/">Dash gallery</a> ·
+      <a href="https://react.dev/community">React community</a> ·
+      <a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask patterns</a></p>
+    </div>
+        """
+    )
     return
 
 
@@ -4534,36 +4587,42 @@ def _(mo):
     fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration", show_value=True, debounce=True)
     fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control", show_value=True, debounce=True)
     fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength", show_value=True, debounce=True)
-    _note = mo.md(
+    _more = mo.md(
         """
-    Set three numbers about *your team*, not about the frameworks.
+    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you stay
+    in Python; React is written in JavaScript, and a Flask app needs some as soon as a page has to
+    react. So a low score here is not a weakness, it just points at different tools.
 
-    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you
-    stay in Python; React is written in JavaScript, and a Flask app needs some as soon as a page
-    has to react. So a low score here is not a weakness, it just points at different tools.
+    Each framework scores the three inputs with its own weights, and every weight row adds up to the
+    same total (3.0), so no framework wins just by carrying more weight. For the three Python-native
+    tools $j_f = 6 - j$: they get *more* attractive when the team knows *less* JavaScript. For Flask
+    and React $j_f = j$. Heuristic only: validate it against real team constraints.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Mini-lab: Framework Fit Assistant
 
-    Each framework scores the three inputs with its own weights, and every weight row adds
-    up to the same total (3.0) so the scores stay comparable:
+    Set three numbers about **your team**, not about the frameworks.
 
     $$
     \\text{fit}_f = w^f_s \\cdot s + w^f_c \\cdot c + w^f_j \\cdot j_f
     \\qquad \\text{with} \\quad w^f_s + w^f_c + w^f_j = 3
     $$
-
-    For the three Python-native tools, $j_f = 6 - j$: they get *more* attractive when the team
-    knows *less* JavaScript. For Flask and React $j_f = j$. Heuristic only: validate it against
-    real team constraints.
-    """
-    ).callout(kind="info")
-    mo.vstack(
-        [mo.md("### Mini-lab: Framework Fit Assistant"), fw_speed, fw_control, fw_js, _note],
+                """
+            ),
+            mo.vstack([fw_speed, fw_control, fw_js], gap=0.4),
+            mo.accordion({"How the score works": _more}),
+        ],
         gap=0.6,
     ).callout(kind="neutral")
     return fw_control, fw_js, fw_speed
 
 
 @app.cell
-def _(fw_control, fw_js, fw_speed, mo, static_table):
+def _(TIER, alt, chart_or_table, fw_control, fw_js, fw_speed, pd, tier_chart):
     # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
     # so no framework wins just by carrying more weight than the others.
     _weights = {
@@ -4582,23 +4641,50 @@ def _(fw_control, fw_js, fw_speed, mo, static_table):
     }
     _ranked = sorted(_scores.items(), key=lambda item: item[1], reverse=True)
     _top = [name for name, score in _ranked if score == _ranked[0][1]]
-    mo.vstack(
-        [
-            static_table(
-                [
-                    {
-                        "framework": name,
-                        "score": score,
-                        "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0])),
-                    }
-                    for name, score in _ranked
-                ],
-                label="Teaching score (higher = better fit)",
-            ),
-            mo.md(f"Current top fit: **{' / '.join(_top)}**" + (" (a tie)" if len(_top) > 1 else "")).callout(kind="info"),
-        ],
-        gap=0.6,
+    _rows = [
+        {"framework": name, "score": score, "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0]))}
+        for name, score in _ranked
+    ]
+    _df = pd.DataFrame(_rows)
+    _df["best"] = _df["framework"].isin(_top)
+    _bars = alt.Chart(_df).encode(
+        y=alt.Y("framework:N", sort=None, title=None),
+        x=alt.X("score:Q", title="teaching score (higher = better fit)", scale=alt.Scale(domain=[0, 15])),
+        tooltip=["framework:N", "score:Q", "weights (speed / control / JS):N"],
     )
+    _chart = (
+        _bars.mark_bar(cornerRadiusEnd=4, size=28).encode(
+            color=alt.condition("datum.best", alt.value(TIER["presentation"]), alt.value(TIER["muted"]))
+        )
+        + _bars.mark_text(align="left", dx=6).encode(text=alt.Text("score:Q", format=".2f"))
+    ).properties(
+        width="container",
+        height=46 * len(_df),
+        title=f"Best fit: {' / '.join(_top)}" + (" (a tie)" if len(_top) > 1 else ""),
+    )
+    chart_or_table(tier_chart(_chart, "presentation"), _rows, label="Teaching score (higher = better fit)")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Frontends</h3>
+      <details>
+        <summary><strong>Q1:</strong> The Streamlit form already refuses 0 units. Why does the API check again?</summary>
+        <p><strong>Answer:</strong> Anyone can phone the kitchen directly, with <code>curl</code>, a script or
+        another team's app. A rule that lives only in the dining room is not a rule. The form repeats it for
+        politeness: instant feedback, no round trip.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> The fit assistant says Streamlit. Is that the decision?</summary>
+        <p><strong>Answer:</strong> No, it is a teaching heuristic with hand-picked weights. Check it against
+        real constraints: how much layout and state control the product needs, who will maintain it, and
+        what the team already knows.</p>
+      </details>
+    </div>
+    """)
     return
 
 
@@ -4623,8 +4709,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Tables show exact values; charts show patterns faster, including patterns that are not there.
-    We close by asking when a chart deserves to be believed.
+    Charts show patterns faster than tables, including patterns that are not there.
 
     $$
     \\text{what you plot} = \\text{signal} + \\text{noise}
