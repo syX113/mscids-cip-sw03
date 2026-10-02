@@ -3780,65 +3780,155 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 8. FastAPI Demo + Automatic Docs
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 8. FastAPI Demo + Automatic Docs"),
+            chapter_intro(
+                "logic",
+                "How do we keep implementation and API documentation in sync?",
+                "Last stop in the logic tier: the rules from chapter 7 become a running server.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md(
+def _(box, diagram, mo):
+    def _menu_item(y, title, note):
+        """One thing FastAPI prints from the type hints, with its edge from the FastAPI box."""
+        return (
+            f'<rect class="dg-box" x="600" y="{y}" width="396" height="58" rx="12"/>'
+            f'<text x="620" y="{y + 24}" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="620" y="{y + 46}">{note}</text>'
+            f'<path class="dg-edge" d="M500 150 C 550 150, 550 {y + 29}, 594 {y + 29}"/>'
+        )
+
+    _menu = diagram(
+        '<rect class="dg-tier" x="0" y="60" width="340" height="180" rx="16"/>'
+        '<text x="20" y="94" font-weight="700">the recipe, written once</text>'
+        '<text x="20" y="134" font-family="monospace" font-size="15">Rating = Annotated[int,</text>'
+        '<text x="44" y="158" font-family="monospace" font-size="15">Field(ge=1, le=5)]</text>'
+        '<text class="dg-muted" x="20" y="196">used by SaleCreate, SaleUpdate</text>'
+        '<text class="dg-muted" x="20" y="220">and the rating filters</text>'
+        '<path class="dg-edge" d="M340 150 H 374"/>'
+        + box(380, 122, "FastAPI", w=120, h=56, cls="dg-tier")
+        + '<text class="dg-muted" x="440" y="204" text-anchor="middle">reads the hints</text>'
+        + _menu_item(0, "422 for a rating of 9", "the rule, enforced before your code runs")
+        + _menu_item(76, "/openapi.json", "the menu, for programs to read")
+        + _menu_item(152, "/redoc", "the menu, as a reference manual")
+        + _menu_item(228, "/docs (Swagger UI)", "the menu, with Try it out buttons")
+        + '<rect class="dg-box dg-hot" x="0" y="300" width="340" height="64" rx="12"/>'
+        '<text x="20" y="326">docstring: "recomputes total_price"</text>'
+        '<text class="dg-muted" x="20" y="350">a behaviour, not a type</text>'
+        '<path class="dg-edge dg-hot" d="M340 332 H 800 V 292"/>'
+        '<text class="dg-hot" x="570" y="322" text-anchor="middle">typed by hand: nothing checks it</text>',
+        width=1000,
+        height=370,
+        label="One line, Rating = Annotated[int, Field(ge=1, le=5)], goes into FastAPI, which prints four things from it: "
+        "the 422 for a rating of 9, /openapi.json, /redoc and /docs. A hand-written docstring about recomputing "
+        "total_price reaches /docs too, but nothing checks it.",
+        tier="logic",
+    )
+    _more = mo.md(
         """
-    ### Chapter 8 Introduction
-
-    > **Key Question:** How do we keep implementation and API documentation in sync?
-
-    *Last stop in the **logic tier**. We turn the rules from chapter 7 into a running server.*
-
-    FastAPI turns validated models into running endpoints *and* the documentation for them, so
-    the two drift apart far less.
-            """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
+    - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint an API
+      has, for other programs to read. FastAPI writes it for you.
+    - **Swagger UI** (`/docs`) reads that file and turns it into buttons: open it and press *Try it out*.
+    - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual.
+    - The rating rule is written once in `sw03_demo_api.py` and used for new sales, for edits and for
+      the `min_rating`/`max_rating` filters. The schema can say `units_sold` must be at least 1; it
+      cannot say that changing it recomputes `total_price`.
+    - The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
+      *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
         """
-    ### FastAPI = Type Hints → OpenAPI
-
-    Most restaurants write the menu by hand. Then the kitchen changes a recipe and the menu
-    quietly starts lying, and every customer who orders from it is disappointed. FastAPI does not
-    let that happen, because **the menu is printed from the recipes**. `sw03_demo_api.py` writes
-    the rating rule exactly once, `Rating = Annotated[int, Field(ge=1, le=5)]`, and uses it for new
-    sales, for edits and for the `min_rating`/`max_rating` filters. That one line becomes the
-    machine-readable menu, the buttons a human clicks, and the rule the server enforces. Change
-    the 5 to a 10 and all of them change together, because there is only one 5.
-
-    *What the menu cannot enforce* is behaviour. The schema can say `units_sold` must be at least
-    1; it cannot say that changing it recomputes `total_price`. That rule reaches `/docs` only
-    because somebody wrote it into a docstring by hand, and nothing checks that the docstring is
-    still true.
-
-    - **OpenAPI** (`/openapi.json`) is a standard file format that describes every endpoint
-      an API has, in a way other programs can read. FastAPI writes it for you.
-    - **Swagger UI** (`/docs`) is a web page that reads that file and turns it into buttons
-      you can click to try each endpoint. Open it and press *Try it out*.
-    - **ReDoc** (`/redoc`) reads the same file and renders it as a reference manual instead.
-
-    The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
-    *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
-            """
-    ).callout(kind="neutral")
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>FastAPI = Type Hints → OpenAPI</h3>
+      <p>A hand-written menu starts lying the day the kitchen changes a recipe. FastAPI prints the menu from the recipes.</p>
+      {_menu}
+      <p class="vis-caption"><strong>Change the 5 to a 10 and all four change together</strong>, because there is
+      only one 5. A rule about behaviour is not a type: it reaches <code>/docs</code> only as hand-written text.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"The three doc pages, and the server behind them": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    mo.md("""
+def _(diagram, html, mo):
+    _cw = 9.6  # px per character of 16 px monospace; textLength pins every piece of code to it
+
+    def _code(y, parts):
+        """One line of code from (text, label) pieces: a labelled piece gets a bracket and its label below it."""
+        svg, col = [], 0
+        for text, label in parts:
+            x, w = col * _cw, len(text) * _cw
+            svg.append(
+                f'<text x="{x:.0f}" y="{y}" font-family="monospace" font-size="16" textLength="{w:.0f}"'
+                f' lengthAdjust="spacingAndGlyphs" style="white-space: pre">{html.escape(text)}</text>'
+            )
+            if label:
+                svg.append(
+                    f'<path style="fill: none; stroke: var(--tier); stroke-width: 2.5"'
+                    f' d="M{x + 2:.0f} {y + 9} v 8 H {x + w - 2:.0f} v -8"/>'
+                    f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 40}" text-anchor="middle">{label}</text>'
+                )
+            col += len(text)
+        return "".join(svg)
+
+    _sentence = diagram(
+        _code(
+            24,
+            [
+                ("@app.post", "verb"),
+                ("(", None),
+                ('"/sales"', "path"),
+                (", ", None),
+                ("response_model=Sale", "the answer's shape"),
+                (", ", None),
+                ("status_code=201", "code on success"),
+                (", ", None),
+                ('tags=["Sales"]', "group in /docs"),
+                (", ", None),
+                ("responses=BAD_REQUEST", "the errors it adds"),
+                (")", None),
+            ],
+        )
+        + _code(
+            114,
+            [
+                ("def create_sale(", None),
+                ("payload: SaleCreate", "the model the client fills: checked first, 422 if not"),
+                (") -> dict[str, Any]:", None),
+            ],
+        )
+        + _code(
+            204,
+            [
+                ("    ", None),
+                ('"""Record a sale. The server computes total_price as units_sold x the product\'s price."""',
+                 "its description in /docs, written by hand"),
+            ],
+        ),
+        width=940,
+        height=260,
+        label="The decorator of POST /sales read as a sentence: verb, path, the shape of the answer, the status code "
+        "on success, its group in /docs and the errors it adds. The payload's type is the model checked first; "
+        "the docstring becomes the description in /docs.",
+        tier="logic",
+    )
+    _source = mo.md("""
     ```python
     # file: sw03_demo_api.py (abridged)
     # Every rule is written once, here, and reused wherever the field appears.
@@ -3877,31 +3967,27 @@ def _(mo):
         ...
     ```
 
-    Read each decorator as a sentence: *verb*, *path*, the shape of the answer, and the errors it
-    can return. The docstring under each function becomes its description in `/docs`; the second
-    one is the hand-written recompute rule from above. `SaleCreate` has no `total_price`, and
-    `Input` refuses fields it does not know, so a client cannot set its own price.
-
-    Sales are the resource this chapter follows, so every verb is written out. The four lookup
-    tables (regions, countries, categories, products) share one generic set of five endpoints,
-    registered by `add_lookup_endpoints`. Nothing else had to be written to get documentation.
+    The second docstring is the hand-written recompute rule from the drawing above. Sales are the
+    resource this chapter follows, so every verb is written out; the four lookup tables (regions,
+    countries, categories, products) share one generic set of five endpoints, registered by
+    `add_lookup_endpoints`. Nothing else had to be written to get documentation.
     """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Live API Workflow
-
-    1. Start the API in a terminal: `uvicorn sw03_demo_api:app`
-    2. Click **1) Check API status** to verify the server is reachable.
-    3. Edit the JSON payload and click **2) POST /products**. Click it again: the name is taken
-       now, so the server answers `400` (the widget stays until the API restarts).
-    4. Choose a product id and click **3) GET /products/{id}** to compare results.
-            """
-    ).callout(kind="info")
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Read a Decorator as a Sentence</h3>
+      {_sentence}
+      <p class="vis-caption">Everything <code>/docs</code> shows about this endpoint comes from these three lines.
+      <code>SaleCreate</code> has no <code>total_price</code>, so a client cannot set its own price.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"The abridged source: the model and two endpoints": _source}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -3925,6 +4011,11 @@ def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload
     # Display only, so editing the shared URL re-renders these widgets instead of rebuilding them.
     mo.vstack(
         [
+            mo.md(
+                "### Live API Workflow\n\n"
+                "Start the API (`uvicorn sw03_demo_api:app`), then press the buttons in order. Press **2)** "
+                "twice: the name is taken, so the second answer is `400`."
+            ),
             mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
             fastapi_payload,
             mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
@@ -3936,6 +4027,8 @@ def _(api_base_url, fastapi_check, fastapi_get, fastapi_item_id, fastapi_payload
 
 @app.cell
 def _(api_base_url, call_api, mo, requests):
+    from http.client import responses as ch8_phrases  # 201 -> "Created", for the answers below
+
     def ch8_api(method, path, body=None):
         """call_api against the base URL above. Stops the cell with a hint if nothing answers, or not with JSON."""
         base = api_base_url.value.rstrip("/")
@@ -3955,11 +4048,11 @@ def _(api_base_url, call_api, mo, requests):
 
     # The sale the chapter 8 labs send: 10 units of product 1, sold in country 3.
     sale_slip = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
-    return ch8_api, sale_slip
+    return ch8_api, ch8_phrases, sale_slip
 
 
 @app.cell
-def _(api_base_url, ch8_api, fastapi_check, mo):
+def _(api_base_url, box, ch8_api, diagram, fastapi_check, mo):
     mo.stop(
         not fastapi_check.value,
         mo.md("Start `uvicorn sw03_demo_api:app` in a terminal, then click **1) Check API status**.").callout(kind="neutral"),
@@ -3970,48 +4063,75 @@ def _(api_base_url, ch8_api, fastapi_check, mo):
         _status != 200,
         mo.md(f"`{_base}/openapi.json` answered `{_status}`. Is that the sales API?").callout(kind="danger"),
     )
-    _routes = [
-        f"- `{_path}`: {', '.join(_verb.upper() for _verb in _ops)}"
-        for _path, _ops in _schema["paths"].items()
-        if _path.startswith(("/products", "/sales"))
+    # The API describes itself: one row per path this chapter uses, one box per verb it accepts.
+    _paths = {_p: _ops for _p, _ops in _schema["paths"].items() if _p.startswith(("/products", "/sales"))}
+    _verbs = ("get", "post", "put", "delete")
+    _parts = [
+        f'<text x="{300 + _j * 120}" y="20" text-anchor="middle" font-weight="700">{_v.upper()}</text>'
+        for _j, _v in enumerate(_verbs)
     ]
-    mo.md(
-        "\n".join(
-            [
-                f"**{_schema['info']['title']} {_schema['info']['version']} is running.** "
-                f"Docs: [{_base}/docs]({_base}/docs)",
-                "",
-                f"The paths this chapter uses, read from `/openapi.json` ({len(_schema['paths'])} paths in all):",
-                "",
-                *_routes,
-            ]
+    for _i, (_path, _ops) in enumerate(_paths.items()):
+        _y = 40 + _i * 52
+        _parts.append(
+            f'<text x="0" y="{_y + 20}" font-family="monospace" dominant-baseline="central">{_path}</text>'
         )
+        for _j, _v in enumerate(_verbs):
+            if _v in _ops:
+                _parts.append(box(248 + _j * 120, _y, "&#10003;", w=104, h=40, cls="dg-tier"))
+            else:
+                _parts.append(
+                    f'<rect x="{248 + _j * 120}" y="{_y}" width="104" height="40" rx="12" fill="none"'
+                    ' stroke="currentColor" stroke-dasharray="6 6" opacity="0.3"/>'
+                )
+    _matrix = diagram(
+        "".join(_parts),
+        width=720,
+        height=40 + 52 * len(_paths),
+        label="The paths this chapter uses and the verbs each accepts, read from /openapi.json: "
+        + "; ".join(f"{_p}: {', '.join(_o).upper()}" for _p, _o in _paths.items()),
+        tier="logic",
+    )
+    mo.vstack(
+        [
+            mo.hstack(
+                [
+                    mo.stat(f"{_status} OK", label="GET /openapi.json", caption=f"{_schema['info']['title']} "
+                            f"{_schema['info']['version']} is running", bordered=True),
+                    mo.stat(len(_schema["paths"]), label="paths it describes", bordered=True),
+                    mo.md(f"**[Open {_base}/docs]({_base}/docs)**"),
+                ],
+                widths=[2, 1, 2],
+                align="center",
+            ),
+            _matrix,
+        ],
+        gap=0.8,
     ).callout(kind="success")
     return
 
 
 @app.cell
-def _(ch8_api, fastapi_payload, fastapi_post, json, mo):
+def _(ch8_api, ch8_phrases, fastapi_payload, fastapi_post, json, mo):
     mo.stop(not fastapi_post.value, mo.md("Edit the payload, then click **2) POST /products**.").callout(kind="neutral"))
     try:
         _payload = json.loads(fastapi_payload.value)
     except json.JSONDecodeError as _exc:
         mo.stop(True, mo.md(f"The payload is not valid JSON: `{_exc}`").callout(kind="danger"))
     _status, _answer = ch8_api("POST", "/products", _payload)
-    mo.md(f"`POST /products` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
-        kind="success" if _status < 400 else "danger"
-    )
+    mo.md(
+        f"`POST /products` → **{_status} {ch8_phrases.get(_status, '')}**\n\n```json\n{json.dumps(_answer, indent=2)}\n```"
+    ).callout(kind="success" if _status < 400 else "danger")
     return
 
 
 @app.cell
-def _(ch8_api, fastapi_get, fastapi_item_id, json, mo):
+def _(ch8_api, ch8_phrases, fastapi_get, fastapi_item_id, json, mo):
     mo.stop(not fastapi_get.value, mo.md("Pick a product id, then click **3) GET /products/{id}**.").callout(kind="neutral"))
     _path = f"/products/{fastapi_item_id.value}"
     _status, _answer = ch8_api("GET", _path)
-    mo.md(f"`GET {_path}` answered `{_status}`.\n\n```json\n{json.dumps(_answer, indent=2)}\n```").callout(
-        kind="success" if _status < 400 else "danger"
-    )
+    mo.md(
+        f"`GET {_path}` → **{_status} {ch8_phrases.get(_status, '')}**\n\n```json\n{json.dumps(_answer, indent=2)}\n```"
+    ).callout(kind="success" if _status < 400 else "danger")
     return
 
 
@@ -4020,17 +4140,14 @@ def _(mo):
     run_gates = mo.ui.run_button(label="Send seven slips through both gates", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Seven Sale Slips, One Model, Two Gates"),
             mo.md(
                 """
-    Chapter 7 validated a payload on your laptop with no network at all, because Pydantic is just
-    Python. This chapter put the very same kind of model on a server. So what is the difference?
+    ### Mini-lab: Seven Sale Slips, One Model, Two Gates
 
-    **Gate 1** is the API's own `SaleCreate`, imported from `sw03_demo_api.py` and run right here
-    in the notebook. **Gate 2** is the running API. Seven slips go through both. Read the table
-    across.
+    What does a server add? **Gate 1** is the API's own `SaleCreate`, run right here in the
+    notebook. **Gate 2** is the running API.
                 """
-            ).callout(kind="info"),
+            ),
             run_gates,
         ],
         gap=0.6,
@@ -4039,8 +4156,14 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
-    mo.stop(not run_gates.value, mo.md("Click **Send seven slips through both gates** to compare them.").callout(kind="neutral"))
+def _(box, ch8_api, diagram, mo, pydantic, run_gates, sale_slip, static_table):
+    mo.stop(
+        not run_gates.value,
+        mo.md(
+            "**Predict first:** which slips does your laptop catch, and which only the server? "
+            "Then click **Send seven slips through both gates**."
+        ).callout(kind="neutral"),
+    )
     from sw03_demo_api import SaleCreate as _SaleCreate  # gate 1: the server's own model, no network
 
     _ok = sale_slip
@@ -4053,14 +4176,14 @@ def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
         "its own total_price of 0.01": {**_ok, "total_price": 0.01},
         "product 9999": {**_ok, "product_id": 9999},
     }
-    _rows, _good = [], None
+    _rows, _cells, _good = [], [], None
     for _name, _slip in _slips.items():
         try:
             _SaleCreate.model_validate(_slip)
-            _gate1 = "passes"
+            _gate1, _short1 = "passes", "&#10003; passes"
         except pydantic.ValidationError as _exc:
             _err = _exc.errors()[0]
-            _gate1 = f"rejected: {_err['loc'][0]} — {_err['msg']}"
+            _gate1, _short1 = f"rejected: {_err['loc'][0]} — {_err['msg']}", f"&#10007; {_err['loc'][0]}"
         _status, _answer = ch8_api("POST", "/sales", _slip)
         mo.stop(
             not (isinstance(_answer, dict) and ("detail" in _answer or "sale_id" in _answer)),
@@ -4069,44 +4192,74 @@ def _(ch8_api, mo, pydantic, run_gates, sale_slip, static_table):
         if _status == 201:
             _good = _answer
             ch8_api("DELETE", f"/sales/{_good['sale_id']}")  # leave the file as we found it
-            _gate2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}"
+            _gate2, _short2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}", "&#10003; 201 created"
         else:
             _detail = _answer["detail"]
-            _gate2 = f"{_status} — {_detail if isinstance(_detail, str) else _detail[0]['msg']}"
+            _why = _detail if isinstance(_detail, str) else _detail[0]["msg"]
+            _gate2 = f"{_status} — {_why}"
+            _short2 = f"&#10007; {_status} " + (_why if isinstance(_detail, str) else _detail[0]["loc"][-1])
         _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
+        _cells.append((_name, _gate1 == "passes", _short1, _status, _short2))
     mo.stop(_good is None, mo.md("Even the good sale was refused. Restart the API to reseed its data.").callout(kind="danger"))
 
-    _note = mo.md(
-        f"""
-    **Read the last column down.** Five slips die at gate 1 and die again at gate 2, with `422`
-    and the *same message*, because both gates run the same model. One slip, `product 9999`,
-    passes gate 1 and dies at gate 2 with `400`. And one gets `201`.
-
-    That difference is the whole lesson. Gate 1 can check **shape**: is this a date, is the rating
-    between 1 and 5. Only gate 2 can check **facts**, because only the server can open the filing
-    cabinet and discover there is no product 9999. Your laptop had no way to know.
-
-    **Then look at the successful row.** We sent {len(_ok)} fields and got {len(_good)} back, and we never
-    sent `total_price`: the server computed {_good["units_sold"]} x
-    {_good["total_price"] / _good["units_sold"]:.2f} itself. The slip that brought its own
-    `total_price` was refused at both gates, because `SaleCreate` has no such field and refuses
-    fields it does not know. A price the client is allowed to invent is a price the client can
-    lie about, so this API does not allow one.
-
-    Two fences. Validating on the laptop is a **courtesy** to the user, instant feedback with no
-    round trip, and never a substitute for the server's check, because anyone can bypass this
-    notebook and post directly with `curl`. And the split between 422 and 400 is this API's
-    convention, not a law of HTTP: FastAPI produces the 422 automatically from the model, while
-    the 400s are business rules somebody wrote by hand.
-            """
-    ).callout(kind="info")
+    # One row per slip, one box per gate: teal got through, red was turned away.
+    _svg = [
+        '<text x="430" y="16" text-anchor="middle" font-weight="700">gate 1: your laptop</text>'
+        '<text x="805" y="16" text-anchor="middle" font-weight="700">gate 2: the server</text>'
+    ]
+    for _i, (_name, _pass1, _short1, _status, _short2) in enumerate(_cells):
+        _y = 36 + _i * 48
+        _svg.append(
+            f'<text x="250" y="{_y + 20}" text-anchor="end" dominant-baseline="central">{_name}</text>'
+            + box(270, _y, _short1, w=320, h=40, cls="dg-box dg-ok" if _pass1 else "dg-box dg-hot")
+            + box(610, _y, _short2, w=386, h=40, cls="dg-box dg-ok" if _status == 201 else "dg-box dg-hot")
+        )
+    _matrix = diagram(
+        "".join(_svg),
+        width=1000,
+        height=36 + 48 * len(_cells),
+        label="Seven slips, each checked by the model on the laptop and by the running server. "
+        + "; ".join(f"{_r['the slip']}: {_r['gate 1: your laptop']}, then {_r['gate 2: the server']}" for _r in _rows),
+    )
     _table = static_table(
         _rows,
         label="The same seven slips, checked twice",
         wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
         column_widths={"gate 1: your laptop": 410, "gate 2: the server": 410},
     )
-    mo.vstack([_table, _note], gap=0.6)
+
+    def _count(status):
+        n = sum(1 for _c in _cells if _c[3] == status)
+        return f"{n} slip{'' if n == 1 else 's'}"
+
+    _tiles = mo.md(
+        f"""
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">422</div><div class="tile-title">{_count(422)}: the wrong shape</div>
+        <p>Caught at both gates with the same message: both run the same model.</p></div>
+      <div class="tile"><div class="tile-key">400</div><div class="tile-title">{_count(400)}: a fact</div>
+        <p>A well-formed id. Only the server can open the filing cabinet and find no product 9999.</p></div>
+      <div class="tile"><div class="tile-key">201</div><div class="tile-title">{_count(201)}: booked</div>
+        <p>{len(_ok)} fields sent, {len(_good)} back. The server computed <code>total_price</code> =
+        {_good["units_sold"]} &times; {_good["total_price"] / _good["units_sold"]:.2f} itself.</p></div>
+    </div>
+        """
+    )
+    _why = mo.md(
+        """
+    A price the client is allowed to invent is a price the client can lie about. `SaleCreate` has no
+    `total_price` field, and `Input` refuses fields it does not know, so the slip that brought its
+    own `total_price` was refused at both gates.
+        """
+    )
+    mo.vstack(
+        [
+            mo.ui.tabs({"Chart": _matrix, "Table": _table}),
+            _tiles,
+            mo.accordion({"Why the client may not send total_price": _why}),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -4115,12 +4268,14 @@ def _(mo):
     run_twice = mo.ui.run_button(label="Press every verb twice", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Press It Twice"),
             mo.md(
-                "The lift button or the ticket dispenser? Chapter 6 had you press them by hand; here "
-                "all four verbs go to the running API **twice in a row**, against one sale, side by "
-                "side. Needs the running API."
-            ).callout(kind="info"),
+                """
+    ### Mini-lab: Press It Twice
+
+    The lift button or the ticket dispenser? All four verbs go to the running API **twice in a
+    row**, against one sale.
+                """
+            ),
             run_twice,
         ],
         gap=0.6,
@@ -4129,8 +4284,14 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, run_twice, sale_slip, static_table):
-    mo.stop(not run_twice.value, mo.md("Click **Press every verb twice** to test it against the running API.").callout(kind="neutral"))
+def _(box, ch8_api, chart_or_table, diagram, mo, run_twice, sale_slip):
+    mo.stop(
+        not run_twice.value,
+        mo.md(
+            "**Predict first:** which verb changes the world again on the second press? "
+            "Then click **Press every verb twice**."
+        ).callout(kind="neutral"),
+    )
 
     _post1, _first = ch8_api("POST", "/sales", sale_slip)
     mo.stop(_post1 != 201, mo.md(f"`POST /sales` answered `{_post1}`: `{_first}`").callout(kind="danger"))
@@ -4174,22 +4335,52 @@ def _(ch8_api, mo, run_twice, sale_slip, static_table):
             "lift button?": "yes",
         },
     ]
-    _note = mo.md(
+    # One row per verb: the two status codes, then what the world looks like after both presses.
+    _svg = [
+        '<text x="235" y="20" text-anchor="middle" font-weight="700">first press</text>'
+        '<text x="405" y="20" text-anchor="middle" font-weight="700">second press</text>'
+        '<text x="748" y="20" text-anchor="middle" font-weight="700">what changed in the world</text>'
+    ]
+    for _i, _row in enumerate(_rows):
+        _y, _lift = 40 + _i * 58, _row["lift button?"] == "yes"
+        _svg.append(
+            f'<text x="0" y="{_y + 20}" font-weight="700">{_row["verb"]}</text>'
+            f'<text class="dg-muted" x="0" y="{_y + 42}">{"lift button" if _lift else "ticket dispenser"}</text>'
+            + box(160, _y, str(_row["first press"]), w=150, h=48)
+            + box(330, _y, str(_row["second press"]), w=150, h=48, cls="dg-box" if _lift else "dg-box dg-hot")
+            + box(500, _y, _row["what changed in the world"], w=496, h=48, cls="dg-box dg-ok" if _lift else "dg-box dg-hot")
+        )
+    _matrix = diagram(
+        "".join(_svg),
+        width=1000,
+        height=40 + 58 * len(_rows),
+        label="Each verb sent twice. "
+        + "; ".join(
+            f"{_r['verb']}: {_r['first press']} then {_r['second press']}, {_r['what changed in the world']}" for _r in _rows
+        ),
+    )
+    _more = mo.md(
         """
-    **GET, PUT and DELETE are safe to press twice. The world ends up the same.** POST is not: the
-    second press booked a second sale. That is exactly why a checkout page begs you not to hit
-    refresh, and why a payment that times out is frightening in a way a profile edit is not.
+    That is exactly why a checkout page begs you not to hit refresh, and why a payment that times
+    out is frightening in a way a profile edit is not.
 
-    **The 404 from chapter 6 is back.** The second DELETE answered `404`, not `204`, and the sale
-    is just as gone. Idempotent is a promise about the **effect on the world**, not about the
-    status code; only the answer to "did *you* delete it" changed.
-
-    One more honest note: idempotence is a promise the API author makes, not something HTTP
-    enforces. A carelessly written `PUT` can behave exactly like `POST`. It holds here because
-    this server updates a row you named by id, not because the word PUT is magic.
+    Idempotence is a promise the API author makes, not something HTTP enforces. A carelessly
+    written `PUT` can behave exactly like `POST`. It holds here because this server updates a row
+    you named by id, not because the word PUT is magic.
         """
-    ).callout(kind="info")
-    mo.vstack([static_table(_rows, label="Each verb, sent twice"), _note], gap=0.6)
+    )
+    mo.vstack(
+        [
+            chart_or_table(_matrix, _rows, label="Each verb, sent twice"),
+            mo.md(
+                f"**GET, PUT and DELETE are lift buttons:** the world ends up the same. **POST is a ticket "
+                f"dispenser:** the second press booked a second sale. The second DELETE's `{_del2}` changes "
+                "nothing: idempotent is about the effect, not the status code."
+            ).callout(kind="info"),
+            mo.accordion({"Idempotence is a promise, not a law": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -4198,12 +4389,14 @@ def _(mo):
     run_follow = mo.ui.run_button(label="Follow the sale into the file", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Where Does a POST Actually Go?"),
             mo.md(
-                "We count the rows in `data/sales.parquet`, POST one sale through the API, count "
-                "again, and then put the row that landed in the file next to the JSON that came "
-                "back. Needs the running API, started from this folder."
-            ).callout(kind="info"),
+                """
+    ### Mini-lab: Where Does a POST Actually Go?
+
+    POST one sale, watch `data/sales.parquet` grow, and compare the stored row with the JSON
+    answer. Needs the API started from this folder.
+                """
+            ),
             run_follow,
         ],
         gap=0.6,
@@ -4212,8 +4405,14 @@ def _(mo):
 
 
 @app.cell
-def _(Path, ch8_api, duckdb, mo, run_follow, sale_slip, static_table):
-    mo.stop(not run_follow.value, mo.md("Click **Follow the sale into the file** to watch the tiers hand over.").callout(kind="neutral"))
+def _(Path, box, ch8_api, chart_or_table, diagram, duckdb, mo, run_follow, sale_slip):
+    mo.stop(
+        not run_follow.value,
+        mo.md(
+            "**Predict first:** does the file store the product's name, or only its id? "
+            "Then click **Follow the sale into the file**."
+        ).callout(kind="neutral"),
+    )
     _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
     mo.stop(
         not _sales_file.exists(),
@@ -4244,31 +4443,66 @@ def _(Path, ch8_api, duckdb, mo, run_follow, sale_slip, static_table):
         {"field": _k, "in the file": str(_file_row.get(_k, "—")), "in the API answer": str(_v)}
         for _k, _v in _created.items()
     ]
-    _note = mo.md(
+
+    def _band(y, tier, name, note):
+        return (
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="2" y="{y}" width="996" height="88" rx="16"/>'
+            f'<text x="20" y="{y + 38}" font-weight="700">{name}</text>'
+            f'<text class="dg-muted" x="20" y="{y + 62}">{note}</text></g>'
+        )
+
+    # The request goes down the left column, the answer comes back up the right, like the tier map.
+    _trip = diagram(
+        _band(0, "presentation", "client", "this notebook")
+        + _band(120, "logic", "logic tier", "sw03_demo_api.py")
+        + _band(240, "data", "data tier", "data/sales.parquet")
+        + '<text x="402" y="110" class="dg-muted">request</text>'
+        + '<text x="822" y="110" class="dg-muted">answer</text>'
+        + box(220, 20, f"POST /sales · {len(sale_slip)} fields, no price", w=340, h=48)
+        + box(220, 140, "check · price it · lock · append", w=340, h=48)
+        + box(220, 260, f"{_before:,} rows &#8594; {_after:,} rows", w=340, h=48)
+        + box(640, 260, f"row stored: {len(_stored.columns)} columns, ids only", w=340, h=48)
+        + box(640, 140, "joins product, country, region names", w=340, h=48)
+        + box(640, 20, f"{_status} · {len(_created)} fields, names spelled out", w=340, h=48)
+        + '<path class="dg-edge" d="M390 68 V 134"/><path class="dg-edge" d="M390 188 V 254"/>'
+        + '<path class="dg-edge" d="M560 284 H 634"/>'
+        + '<path class="dg-edge" d="M810 260 V 194"/><path class="dg-edge" d="M810 140 V 74"/>',
+        width=1000,
+        height=330,
+        label=f"The POST goes down: the notebook sends {len(sale_slip)} fields, the API checks, prices and appends it, "
+        f"and the file grows from {_before:,} to {_after:,} rows. The answer comes up: the stored row has "
+        f"{len(_stored.columns)} columns of ids, the API joins the names and answers {_status} with {len(_created)} fields.",
+        tier="logic",
+    )
+    _caption = mo.md(
         f"""
-    **The file grew by one: {_before:,} rows to {_after:,}.**
-
+    <p class="vis-caption">The <strong>file</strong> keeps <code>product_id {_created["product_id"]}</code> and
+    <code>country_id {_created["country_id"]}</code>: ids, every fact written once. The <strong>answer</strong> spells
+    out "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}": the logic tier
+    did the joining, so the dashboard does not have to.</p>
+        """
+    )
+    _more = mo.md(
+        """
     The logic tier did not invent a database. It wrote to `data/sales.parquet`, a working copy of
-    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/`
-    into `data/` on every start). Your POST travelled all the way down.
-
-    Now read the table across, because this is what a tier is *for*. The **file** keeps
-    {len(_stored.columns)} columns and stores `product_id {_created["product_id"]}`,
-    `country_id {_created["country_id"]}`: ids, no names, every fact written exactly once. That is
-    the normalisation the data tier cares about. The **response** has {len(_created)} fields, with
-    "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}"
-    spelled out. The logic tier did the joining, so the dashboard in `sw03_demo_streamlit.py` does not have to. Even
-    the date changes shape: the file keeps a timestamp, the API sends a plain date.
+    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/` into
+    `data/` on every start). Even the date changes shape: the file keeps a timestamp, the API sends a
+    plain date.
 
     **One honest callback.** We just read that file behind the API's back. The API takes a lock
-    around every write, but like the key on the hook in chapter 1, a lock only protects those who
-    ask for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong
-    instant could catch it half-written. That is precisely the isolation problem from chapter 1,
-    and it is the reason a real system puts a database at the bottom of the data tier rather than
-    a file.
+    around every write, but like the key on the hook in chapter 1, a lock only protects those who ask
+    for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant
+    could catch it half-written. That is chapter 1's isolation problem, and the reason a real system
+    puts a database at the bottom of the data tier rather than a file.
         """
-    ).callout(kind="info")
-    mo.vstack([static_table(_rows, label="Same sale, two tiers, two shapes"), _note], gap=0.6)
+    )
+    mo.vstack(
+        [
+            chart_or_table(mo.vstack([_trip, _caption], gap=0.4), _rows, label="Same sale, two tiers, two shapes"),
+            mo.accordion({"Where the file came from, and one honest callback": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -4277,18 +4511,14 @@ def _(mo):
     run_two_analysts = mo.ui.run_button(label="Run the two-analyst test", kind="success")
     mo.vstack(
         [
-            mo.md("### Mini-lab: Two People, One Product, Both Click Save"),
             mo.md(
                 """
-    **Predict first, then run it.**
+    ### Mini-lab: Two People, One Product, Both Click Save
 
-    Anna and Ben both open product 1 in a browser tab, at the same starting price. Anna applies a
-    10% raise. Ben adds a 20-franc surcharge. Both click save. Both see "saved", and both get
-    `200 OK` from the API you built.
-
-    **What is the price afterwards?**
+    Anna and Ben open product 1 at the same price. Anna saves a **10% raise**, Ben a
+    **CHF 20 surcharge**. Both get `200 OK`.
                 """
-            ).callout(kind="info"),
+            ),
             run_two_analysts,
         ],
         gap=0.6,
@@ -4297,10 +4527,12 @@ def _(mo):
 
 
 @app.cell
-def _(ch8_api, mo, run_two_analysts, static_table):
+def _(ch8_api, chart_or_table, mo, run_two_analysts):
     mo.stop(
         not run_two_analysts.value,
-        mo.md("Write your prediction down, then click **Run the two-analyst test**.").callout(kind="neutral"),
+        mo.md(
+            "**Predict first:** what is the price afterwards? Write it down, then click **Run the two-analyst test**."
+        ).callout(kind="neutral"),
     )
 
     def _price(method, body=None):
@@ -4315,8 +4547,10 @@ def _(ch8_api, mo, run_two_analysts, static_table):
         _anna_sees = _price("GET")
         _ben_sees = _price("GET")
         # Both save, strictly one after the other.
-        _after_anna = _price("PUT", {"price": round(_anna_sees * 1.10, 2)})
-        _after_ben = _price("PUT", {"price": round(_ben_sees + 20, 2)})
+        _anna_sends = round(_anna_sees * 1.10, 2)
+        _ben_sends = round(_ben_sees + 20, 2)
+        _after_anna = _price("PUT", {"price": _anna_sends})
+        _after_ben = _price("PUT", {"price": _ben_sends})
         _final = _price("GET")
     finally:
         ch8_api("PUT", "/products/1", {"price": _start})  # put the price back, like the other labs tidy up
@@ -4331,36 +4565,95 @@ def _(ch8_api, mo, run_two_analysts, static_table):
         {"step": "6. price afterwards", "price": _final, "server said": "-"},
         {"step": "what it should have been", "price": _correct, "server said": "-"},
     ]
-    _note = mo.md(
+    # Chapter 1's lost-update grid, with people instead of workers and a price instead of a counter.
+    _grid = mo.Html(
         f"""
-    **Anna's raise is gone. {_correct - _final:.2f} of it, and nobody was told.**
+    <div class="section-card flow-card">
+      <div class="lost-update-wrap">
+        <div class="lost-update-grid">
+          <div class="lu-header">Step</div>
+          <div class="lu-header">Anna</div>
+          <div class="lu-header">Ben</div>
+          <div class="lu-header">Price on the server</div>
 
-    Look at what did *not* happen. No error. No warning. No conflict. Two `200 OK` responses, two
-    users who saw "saved", and a price that is simply wrong.
+          <div class="lu-step">1</div>
+          <div class="lu-event lu-read">GET: sees {_anna_sees:.2f}</div>
+          <div class="lu-event lu-read">GET: sees {_ben_sees:.2f}</div>
+          <div class="lu-state">{_start:.2f}</div>
 
-    Now look back at **chapter 1**. This is the same lost update as the shared counter, the one we
-    watched disappear from a text file, and it survived everything we have built since. It is not
-    a threading accident either: these six requests ran strictly one after another, so this fails
-    identically every single time you click the button. The bug is structural, not a timing fluke.
+          <div class="lu-step">2</div>
+          <div class="lu-event lu-write">PUT {_anna_sends:.2f} (+10%): 200 OK</div>
+          <div class="lu-event">adds CHF 20 to his stale {_ben_sees:.2f}</div>
+          <div class="lu-state">{_after_anna:.2f}</div>
 
-    Why did the lock not save us? Every write in `sw03_demo_api.py` runs inside one `lock`,
-    chapter 1's own fix, so each single request is safe. But *there is no lock around what
-    actually happened here*. The read and the write were two separate HTTP requests, minutes apart
-    in real life, and the API has no idea they were meant to belong together. Ben's `PUT` carried
-    a price computed from a page he opened before Anna saved. Chapter 1's lesson holds exactly as
-    stated: a lock, like a transaction, protects the steps you put inside it, and nothing else.
-
-    **The fix is not more locking.** It is to stop sending *the answer* and start sending *the
-    change* (`{{"raise_percent": 10}}`), or to make the client say which version it read and let
-    the server refuse if that version is stale. HTTP has that second option built in: `If-Match`
-    with an ETag, answered by `412 Precondition Failed`. Correctness is a property of the design,
-    not of the tools.
+          <div class="lu-step">3</div>
+          <div class="lu-event lu-idle">done</div>
+          <div class="lu-event lu-stale">PUT stale {_ben_sends:.2f}: 200 OK</div>
+          <div class="lu-state lu-problem">{_after_ben:.2f} (Anna's raise overwritten)</div>
+        </div>
+      </div>
+      <div class="flow-note"><strong>Should be {_correct:.2f}.</strong> Observed: {_final:.2f}, and both saves
+      answered 200 OK.</div>
+    </div>
         """
-    ).callout(kind="danger")
+    )
+    _more = mo.md(
+        """
+    Every write in `sw03_demo_api.py` runs inside one `lock`, chapter 1's own fix, so each single
+    request is safe. But *there is no lock around what actually happened here*. The read and the
+    write were two separate HTTP requests, minutes apart in real life, and the API has no idea they
+    were meant to belong together. Ben's `PUT` carried a price computed from a page he opened
+    before Anna saved. Chapter 1's lesson holds exactly as stated: a lock, like a transaction,
+    protects the steps you put inside it, and nothing else. Correctness is a property of the
+    design, not of the tools.
+        """
+    )
     mo.vstack(
-        [static_table(_steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"), _note],
+        [
+            mo.hstack(
+                [
+                    mo.stat(f"{_correct:.2f}", label="should be", bordered=True),
+                    mo.stat(f"{_final:.2f}", label="is", bordered=True),
+                    mo.stat(f"{_correct - _final:.2f}", label="lost, and nobody was told", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(_grid, _steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"),
+            mo.md(
+                "**Chapter 1's lost update, over HTTP.** No error, two `200 OK`s. The requests ran one after "
+                "another, so it fails on every click: a design bug, not a timing fluke."
+            ).callout(kind="danger"),
+            mo.accordion({"Why the API's lock did not save Anna": _more}),
+        ],
         gap=0.6,
     )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — FastAPI</h3>
+      <details>
+        <summary><strong>Q1:</strong> Gate 1 already checked the slip on your laptop. Why check it again at the server?</summary>
+        <p><strong>Answer:</strong> Anyone can bypass this notebook and post directly with <code>curl</code>.
+        Validating on the laptop is a courtesy to the user, instant feedback with no round trip, never a
+        substitute for the server's check.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> Is the split between 422 and 400 a law of HTTP?</summary>
+        <p><strong>Answer:</strong> No, it is this API's convention. FastAPI produces the 422 automatically from
+        the model; the 400s are business rules somebody wrote by hand.</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> How should Ben's save have failed?</summary>
+        <p><strong>Answer:</strong> Loudly. Send <em>the change</em> (<code>{"raise_percent": 10}</code>) instead of
+        the answer, so both changes apply. Or make the client say which version it read (<code>If-Match</code>
+        with an ETag) and let the server refuse a stale write with <code>412 Precondition Failed</code>.</p>
+      </details>
+    </div>
+    """)
     return
 
 
@@ -4370,13 +4663,10 @@ def _(mo):
         """
     ### Chapter 8 Conclusion
 
-    - One model drives the validation, the endpoint and `/docs`, so the documentation cannot drift
-      from the rules. A hand-written docstring still can.
-    - Shape can be checked anywhere, on your laptop or at the server (422); facts only at the
-      server (400). Only the server computes `total_price`.
+    - One model drives validation, endpoint and `/docs`: the docs cannot drift. A hand-written docstring can.
+    - Shape is checked anywhere (422), facts only at the server (400). Only the server computes `total_price`.
     - GET, PUT and DELETE are safe to press twice; POST books a second sale.
-    - A lock per request cannot stop a lost update split over two requests: send the change, or
-      make the client say which version it read (`If-Match`).
+    - A lock per request cannot stop a lost update split over two requests: send the change, or `If-Match`.
             """
     ).callout(kind="success")
     return
@@ -4388,8 +4678,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Backend answers are useful, but users still need a clear interface.
-    Next we compare frontend options and what each one trades away: speed, control or simplicity.
+    Next: the interface people actually use, and what each frontend trades away.
 
     $$
     \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
@@ -4400,82 +4689,135 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 9. Frontend Framework Comparison
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Chapter 9 Introduction
-
-    > **Key Question:** What does the frontend need to know about everything behind it?
-
-    *We reach the **presentation tier**. The API from chapter 8 has the data; something has to show it.*
-
-    Framework choice is a product decision, not a matter of taste: match the tool to your team's skills and
-    to how much UI control the product needs. The usual trade-off:
-
-    $$
-    \\text{Iteration Speed} \\uparrow \\;\\Rightarrow\\; \\text{UI Control} \\downarrow
-    $$
-    """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo, static_table):
-    _framework_note = mo.md(
-        """
-    ### Choosing a Frontend Stack
-
-    **First, what a frontend actually is.** A restaurant has three rooms. The **cold store** holds
-    the ingredients, keeps them correct and gets them out fast: chapters 1 to 5. The
-    **kitchen** holds the recipes and the rules, and nothing leaves without being checked, whether
-    the order came from a table, a phone or a delivery app: chapters 6 to 8. The **dining room**
-    is what the guest sees, the tables, the plating and the waiter: chapters 9 and 10.
-
-    A frontend is the dining room. It owns no ingredients and no recipes. It writes an order slip,
-    which is an HTTP request to a path, hands it through the hatch, and arranges whatever comes
-    back so a human can decide something.
-
-    This is the payoff for splitting the tiers at all. Change supplier, Parquet for DuckDB, and no
-    guest notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not
-    change one line. **This repo already contains that dining room:** `sw03_demo_streamlit.py`,
-    talking to the API you started in chapter 6.
-
-    *Where the picture breaks.* A waiter cannot cook, but a frontend **does** compute: it sorts,
-    formats, aggregates and draws every chart in that dashboard. So do not read this as "the
-    frontend is dumb". Read it as **the frontend owns no rules**. Anyone can telephone the kitchen
-    directly, with `curl` or a script or another team's app, so a rule that lives only in the
-    dining room is not a rule at all. That is why this repo deliberately states the same rule
-    twice: the Streamlit form sets `min_value=1` for units sold, and the API states it again as
-    `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
-    limit; only the kitchen knows it. The dining room may repeat a rule for politeness. Never instead.
-
-    Showcases: [Marimo gallery](https://marimo.io/gallery) ·
-    [Dash gallery](https://dash.gallery/Portal/) ·
-    [React community](https://react.dev/community) ·
-    [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
-    """
-    ).callout(kind="neutral")
-    _columns = ("framework", "you write", "strengths", "trade-offs", "use case")
-    _frameworks = [
-        ("Marimo", "Python", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps", "Labs, teaching, analysis apps"),
-        ("Dash", "Python", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps", "Interactive analytics"),
-        ("Streamlit", "Python", "Fastest prototyping, simple widgets", "Less layout and state control in big apps", "Dashboards, internal tools"),
-        ("Flask", "Python + HTML templates, some JS", "Full control, templates + APIs", "More setup, no built-in UI", "Custom web apps + APIs"),
-        ("React", "JavaScript / TypeScript", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling", "Production web apps"),
-    ]
-    _framework_table = static_table(
-        [dict(zip(_columns, _row, strict=True)) for _row in _frameworks], label="Framework comparison"
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 9. Frontend Framework Comparison"),
+            chapter_intro(
+                "presentation",
+                "What does the frontend need to know about everything behind it?",
+                "The API from chapter 8 has the data; something has to show it.",
+            ),
+        ],
+        gap=1,
     )
-    mo.vstack([_framework_note, _framework_table], gap=0.6)
+    return
+
+
+@app.cell
+def _(box, diagram, mo):
+    def _room(x, tier, name, note, file, rule=None, why=None):
+        """One room of the restaurant: its tier colour, what it holds, and the units rule if it states one."""
+        parts = [
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="{x}" y="110" width="280" height="220" rx="16"/></g>',
+            f'<text x="{x + 20}" y="144" font-size="20" font-weight="700">{name}</text>',
+            f'<text class="dg-muted" x="{x + 20}" y="170">{note}</text>',
+            box(x + 20, 188, file, w=240, h=44),
+        ]
+        if rule:
+            parts.append(
+                f'<rect class="dg-box" x="{x + 20}" y="250" width="240" height="62" rx="12"/>'
+                f'<text x="{x + 140}" y="276" text-anchor="middle" font-family="monospace" font-size="15">{rule}</text>'
+                f'<text class="dg-muted" x="{x + 140}" y="300" text-anchor="middle">{why}</text>'
+            )
+        return "".join(parts)
+
+    _restaurant = diagram(
+        _room(2, "presentation", "dining room", "ch. 9-10: what the guest sees", "sw03_demo_streamlit.py",
+              "min_value=1", "repeated for politeness")
+        + _room(360, "logic", "kitchen", "ch. 6-8: recipes and rules", "sw03_demo_api.py",
+                "ge=1, le=100_000", "the rule")
+        + _room(718, "data", "cold store", "ch. 1-5: ingredients", "data/*.parquet", "sales, products, ...", "five tables, ids only")
+        # the hatches: a request goes right, the answer comes back left
+        + '<path class="dg-edge" d="M284 206 H 354"/><path class="dg-edge" d="M358 250 H 288"/>'
+        + '<path class="dg-edge" d="M642 206 H 712"/><path class="dg-edge" d="M716 250 H 646"/>'
+        + '<text class="dg-muted" x="321" y="196" text-anchor="middle">request</text>'
+        + '<text class="dg-muted" x="321" y="274" text-anchor="middle">answer</text>'
+        + '<text class="dg-muted" x="679" y="196" text-anchor="middle">query</text>'
+        + '<text class="dg-muted" x="679" y="274" text-anchor="middle">rows</text>'
+        # the phone line: anyone can call the kitchen without passing the dining room
+        + box(340, 10, "curl · a script · another team's app", w=320, h=48, cls="dg-box dg-hot")
+        + '<path class="dg-edge dg-hot" d="M500 58 V 104"/>'
+        + '<text class="dg-hot" x="512" y="88">no dining room in between</text>',
+        width=1000,
+        height=340,
+        label="Three rooms: the dining room (Streamlit, chapters 9 and 10) sends requests to the kitchen (the API, "
+        "chapters 6 to 8), which queries the cold store (Parquet files, chapters 1 to 5). The units rule sits in the "
+        "kitchen; the form repeats only its lower bound. curl, a script or another app can call the kitchen directly.",
+    )
+    _more = mo.md(
+        """
+    - **The payoff for splitting the tiers.** Change supplier, Parquet for DuckDB, and no guest
+      notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not change one line.
+    - **What a frontend does.** It writes an order slip, an HTTP request to a path, hands it through
+      the hatch, and arranges whatever comes back so a human can decide something.
+    - **Where the picture breaks.** A waiter cannot cook, but a frontend *does* compute: it sorts,
+      formats, aggregates and draws every chart in the dashboard. So do not read this as "the frontend
+      is dumb". Read it as **the frontend owns no rules**.
+    - **The same rule, twice, on purpose.** The Streamlit form sets `min_value=1` for units sold; the API
+      states `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
+      limit: only the kitchen knows it.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>A Frontend Is the Dining Room</h3>
+      {_restaurant}
+      <p class="vis-caption"><strong>The frontend owns no rules.</strong> Anyone can phone the kitchen directly,
+      so a rule that lives only in the dining room is not a rule at all. The dining room may repeat a rule for
+      politeness. Never instead.</p>
+    </div>
+                """
+            ),
+            mo.accordion({"Where the restaurant picture holds, and where it breaks": _more}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(diagram, mo):
+    # Ordered by the fit assistant's iteration-speed weight, fastest first.
+    _frameworks = [
+        ("Streamlit", "Py", "Dashboards, internal tools", "Fastest prototyping, simple widgets", "Less layout and state control in big apps"),
+        ("Marimo", "Py", "Labs, teaching, analysis apps", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps"),
+        ("Dash", "Py", "Interactive analytics", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps"),
+        ("Flask", "Py+JS", "Custom web apps + APIs", "Full control, templates + APIs", "More setup, no built-in UI"),
+        ("React", "JS", "Production web apps", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling"),
+    ]
+    _tiles = "".join(
+        f'<div class="tile"><div class="tile-key">{_lang}</div><div class="tile-title">{_name}</div>'
+        f"<p><strong>{_use}</strong></p><p>{_good}</p><p class=\"tile-bad\">{_bad}</p></div>"
+        for _name, _lang, _use, _good, _bad in _frameworks
+    )
+    _tradeoff = diagram(
+        '<text x="0" y="26" font-weight="700">faster iteration</text>'
+        '<path class="dg-edge" d="M400 20 H 150"/>'
+        '<text class="dg-muted" x="500" y="26" text-anchor="middle">the usual trade-off</text>'
+        '<path class="dg-edge" d="M600 20 H 850"/>'
+        '<text x="1000" y="26" text-anchor="end" font-weight="700">more UI control</text>',
+        width=1000,
+        height=40,
+        label="The usual trade-off: the further left, the faster you iterate; the further right, the more UI control you get.",
+    )
+    mo.md(
+        f"""
+    <div class="section-card">
+      <h3>Choosing a Frontend Stack</h3>
+      {_tradeoff}
+      <div class="tiles tier-presentation" style="grid-template-columns: repeat(5, 1fr); margin-top: 12px">{_tiles}</div>
+      <p class="vis-caption">Py: Python only. JS: JavaScript, the language browsers run.
+      Showcases: <a href="https://marimo.io/gallery">Marimo gallery</a> ·
+      <a href="https://dash.gallery/Portal/">Dash gallery</a> ·
+      <a href="https://react.dev/community">React community</a> ·
+      <a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask patterns</a></p>
+    </div>
+        """
+    )
     return
 
 
@@ -4484,36 +4826,42 @@ def _(mo):
     fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration", show_value=True, debounce=True)
     fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control", show_value=True, debounce=True)
     fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength", show_value=True, debounce=True)
-    _note = mo.md(
+    _more = mo.md(
         """
-    Set three numbers about *your team*, not about the frameworks.
+    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you stay
+    in Python; React is written in JavaScript, and a Flask app needs some as soon as a page has to
+    react. So a low score here is not a weakness, it just points at different tools.
 
-    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you
-    stay in Python; React is written in JavaScript, and a Flask app needs some as soon as a page
-    has to react. So a low score here is not a weakness, it just points at different tools.
+    Each framework scores the three inputs with its own weights, and every weight row adds up to the
+    same total (3.0), so no framework wins just by carrying more weight. For the three Python-native
+    tools $j_f = 6 - j$: they get *more* attractive when the team knows *less* JavaScript. For Flask
+    and React $j_f = j$. Heuristic only: validate it against real team constraints.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Mini-lab: Framework Fit Assistant
 
-    Each framework scores the three inputs with its own weights, and every weight row adds
-    up to the same total (3.0) so the scores stay comparable:
+    Set three numbers about **your team**, not about the frameworks.
 
     $$
     \\text{fit}_f = w^f_s \\cdot s + w^f_c \\cdot c + w^f_j \\cdot j_f
     \\qquad \\text{with} \\quad w^f_s + w^f_c + w^f_j = 3
     $$
-
-    For the three Python-native tools, $j_f = 6 - j$: they get *more* attractive when the team
-    knows *less* JavaScript. For Flask and React $j_f = j$. Heuristic only: validate it against
-    real team constraints.
-    """
-    ).callout(kind="info")
-    mo.vstack(
-        [mo.md("### Mini-lab: Framework Fit Assistant"), fw_speed, fw_control, fw_js, _note],
+                """
+            ),
+            mo.vstack([fw_speed, fw_control, fw_js], gap=0.4),
+            mo.accordion({"How the score works": _more}),
+        ],
         gap=0.6,
     ).callout(kind="neutral")
     return fw_control, fw_js, fw_speed
 
 
 @app.cell
-def _(fw_control, fw_js, fw_speed, mo, static_table):
+def _(TIER, alt, chart_or_table, fw_control, fw_js, fw_speed, pd, tier_chart):
     # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
     # so no framework wins just by carrying more weight than the others.
     _weights = {
@@ -4532,23 +4880,50 @@ def _(fw_control, fw_js, fw_speed, mo, static_table):
     }
     _ranked = sorted(_scores.items(), key=lambda item: item[1], reverse=True)
     _top = [name for name, score in _ranked if score == _ranked[0][1]]
-    mo.vstack(
-        [
-            static_table(
-                [
-                    {
-                        "framework": name,
-                        "score": score,
-                        "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0])),
-                    }
-                    for name, score in _ranked
-                ],
-                label="Teaching score (higher = better fit)",
-            ),
-            mo.md(f"Current top fit: **{' / '.join(_top)}**" + (" (a tie)" if len(_top) > 1 else "")).callout(kind="info"),
-        ],
-        gap=0.6,
+    _rows = [
+        {"framework": name, "score": score, "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0]))}
+        for name, score in _ranked
+    ]
+    _df = pd.DataFrame(_rows)
+    _df["best"] = _df["framework"].isin(_top)
+    _bars = alt.Chart(_df).encode(
+        y=alt.Y("framework:N", sort=None, title=None),
+        x=alt.X("score:Q", title="teaching score (higher = better fit)", scale=alt.Scale(domain=[0, 15])),
+        tooltip=["framework:N", "score:Q", "weights (speed / control / JS):N"],
     )
+    _chart = (
+        _bars.mark_bar(cornerRadiusEnd=4, size=28).encode(
+            color=alt.condition("datum.best", alt.value(TIER["presentation"]), alt.value(TIER["muted"]))
+        )
+        + _bars.mark_text(align="left", dx=6).encode(text=alt.Text("score:Q", format=".2f"))
+    ).properties(
+        width="container",
+        height=46 * len(_df),
+        title=f"Best fit: {' / '.join(_top)}" + (" (a tie)" if len(_top) > 1 else ""),
+    )
+    chart_or_table(tier_chart(_chart, "presentation"), _rows, label="Teaching score (higher = better fit)")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Frontends</h3>
+      <details>
+        <summary><strong>Q1:</strong> The Streamlit form already refuses 0 units. Why does the API check again?</summary>
+        <p><strong>Answer:</strong> Anyone can phone the kitchen directly, with <code>curl</code>, a script or
+        another team's app. A rule that lives only in the dining room is not a rule. The form repeats it for
+        politeness: instant feedback, no round trip.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> The fit assistant says Streamlit. Is that the decision?</summary>
+        <p><strong>Answer:</strong> No, it is a teaching heuristic with hand-picked weights. Check it against
+        real constraints: how much layout and state control the product needs, who will maintain it, and
+        what the team already knows.</p>
+      </details>
+    </div>
+    """)
     return
 
 
@@ -4573,8 +4948,7 @@ def _(mo):
         """
     ### Bridge to Next Chapter
 
-    Tables show exact values; charts show patterns faster, including patterns that are not there.
-    We close by asking when a chart deserves to be believed.
+    Charts show patterns faster than tables, including patterns that are not there.
 
     $$
     \\text{what you plot} = \\text{signal} + \\text{noise}
@@ -4585,62 +4959,56 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 10. Honest Charts (Signal vs Noise)
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 10. Honest Charts (Signal vs Noise)"),
+            chapter_intro(
+                "presentation",
+                "Which pattern is signal, and which is noise?",
+                "The last decision of the whole stack: what a chart claims is what people believe.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(
+    _more = mo.md(
         """
-    ### Chapter 10 Introduction
-
-    > **Key Question:** Which pattern is signal, and which is noise?
-
-    *Still in the **presentation tier**, and the last decision of the whole stack: what a chart claims is what people believe.*
-
-    Charts help humans detect patterns quickly. A linear regression summarises a trend with two numbers:
-
-    $$
-    y = \\alpha + \\beta x
-    $$
-
-    - $\\alpha$: baseline level, the value of y where x is 0
-    - $\\beta$: change in y for one unit change in x
-    """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
+    - $\\alpha$ is the baseline level, the value of y where x is 0; $\\beta$ is the change in y for one
+      unit of x. The margin of error is two standard errors, about 95% confidence.
+    - **Slope 0, noise high:** the equation still prints confidently, and the ± tells you not to
+      believe it. About 1 seed in 20 still clears the bar at slope 0: that is what 95% means.
+    - **Noise 1.4, slope 0.4:** $R^2$ calls the line nearly useless, yet the slope is clearly real.
+    - **More rows** shrink the ±, but they do not push $R^2$ up. $R^2$ measures how predictable single
+      points are, not whether a trend exists.
         """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Lab: Signal or Noise?
 
-    Generate a dataset where **you** set the true slope and the noise, then watch what the
-    regression reports back. It gives two separate answers:
+    The regression $y = \\alpha + \\beta x$ gives two separate answers:
 
-    - **Trend:** $\\beta$ plus or minus its margin of error (two standard errors, about 95%
-      confidence). If that range includes 0, the data cannot tell the slope from zero.
-    - **Fit:** $R^2$, the share of the up-and-down in y that the line explains: how well it
-      predicts a *single* point.
+    <div class="tiles tier-presentation">
+      <div class="tile"><div class="tile-key">&beta; &plusmn; 2 SE</div><div class="tile-title">Trend: is there a slope?</div>
+        <p>If the range includes 0, the data cannot tell the slope from zero.</p></div>
+      <div class="tile"><div class="tile-key">R&sup2;</div><div class="tile-title">Fit: how close are the points?</div>
+        <p>How well the line predicts a <em>single</em> point: the share of the spread it explains.</p></div>
+    </div>
 
-    Set the slope to 0 and the noise high: the equation still prints confidently, and the ± tells
-    you not to believe it. Still, about 1 seed in 20 clears the bar at slope 0: that is what
-    95% means.
-
-    Then put the noise back to 1.4 and set the slope to 0.4: $R^2$ calls the line nearly useless,
-    yet the slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
-    how predictable single points are, not whether a trend exists.
-
-    The mini-lab below then asks one question of real data three different ways, and gets three
-    different answers.
-    """
-    ).callout(kind="neutral")
+    **Try:** slope 0 with noise 5 · slope 0.4 with noise 1.4 · then more rows.
+                """
+            ),
+            mo.accordion({"What each experiment shows": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -4662,8 +5030,10 @@ def _(mo):
 
 @app.cell
 def _(
+    TIER,
     alt,
     chart_noise,
+    chart_or_table,
     chart_rows,
     chart_seed,
     chart_slope,
@@ -4671,6 +5041,7 @@ def _(
     pd,
     random,
     statistics,
+    tier_chart,
 ):
     _rng = random.Random(chart_seed.value)
     _xs = [_rng.gauss(0, 1) for _ in range(chart_rows.value)]
@@ -4699,18 +5070,47 @@ def _(
         f"**Fit:** $R^2 = {_r2:.2f}$, the line explains {_fit}."
     ).callout(kind="success" if _nonzero else "warn")
 
+    # The fan: every line whose slope lies in beta ± 2 SE, pivoting on the centre of the data.
+    _xbar, _ybar = statistics.fmean(_xs), statistics.fmean(_ys)
+    _grid = [min(_xs) + (max(_xs) - min(_xs)) * _i / 40 for _i in range(41)]
+    _ends = [((_beta - 2 * _se) * (_g - _xbar), (_beta + 2 * _se) * (_g - _xbar)) for _g in _grid]
+    _fan = pd.DataFrame(
+        {
+            "x": _grid,
+            "low": [_ybar + min(_e) for _e in _ends],
+            "high": [_ybar + max(_e) for _e in _ends],
+            "flat": _ybar,
+        }
+    )
+    _x = alt.X("x:Q").axis(tickCount=8)
     _points = (
         alt.Chart(pd.DataFrame({"x": _xs, "y": _ys}))
-        .mark_circle(size=40, opacity=0.6, color="#3b82f6")
-        .encode(x=alt.X("x:Q").axis(tickCount=8), y="y:Q")
+        .mark_circle(size=36, opacity=0.45, color=TIER["muted"])
+        .encode(x=_x, y="y:Q")
     )
-    _line = _points.transform_regression("x", "y").mark_line(color="#f59e0b", strokeWidth=4)
-    _chart = (
-        (_points + _line)
-        .properties(width="container", height=320)
-        .configure_axis(labelFontSize=13, titleFontSize=14)
+    _band = alt.Chart(_fan).mark_area(opacity=0.25, color=TIER["presentation"]).encode(x=_x, y=alt.Y("low:Q", title="y"), y2="high:Q")
+    _flat = alt.Chart(_fan).mark_line(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x=_x, y=alt.Y("flat:Q", title="y"))
+    _line = _points.transform_regression("x", "y").mark_line(color=TIER["presentation"], strokeWidth=4)
+    _chart = (_band + _points + _flat + _line).properties(width="container", height=320)
+    _summary = [
+        {"quantity": "slope you set", "value": chart_slope.value},
+        {"quantity": "fitted slope β", "value": round(_beta, 3)},
+        {"quantity": "margin of error (2 SE)", "value": round(2 * _se, 3)},
+        {"quantity": "intercept α", "value": round(_alpha, 3)},
+        {"quantity": "R²", "value": round(_r2, 3)},
+        {"quantity": "rows (n)", "value": len(_xs)},
+    ]
+    mo.vstack(
+        [
+            _verdict,
+            chart_or_table(tier_chart(_chart, "presentation"), _summary, label="Regression summary"),
+            mo.md(
+                '<p class="vis-caption">Orange fan: every slope inside &beta; &plusmn; 2 SE. If the dashed flat '
+                "line fits inside it, the data cannot rule out zero.</p>"
+            ),
+        ],
+        gap=0.6,
     )
-    mo.vstack([_verdict, _chart], gap=0.8)
     return
 
 
@@ -4724,17 +5124,18 @@ def _(mo):
         ],
         value="A - aggregate the dots",
         label="Ask the same question a different way",
+        inline=True,
     )
     mo.vstack(
         [
-            mo.md("### Mini-lab: Three Ways to Change the Finding Without Changing the Data"),
             mo.md(
                 """
-    One question, asked of the repo's real 3,360 sales: **does spending more make customers
-    happier?** Nothing below adds or removes a single sale. Only the way we look changes.
-    (The lab reads the seed files directly, a notebook shortcut past the API; the dashboard asks the API.)
-    """
-            ).callout(kind="info"),
+    ### Mini-lab: Three Ways to Change the Finding Without Changing the Data
+
+    One question of the repo's real 3,360 sales: **does spending more make customers happier?**
+    Every view uses every sale; only the way we look changes.
+                """
+            ),
             honest_view,
         ],
         gap=0.6,
@@ -4743,7 +5144,7 @@ def _(mo):
 
 
 @app.cell
-def _(SEED_DIR, duckdb, honest_view, mo, static_table):
+def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
     _con = duckdb.connect()
     _con.execute(
         f"""
@@ -4767,61 +5168,111 @@ def _(SEED_DIR, duckdb, honest_view, mo, static_table):
         return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
 
     if honest_view.value.startswith("A"):
-        _rows = [
-            _measure("one dot per sale"),
-            _measure("one dot per product per month", _averaged("product, month")),
-            _measure("one dot per category per month", _averaged("category, month")),
-            _measure("one dot per category", _averaged("category")),
+        _views = [
+            ("one dot per sale", "sales", ()),
+            ("per product per month", _averaged("product, month"), ()),
+            ("per category per month", _averaged("category, month"), ()),
+            ("per category", _averaged("category"), ()),
         ]
-        _lesson = f"""
-    **$R^2$ climbed from {_rows[0]["R²"]:.2f} to {_rows[-1]["R²"]:.2f} and no new information entered the room.**
-
-    Every row above is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
-    strengthen a relationship, it **deletes the disagreement** that was telling you the
-    relationship is weak. The last row has {_rows[-1]["dots (n)"]} dots and a story you could put on a slide.
-
-    This is why a goodness-of-fit number is meaningless without its sample size. Always read
-    $R^2$ and $n$ together, which is why the table prints both. The dashboard's *What goes with a
-    good rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
-    """
     elif honest_view.value.startswith("B"):
         _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
-        _rows = [_measure("all sales pooled together")]
-        _rows += [_measure(f"only {_c}", "sales WHERE category = ?", _c) for _c in _cats]
+        _views = [("all sales pooled", "sales", ())] + [(f"only {_c}", "sales WHERE category = ?", (_c,)) for _c in _cats]
+    else:
+        _views = [("all sales", "sales", ()), ("every sale except Services", "sales WHERE category <> 'Services'", ())]
+    _rows = [_measure(_label, _source, *_params) for _label, _source, _params in _views]
+
+    def _panel(i, row, source, params):
+        """Small multiple i: the dots and their least-squares line, red when it slopes down."""
+        df = _con.execute(f"SELECT x, y FROM {source}", params).df()
+        dots = (
+            alt.Chart(df)
+            .mark_circle(size=18 if len(df) > 1000 else 60, opacity=0.15 if len(df) > 1000 else 0.7, color=TIER["muted"])
+            .encode(
+                x=alt.X("x:Q", title="CHF spent", axis=alt.Axis(format="~s", tickCount=4)),
+                y=alt.Y("y:Q", title="rating" if i == 0 else None, scale=alt.Scale(domain=[1, 5])),
+            )
+        )
+        slope = row["slope (rating per CHF 10k)"]
+        line = dots.transform_regression("x", "y").mark_line(
+            strokeWidth=4, color=TIER["hot"] if slope < 0 else TIER["presentation"]
+        )
+        return (dots + line).properties(
+            width=190 if len(_views) > 2 else 430,
+            height=230,
+            title=alt.TitleParams(
+                row["what we plotted"],
+                subtitle=f"n {row['dots (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
+                fontSize=15,
+                subtitleFontSize=14,
+            ),
+        )
+
+    _panels = alt.hconcat(*[_panel(_i, _row, _view[1], _view[2]) for _i, (_row, _view) in enumerate(zip(_rows, _views, strict=True))])
+
+    if honest_view.value.startswith("A"):
+        _lesson = (
+            f"**$R^2$ climbed from {_rows[0]['R²']:.2f} to {_rows[-1]['R²']:.2f} and no new information entered "
+            f"the room.** The last panel has {_rows[-1]['dots (n)']} dots and a story you could put on a slide."
+        )
+        _more = mo.md(
+            f"""
+    Every panel is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
+    strengthen a relationship, it **deletes the disagreement** that was telling you the
+    relationship is weak.
+
+    This is why a goodness-of-fit number is meaningless without its sample size. Always read $R^2$
+    and $n$ together, which is why every panel prints both. The dashboard's *What goes with a good
+    rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
+            """
+        )
+    elif honest_view.value.startswith("B"):
         _down = [_c for _c, _row in zip(_cats, _rows[1:], strict=True) if _row["slope (rating per CHF 10k)"] < 0]
         _up = [_c for _c in _cats if _c not in _down]
-        _lesson = f"""
-    **The pooled line does not describe any of the groups.**
+        _lesson = (
+            f"**The pooled line does not describe the groups.** Pooled, the slope is positive. Inside "
+            f"{' and '.join(_down)} it points the other way (red); only {' and '.join(_up)} still slopes upward."
+        )
+        _more = mo.md(
+            f"""
+    The upward pooled line is mostly describing the gaps **between** categories: Services happen to
+    be expensive and well rated, while Hardware is mid-priced and rated worst.
 
-    Pooled, the slope is positive: spend more, be happier. Inside {" and ".join(_down)} it points
-    the other way, and only {" and ".join(_up)} still slopes upward. The upward pooled line is mostly
-    describing the gaps **between** categories: Services happen to be expensive and well rated,
-    while Hardware is mid-priced and rated worst.
-
-    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here
-    it reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap.
-    Three groups' worth of difference, wearing three thousand dots' worth of authority.
-    """
+    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here it
+    reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap. Three
+    groups' worth of difference, wearing three thousand dots' worth of authority.
+            """
+        )
     else:
-        _rows = [
-            _measure("all sales"),
-            _measure("every sale except Services", "sales WHERE category <> 'Services'"),
-        ]
-        _lesson = """
-    **One group out of three decided the direction of the answer.**
-
-    Remove Services and the slope flips sign: the finding reverses completely. Now look at the
-    $R^2$ column. It barely moved.
-
-    That is the warning worth leaving this chapter with. $R^2$ tells you how tightly the dots hug
-    the line. It never tells you whether the line was the right line to draw, and it will not
-    warn you when one group is carrying the entire result.
-    """
+        _lesson = (
+            "**One group out of three decided the direction of the answer.** Remove Services and the slope "
+            "flips sign, and $R^2$ barely moves."
+        )
+        _more = mo.md(
+            """
+    $R^2$ tells you how tightly the dots hug the line. It never tells you whether the line was the
+    right line to draw, and it will not warn you when one group is carrying the entire result.
+            """
+        )
 
     mo.vstack(
         [
-            static_table(_rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"),
+            chart_or_table(
+                tier_chart(_panels, "presentation"), _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"
+            ),
             mo.md(_lesson).callout(kind="warn"),
+            mo.accordion(
+                {
+                    "Why it happens": mo.vstack(
+                        [
+                            _more,
+                            mo.md(
+                                "*The lab reads the seed files directly, a notebook shortcut past the API; "
+                                "the dashboard asks the API.*"
+                            ),
+                        ]
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -4830,54 +5281,101 @@ def _(SEED_DIR, duckdb, honest_view, mo, static_table):
 
 @app.cell
 def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Honest Charts</h3>
+      <details>
+        <summary><strong>Q1:</strong> A slide shows a tight line and a high R². What do you ask first?</summary>
+        <p><strong>Answer:</strong> What one dot is, and how many there are. View A turns the same sales from a
+        weak per-sale relationship into a tight line of category averages, with no new information.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> When is it fair to drop a category?</summary>
+        <p><strong>Answer:</strong> When the reason is stated before you look at the result (a different
+        business, a data error), and both answers are shown. Dropping a group because it spoils the story is
+        exactly how view C reverses the finding.</p>
+      </details>
+    </div>
+    """)
+    return
+
+
+@app.cell
+def _(mo):
     mo.md(
         """
-    ### Wrap-up
+    ### Chapter 10 Conclusion
 
-    We built one data product, one tier at a time. The map from the start, filled in:
+    - Read a slope with its ± range, and $R^2$ with its $n$.
+    - $R^2$ says how close single points sit, not whether a trend exists.
+    - Averaging, splitting or dropping a group can reverse a finding without changing one row: say which you did.
+            """
+    ).callout(kind="success")
+    return
 
-    - **Data tier, where the bytes rest:** keep writes correct (ch. 1), pick a format (ch. 2),
-      choose a layout (ch. 3), shrink it (ch. 4), query it with DuckDB (ch. 5).
-    - **Logic tier, the rules and the API:** agree on a contract (ch. 6), check what comes in
-      with Pydantic (ch. 7), serve it with FastAPI (ch. 8).
-    - **Presentation tier, what people see:** choose a frontend (ch. 9), show the numbers
-      honestly (ch. 10).
 
-    Each tier only talks to its neighbour. Move the sales from Parquet files into a DuckDB
-    database and only the storage code in `sw03_demo_api.py` changes (the file names in `TABLES`
-    and `reset`, `read`, `write`), not one endpoint. Swap Streamlit for React and neither lower
-    tier notices.
-
-    If you remember one thing: correctness is designed in, not bought with a tool. Get it first,
-    then performance, then usability.
-    """
-    ).callout(kind="neutral")
+@app.cell
+def _(mo, tier_map):
+    _more = mo.md(
+        """
+    Move the sales from Parquet files into a DuckDB database and only the storage code in
+    `sw03_demo_api.py` changes (the file names in `TABLES` and `reset`, `read`, `write`), not one
+    endpoint. Swap Streamlit for React and neither lower tier notices.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Wrap-up: the Map, Filled In</h3>
+      {tier_map}
+      <p class="vis-caption">Each tier only talks to its neighbour, so any one can be replaced without
+      rewriting the others.</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-key">1</div><div class="tile-title">Correctness</div>
+          <p>Designed in, not bought with a tool. Get it first.</p></div>
+        <div class="tile"><div class="tile-key">2</div><div class="tile-title">Performance</div>
+          <p>Then make it fast.</p></div>
+        <div class="tile"><div class="tile-key">3</div><div class="tile-title">Usability</div>
+          <p>Then make it clear, and honest.</p></div>
+      </div>
+    </div>
+                """
+            ),
+            mo.accordion({"What replacing one tier would touch": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md("""
-    ## Some Useful Links
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    - [marimo docs](https://docs.marimo.io) · [gallery](https://marimo.io/gallery)
-    - [DuckDB](https://duckdb.org/docs) · [SQLite](https://www.sqlite.org/docs.html)
-    - [Apache Parquet](https://parquet.apache.org) · [Arrow](https://arrow.apache.org) ·
-      [Avro](https://avro.apache.org)
-    - [FastAPI](https://fastapi.tiangolo.com) · [Pydantic](https://docs.pydantic.dev) ·
-      [Streamlit](https://docs.streamlit.io)
-    - [OpenAPI spec](https://spec.openapis.org/oas/latest.html) ·
-      [HTTP semantics, RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) ·
-      [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes)
-    - [Dash gallery](https://dash.gallery/Portal/) · [React community](https://react.dev/community) ·
-      [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
-    """)
+    mo.vstack(
+        [
+            mo.md("## Some Useful Links"),
+            mo.md("""
+    <div class="tiles">
+      <div class="tile tier-data"><div class="tile-title">Data tier</div>
+        <p><a href="https://duckdb.org/docs">DuckDB</a> · <a href="https://www.sqlite.org/docs.html">SQLite</a> ·
+        <a href="https://parquet.apache.org">Apache&nbsp;Parquet</a> · <a href="https://arrow.apache.org">Arrow</a> ·
+        <a href="https://avro.apache.org">Avro</a></p></div>
+      <div class="tile tier-logic"><div class="tile-title">Logic tier</div>
+        <p><a href="https://fastapi.tiangolo.com">FastAPI</a> · <a href="https://docs.pydantic.dev">Pydantic</a> ·
+        <a href="https://spec.openapis.org/oas/latest.html">OpenAPI&nbsp;spec</a> ·
+        <a href="https://www.rfc-editor.org/rfc/rfc9110.html">HTTP semantics, RFC&nbsp;9110</a> ·
+        <a href="https://en.wikipedia.org/wiki/List_of_HTTP_status_codes">HTTP&nbsp;status&nbsp;codes</a></p></div>
+      <div class="tile tier-presentation"><div class="tile-title">Presentation tier</div>
+        <p><a href="https://docs.marimo.io">marimo&nbsp;docs</a> · <a href="https://marimo.io/gallery">gallery</a> ·
+        <a href="https://docs.streamlit.io">Streamlit</a> · <a href="https://dash.gallery/Portal/">Dash&nbsp;gallery</a> ·
+        <a href="https://react.dev/community">React&nbsp;community</a> ·
+        <a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask&nbsp;patterns</a></p></div>
+    </div>
+            """),
+        ],
+        gap=1,
+    )
     return
 
 
