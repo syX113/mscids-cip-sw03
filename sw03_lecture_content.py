@@ -223,6 +223,10 @@ def _(os):
     from PIL import Image, ImageDraw
     from pyarrow import feather
 
+    # Charts as SVG, not canvas: the slides are zoomed to fit the screen, and a canvas bitmap zoomed up blurs.
+    # Assigned, so the cell shows nothing (an output would become a slide of its own).
+    _ = alt.renderers.set_embed_options(renderer="svg")
+
     return (
         Image,
         ImageDraw,
