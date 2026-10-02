@@ -119,7 +119,7 @@ def exercise1_prompt(mo):
 def exercise1(mo):
     def build_intro_markdown(title, topic):
         # TODO (Exercise 1): edit the following line
-        markdown_text = ""  # ### FILL HERE ###
+        markdown_text = "### Welcome\nThis notebook practices **files, compression, and APIs**."
         widget = mo.md(markdown_text)
         return {"text": markdown_text, "widget": widget}
 
