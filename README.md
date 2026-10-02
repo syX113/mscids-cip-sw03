@@ -4,11 +4,11 @@ Course materials for SW03: a Marimo lecture notebook, exercises, a FastAPI demo,
 
 The lecture builds one data product in **three tiers**:
 
-| Tier | What it does | Chapters | Files |
+| Tier | What it does | Lecture parts | Files |
 | --- | --- | --- | --- |
-| 🗄️ Data | Where the bytes rest | 1-5 | `data/`, DuckDB and Parquet demos |
-| ⚙️ Logic | Rules and the API | 6-8 | `sw03_demo_api.py` |
-| 🖥️ Presentation | What people see | 9-10 | `sw03_demo_streamlit.py`, Marimo charts |
+| 🗄️ Data | Where the bytes rest | 1 (file formats), 2 (storage) | `data/`, DuckDB and Parquet demos |
+| ⚙️ Logic | Rules and the API | 3 (APIs) | `sw03_demo_api.py` |
+| 🖥️ Presentation | What people see | 4 (presentation frameworks) | `sw03_demo_streamlit.py`, Marimo charts |
 
 ---
 
@@ -138,7 +138,7 @@ Use separate terminals so each service stays running.
 | Terminal 3 | 🚀 FastAPI demo | `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
 | Terminal 4 (optional) | 🎛️ Streamlit demo | `streamlit run sw03_demo_streamlit.py` |
 
-Chapters 6 and 8 of the lecture talk to the API, so start Terminal 3 before those chapters.
+Part 3 of the lecture talks to the API, so start Terminal 3 before that part.
 The Streamlit demo needs the API too; its default base URL is `http://127.0.0.1:8000`.
 
 To stop a running process in a terminal: `Ctrl + C`.
@@ -162,7 +162,7 @@ slide in smaller text.
 
 ### Benchmarks run only when you click
 
-The benchmarks in the lecture notebook sit behind **Run** buttons: click a chapter's button to run
+The benchmarks in the lecture notebook sit behind **Run** buttons: click a slide's button to run
 its experiment.
 
 ### Check the API still works
@@ -213,7 +213,7 @@ routes give identical versions.
 | ⚡ `marimo: command not found` | Activate the environment first: `source .venv/bin/activate` (Windows: `.\.venv\Scripts\Activate.ps1`) |
 | 🚫 PowerShell blocks `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then activate again |
 | 🌐 API not reachable | Start it again: `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
-| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update the API base URL box in the lecture (chapter 6; chapter 8 shows the same box) and the Streamlit sidebar. |
+| 🔌 `Address already in use` / port taken | Something is still running on that port. Either press `Ctrl + C` in the old terminal, or pick another port: `--port 8001` for the API, `--server.port 8502` for Streamlit. If you change the API port, update the API base URL box in the lecture (Part 3; two slides share the same box) and the Streamlit sidebar. |
 | 🔄 Your API changes are gone | Expected: the API reseeds `data/` from `data/seed/` on every start, and with `--reload` on every saved `.py` file. Start it without `--reload` to keep your changes while you work. |
 | 📁 Wrong folder | `ls` (works in PowerShell too) should show `sw03_lecture_content.py`. If not, `cd` into `mscids-cip-sw03`. |
 

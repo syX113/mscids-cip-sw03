@@ -26,12 +26,12 @@ def cell_exercise_list(mo):
 
     1. Introduction: Create markdown output in marimo
     2. Introduction: Create a table preview and summary
-    3. File I/O (Chapter 2): Write and read CSV
-    4. File I/O (Chapters 2-3): Write and read Parquet, then compare its size to CSV
-    5. Compression (Chapter 4): Create a gzip report
-    6. Compression (Chapter 4): Compare gzip levels
-    7. API (Chapter 8): Create a small FastAPI app
-    8. API (Chapter 6): Call an endpoint and parse JSON
+    3. File I/O (Part 1): Write and read CSV
+    4. File I/O (Parts 1-2): Write and read Parquet, then compare its size to CSV
+    5. Compression (Part 2): Create a gzip report
+    6. Compression (Part 2): Compare gzip levels
+    7. API (Part 3): Create a small FastAPI app
+    8. API (Part 3): Call an endpoint and parse JSON
     """)
     return
 
@@ -171,7 +171,7 @@ def exercise2_solution(mo, sample_rows):
 @app.cell(hide_code=True)
 def exercise3_prompt(mo):
     mo.md(r"""
-    ## Exercise 3 (File I/O, Chapter 2): Write and Read CSV
+    ## Exercise 3 (File I/O, Part 1): Write and Read CSV
 
     Implement `write_and_read_csv(rows, file_path)`.
 
@@ -181,7 +181,7 @@ def exercise3_prompt(mo):
 
     Hint: `list(reader)` collects every row; count the rows you read back, not the ones you wrote.
 
-    Notice: CSV hands every value back as a string (Chapter 2), so `qty` 2 returns as `"2"`.
+    Notice: CSV hands every value back as a string (Part 1), so `qty` 2 returns as `"2"`.
     """)
     return
 
@@ -225,7 +225,7 @@ def exercise3_solution(Path, csv, sample_rows, tempfile):
 @app.cell(hide_code=True)
 def exercise4_prompt(mo):
     mo.md(r"""
-    ## Exercise 4 (File I/O, Chapters 2-3): Parquet and CSV Comparison
+    ## Exercise 4 (File I/O, Parts 1-2): Parquet and CSV Comparison
 
     Implement `write_parquet_and_compare(rows, parquet_path, csv_path)`.
 
@@ -287,7 +287,7 @@ def exercise4_solution(Path, sample_rows_bulk, tempfile, write_and_read_csv):
 @app.cell(hide_code=True)
 def exercise5_prompt(mo):
     mo.md(r"""
-    ## Exercise 5 (Compression, Chapter 4): Create gzip Report
+    ## Exercise 5 (Compression, Part 2): Create gzip Report
 
     Implement `gzip_report(text_payload, level=6)`.
 
@@ -333,7 +333,7 @@ def exercise5_solution(gzip, sample_text):
 @app.cell(hide_code=True)
 def exercise6_prompt(mo):
     mo.md(r"""
-    ## Exercise 6 (Compression, Chapter 4): Compare gzip Levels
+    ## Exercise 6 (Compression, Part 2): Compare gzip Levels
 
     Implement `compare_gzip_levels(text_payload, levels)`.
 
@@ -378,7 +378,7 @@ def exercise6_solution(gzip_report, sample_text):
 @app.cell(hide_code=True)
 def exercise7_prompt(mo):
     mo.md(r"""
-    ## Exercise 7 (API, Chapter 8): Create a FastAPI App
+    ## Exercise 7 (API, Part 3): Create a FastAPI App
 
     Implement `create_hello_api()`.
 
@@ -423,12 +423,12 @@ def exercise7_solution():
 @app.cell(hide_code=True)
 def exercise8_prompt(mo):
     mo.md(r"""
-    ## Exercise 8 (API, Chapter 6): Call an Endpoint and Parse JSON
+    ## Exercise 8 (API, Part 3): Call an Endpoint and Parse JSON
 
     Implement `call_json_endpoint(base_url, path, opener)`. `opener` works like
     `urllib.request.urlopen`: call it with a URL and it returns a response with `.read()`
-    and `.status`. `urlopen` is the standard library's HTTP client. The `requests` package, which
-    the lecture's labs use behind the scenes, spells the same steps `.status_code` and `.json()`
+    and `.status`. `urlopen` is the standard library's HTTP client. The `requests` package, used
+    in Part 3 of the lecture, spells the same steps `.status_code` and `.json()`
     instead of `.status` and `.read()` plus `json.loads`.
 
     Expected behavior:

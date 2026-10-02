@@ -28,10 +28,7 @@ def _():
     import random
     import re
     import sqlite3
-    import statistics
     import tempfile
-    import threading
-    import time
     import timeit
     from pathlib import Path
 
@@ -51,10 +48,7 @@ def _():
         random,
         re,
         sqlite3,
-        statistics,
         tempfile,
-        threading,
-        time,
         timeit,
     )
 
@@ -102,21 +96,15 @@ def _(mo):
       <div class="eyebrow">CIP - SW03 Lecture Studio</div>
       <div class="hero-title">Storage, Serialization, APIs & Apps</div>
       <div class="hero-subtitle">
-        <strong>EdgeWorks</strong> sells sensors, software and services in eight countries. Its head of
-        sales, Mia, wants a sales dashboard she can trust. Today we are EdgeWorks' data team, and we
-        build it from the bottom up: where the data rests, what serves it, and what people look at.
+        Case study: <strong>EdgeWorks</strong>, a vendor of sensors, software and services in eight
+        countries, requires a reliable sales dashboard. The lecture follows its sales data from a file,
+        through an API, to a dashboard.
       </div>
       <div class="hero-pills">
-        <span class="pill">Locks & ACID</span>
-        <span class="pill">Serialization</span>
-        <span class="pill">Row vs Column</span>
-        <span class="pill">Compression</span>
-        <span class="pill">DuckDB & Indexes</span>
-        <span class="pill">REST Contract</span>
-        <span class="pill">Pydantic</span>
-        <span class="pill">FastAPI</span>
-        <span class="pill">Frontends</span>
-        <span class="pill">Honest Charts</span>
+        <span class="pill">Part 1 · File formats and serialization</span>
+        <span class="pill">Part 2 · Storage: layout, compression, queries</span>
+        <span class="pill">Part 3 · APIs</span>
+        <span class="pill">Part 4 · Presentation frameworks</span>
       </div>
     </div>
     """)
@@ -124,15 +112,15 @@ def _(mo):
 
 
 @app.cell
-def _(in_plain, mia_asks, mo, shop_sales, static_table):
+def _(guiding_question, in_plain, mo, shop_sales, static_table):
     _months = shop_sales["sale_date"].dt.to_period("M").nunique()
     _sample = shop_sales.sort_values("sale_id").head(4)[
         ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"]
     ]
     mo.vstack(
         [
-            mo.md("## Meet EdgeWorks"),
-            mia_asks("I want one dashboard for our sales. Numbers I can trust, fast, and on my laptop."),
+            mo.md("## Case Study: EdgeWorks"),
+            guiding_question("How does revenue per region get from the sales file onto a dashboard?"),
             mo.hstack(
                 [
                     mo.stat(f"{len(shop_sales):,}", label="sales", caption=f"over {_months} months", bordered=True),
@@ -144,11 +132,11 @@ def _(in_plain, mia_asks, mo, shop_sales, static_table):
             ),
             static_table(
                 _sample.assign(sale_date=_sample["sale_date"].dt.date).to_dict("records"),
-                label="Every sale is one row like these (data/seed/sales.parquet)",
+                label="Each sale is one row (sample from data/seed/sales.parquet)",
             ),
             in_plain(
-                "Every example today uses these real rows. When something goes wrong in a lab, it goes wrong "
-                "on EdgeWorks' sales, in numbers Mia would see."
+                "All examples in this lecture use this data set. Each part answers one step of the guiding question: "
+                "how the data is stored (Parts 1 and 2), how it is served (Part 3) and how it is presented (Part 4)."
             ),
         ],
         gap=0.8,
@@ -157,9 +145,28 @@ def _(in_plain, mia_asks, mo, shop_sales, static_table):
 
 
 @app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Learning Objectives</h3>
+      <p class="vis-caption">After this lecture, you can</p>
+      <ol class="question-list">
+        <li class="tier-data">compare CSV, JSON, Avro, Parquet, Arrow and Pickle by readability, size, speed, types, schema support and safety;</li>
+        <li class="tier-data">explain why a columnar layout and compression make analytical queries fast, and query Parquet files with SQL;</li>
+        <li class="tier-data">explain what a database transaction adds compared with a plain file;</li>
+        <li class="tier-logic">describe an HTTP request and its response, and retrieve data from an API with Python;</li>
+        <li class="tier-logic">build a small API with FastAPI that validates its input with Pydantic;</li>
+        <li class="tier-presentation">compare Streamlit, marimo and Dash, and choose a framework for a given dashboard.</li>
+      </ol>
+    </div>
+    """)
+    return
+
+
+@app.cell
 def _(box, diagram, label_w, mo):
     def _tier(y, tier, name, role, chapters):
-        """One tier band: name and role on the left, then one chip per chapter."""
+        """One tier band: name and role on the left, then one chip per topic, numbered by part."""
         parts = [
             f'<g class="tier-{tier}"><rect class="dg-tier" x="0" y="{y}" width="1060" height="96" rx="16"/>',
             f'<text x="24" y="{y + 40}" font-size="21" font-weight="700">{name}</text>',
@@ -175,28 +182,29 @@ def _(box, diagram, label_w, mo):
     # Returned too, so the wrap-up can show the same map again.
     tier_map = diagram(
         '<text x="920" y="22" text-anchor="middle" font-weight="700">request</text>'
-        '<text x="1000" y="22" text-anchor="middle" font-weight="700">answer</text>'
-        + _tier(40, "presentation", "Presentation tier", "Mia's dashboard", [("9", "frontend"), ("10", "honest charts")])
-        + _tier(172, "logic", "Logic tier", "the sales API", [("6", "contract"), ("7", "validate input"), ("8", "serve over HTTP")])
-        + _tier(304, "data", "Data tier", "the sales files", [("1", "correct writes"), ("2", "format"), ("3", "layout"), ("4", "compression"), ("5", "query")])
-        # one hop per neighbour: down for the request, up for the answer
+        '<text x="1000" y="22" text-anchor="middle" font-weight="700">response</text>'
+        + _tier(40, "presentation", "Presentation tier", "the sales dashboard", [("4", "frameworks"), ("4", "analysis choices")])
+        + _tier(172, "logic", "Logic tier", "the sales API", [("3", "HTTP"), ("3", "consume"), ("3", "FastAPI"), ("3", "validation")])
+        + _tier(304, "data", "Data tier", "the sales files", [("1", "formats"), ("2", "layout"), ("2", "compression"), ("2", "queries"), ("2", "transactions")])
+        # one hop per neighbour: down for the request, up for the response
         + '<path class="dg-edge" d="M920 88 V 166"/><path class="dg-edge" d="M920 220 V 298"/>'
         + '<path class="dg-edge" d="M1000 352 V 274"/><path class="dg-edge" d="M1000 220 V 142"/>'
         + '<circle class="dg-dot" r="9"><animateMotion dur="5s" repeatCount="indefinite" path="M920 88 V 352 H 1000 V 88 Z"/></circle>',
         width=1060,
         height=420,
-        label="Three tiers, stacked: presentation (chapters 9 and 10) on logic (6 to 8) on data (1 to 5). "
-        "A request travels down one tier at a time and the answer comes back up the same way.",
+        label="Three tiers, stacked: presentation (Part 4) on logic (Part 3) on data (Parts 1 and 2). "
+        "A request travels down one tier at a time and the response comes back up the same way.",
     )
     mo.md(f"""
     <div class="section-card">
-      <h3>The Map: Mia's Dashboard Is Three Tiers</h3>
+      <h3>Overview: A Three-Tier Architecture</h3>
       {tier_map}
-      <p class="vis-caption">The <strong>data tier</strong> keeps the sales files
+      <p class="vis-caption">The <strong>data tier</strong> stores the sales files
       (<code>data/*.parquet</code>), the <strong>logic tier</strong> is the sales API
-      (<code>sw03_demo_api.py</code>), the <strong>presentation tier</strong> is the dashboard Mia
-      opens (<code>sw03_demo_streamlit.py</code>). Each talks only to its neighbour, so any one can be
-      replaced without rewriting the others.</p>
+      (<code>sw03_demo_api.py</code>), and the <strong>presentation tier</strong> is the dashboard
+      (<code>sw03_demo_streamlit.py</code>). Each tier communicates only with its neighbour, so any one
+      of them can be replaced without changing the others. The numbers on the chips are the parts of this
+      lecture.</p>
     </div>
     """)
     return (tier_map,)
@@ -206,38 +214,16 @@ def _(box, diagram, label_w, mo):
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Ten Questions Mia Will Ask Today</h3>
-      <ol class="mia-list">
-        <li class="tier-data"><strong>Locks</strong>: two reps booked an order at the same moment. Why is today's order count too low?</li>
-        <li class="tier-data"><strong>Formats</strong>: we send sales files to partners. Which format, and why did the CSV turn store code 007 into 7?</li>
-        <li class="tier-data"><strong>Layout</strong>: "total revenue" reads one column. Why does it read the whole file?</li>
-        <li class="tier-data"><strong>Compression</strong>: the sales history fills the disk. Can we shrink it without losing a cent?</li>
-        <li class="tier-data"><strong>DuckDB</strong>: can I get revenue per region straight from the files, with no database server?</li>
-        <li class="tier-logic"><strong>REST</strong>: the dashboard and the partners' scripts both need the sales. How do they ask for them?</li>
-        <li class="tier-logic"><strong>Pydantic</strong>: someone sent a sale with rating 9 and 0 units. How do we stop it at the door?</li>
-        <li class="tier-logic"><strong>FastAPI</strong>: how do partners learn what our API accepts, without emailing us?</li>
-        <li class="tier-presentation"><strong>Frontends</strong>: what should we build the dashboard with?</li>
-        <li class="tier-presentation"><strong>Honest charts</strong>: does spending more make customers happier? Mia wants a chart for the board.</li>
-      </ol>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>How to Read This Notebook</h3>
+      <h3>Structure of Each Part</h3>
       <div class="tiles">
-        <div class="tile"><div class="tile-key">?</div><div class="tile-title">Mia asks</div>
-          <p>Every chapter starts with a real question from EdgeWorks' head of sales.</p></div>
-        <div class="tile"><div class="tile-key">=</div><div class="tile-title">In plain words</div>
-          <p>Every idea in one or two everyday sentences, before any formula.</p></div>
-        <div class="tile"><div class="tile-key">&#9654;</div><div class="tile-title">Try it</div>
-          <p>A lab on EdgeWorks' sales. Slow ones wait for their Run button: guess first, then run.</p></div>
-        <div class="tile"><div class="tile-key">&#8230;</div><div class="tile-title">Discussion</div>
-          <p>Questions for the room: click one to reveal the answer.</p></div>
+        <div class="tile"><div class="tile-key">?</div><div class="tile-title">Guiding question</div>
+          <p>Each part starts from one question of the EdgeWorks case.</p></div>
+        <div class="tile"><div class="tile-key">=</div><div class="tile-title">Key idea</div>
+          <p>The central concept in one or two sentences.</p></div>
+        <div class="tile"><div class="tile-key">&#9654;</div><div class="tile-title">Experiment</div>
+          <p>A live analysis of the sales data; longer benchmarks run on demand.</p></div>
+        <div class="tile"><div class="tile-key">&#8230;</div><div class="tile-title">Discussion and summary</div>
+          <p>Questions with expandable answers, then the key points of the part.</p></div>
       </div>
     </div>
     """)
@@ -259,7 +245,6 @@ def _(os):
     import pyarrow.parquet as pq
     import pydantic
     import requests
-    from PIL import Image, ImageDraw
     from pyarrow import feather
 
     # Charts as SVG, not canvas: the slides are zoomed to fit the screen, and a canvas bitmap zoomed up blurs.
@@ -267,8 +252,6 @@ def _(os):
     _ = alt.renderers.set_embed_options(renderer="svg")
 
     return (
-        Image,
-        ImageDraw,
         alt,
         duckdb,
         fastavro,
@@ -309,7 +292,7 @@ def _(SEED_DIR, pd):
 
 
 @app.cell
-def _(mo, requests, timeit):
+def _(html, mo, requests, timeit):
     def format_bytes(num_bytes):
         """Human-friendly byte counts."""
         value = float(num_bytes)
@@ -373,32 +356,46 @@ def _(mo, requests, timeit):
         """A lab result: the chart that shows the finding, and the exact numbers one click away."""
         return mo.ui.tabs({"Chart": chart, "Table": static_table(rows, label=label)})
 
-    def mia_asks(question: str):
-        """Mia, EdgeWorks' head of sales, asking the question a chapter or a lab answers (markdown)."""
-        return mo.Html(f'<div class="mia-asks"><span class="mia-who">Mia, head of sales</span>{mo.md(question).text}</div>')
+    def guiding_question(question: str):
+        """The question from the EdgeWorks case that a part or an experiment answers (markdown)."""
+        return mo.Html(
+            f'<div class="guiding-q"><span class="guiding-q-label">Guiding question</span>{mo.md(question).text}</div>'
+        )
 
     def in_plain(text: str):
-        """The idea in one or two everyday sentences (markdown), shown before any formula."""
-        return mo.Html(f'<div class="in-plain"><span class="in-plain-label">In plain words</span>{mo.md(text).text}</div>')
+        """The key idea in one or two sentences (markdown), shown before any formula."""
+        return mo.Html(f'<div class="in-plain"><span class="in-plain-label">Key idea</span>{mo.md(text).text}</div>')
 
-    def chapter_intro(tier: str, question: str, context: str):
-        """A chapter's opening card: the tier badge, Mia's question in large type, one line of markdown context."""
+    def chapter_intro(tier: str, question: str, context: str, topics: tuple[str, ...] = ()):
+        """A part's opening card: the tier badge, the guiding question in large type, one line of context, the topics."""
+        pills = "".join(f'<span class="pill">{html.escape(_t)}</span>' for _t in topics)
         return mo.Html(
             f'<div class="key-q tier-{tier}"><span class="tier-badge">{tier} tier</span>'
-            f'<span class="mia-who key-q-who">Mia asks</span>'
-            f'<p class="key-q-text">{question}</p>{mo.md(context).text}</div>'
+            f'<span class="guiding-q-label key-q-who">Guiding question</span>'
+            f'<p class="key-q-text">{question}</p>{mo.md(context).text}'
+            + (f'<div class="hero-pills">{pills}</div>' if pills else "")
+            + "</div>"
+        )
+
+    def card_box(x, y, title, sub, cls="dg-box", w=235, h=72):
+        """SVG for a two-line box at (x, y): a bold title over a muted line."""
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 29}" text-anchor="middle" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 53}" text-anchor="middle">{sub}</text>'
         )
 
     return (
         TIER,
         best_seconds,
         call_api,
+        card_box,
         chapter_intro,
         chart_or_table,
         format_bytes,
         format_ms,
+        guiding_question,
         in_plain,
-        mia_asks,
         static_table,
         tier_chart,
     )
@@ -408,764 +405,20 @@ def _(mo, requests, timeit):
 def _(chapter_intro, mo):
     mo.vstack(
         [
-            mo.md("## 1. File Locks vs Databases (ACID)"),
+            mo.md("## Part 1 · File Formats and Serialization"),
             chapter_intro(
                 "data",
-                "Two reps booked an order at the same moment. Why is today's order count too low?",
-                "The very bottom of the data tier: before any format or layout, every save has to land. We lose an "
-                "order on purpose, then keep it: first with a lock, then with a database.",
-            ),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(in_plain, mo, shop_sales):
-    # The story's day: EdgeWorks' busiest day of January 2026, its last two orders booked at the same moment.
-    _per_day = shop_sales[shop_sales["sale_date"].dt.to_period("M") == "2026-01"].groupby("sale_date").size()
-    _day, ch1_day_orders = _per_day.idxmax(), int(_per_day.max())
-    _before = ch1_day_orders - 2
-    mo.vstack(
-        [
-            mo.md("### How an order goes missing from the count"),
-            in_plain(
-                "Mia's dashboard shows **orders booked today**, a number kept in one file. Every booking updates "
-                "it in three steps: **read** the number, **add** one, **save** it back. If two reps both read "
-                "before either one saves, both save the same number, and one order drops out of the count. "
-                "This is called a **lost update**."
-            ),
-            mo.md(
-                f"""
-    <div class="section-card flow-card">
-      <div class="lost-update-wrap">
-        <div class="lost-update-grid">
-          <div class="lu-header">Step</div>
-          <div class="lu-header">Rep A books order {_before + 1}</div>
-          <div class="lu-header">Rep B books order {_before + 2}</div>
-          <div class="lu-header">Orders today (the file)</div>
-
-          <div class="lu-step">1</div>
-          <div class="lu-event lu-read">reads {_before}</div>
-          <div class="lu-event lu-read">reads {_before}</div>
-          <div class="lu-state">{_before}</div>
-
-          <div class="lu-step">2</div>
-          <div class="lu-event lu-write">saves {_before} + 1 = {_before + 1}</div>
-          <div class="lu-event">adds 1 to the {_before} it read</div>
-          <div class="lu-state">{_before + 1}</div>
-
-          <div class="lu-step">3</div>
-          <div class="lu-event lu-idle">done</div>
-          <div class="lu-event lu-stale">saves {_before} + 1 = {_before + 1}</div>
-          <div class="lu-state lu-problem">{_before + 1} (A's order overwritten)</div>
-        </div>
-      </div>
-      <div class="flow-note"><strong>{_day.day} {_day:%B %Y}, the busiest day that month: {ch1_day_orders} orders
-      booked, {ch1_day_orders - 1} counted.</strong> Both orders are in the order book; only the count lost one.</div>
-    </div>
-                """
-            ),
-            mo.md(
-                "**What to notice:** nobody saw an error. Each rep did the right thing; the timing did the damage. "
-                "B's save is **stale**: it is based on a number that changed after B read it."
-            ),
-            mo.md(
-                f"**In one line:** lost orders = orders booked − orders counted, here {ch1_day_orders} − "
-                f"{ch1_day_orders - 1} = 1."
-            ),
-        ],
-        gap=0.8,
-    )
-    return (ch1_day_orders,)
-
-
-@app.cell
-def _(mo):
-    ch1_sim_orders = mo.ui.slider(1, 6, value=2, label="Orders each rep books", show_value=True, debounce=True)
-    ch1_sim_timing = mo.ui.slider(1, 999, value=7, label="Timing (try another)", show_value=True, debounce=True)
-    return ch1_sim_orders, ch1_sim_timing
-
-
-@app.cell
-def _(
-    TIER,
-    alt,
-    ch1_day_orders,
-    ch1_sim_orders,
-    ch1_sim_timing,
-    chart_or_table,
-    mo,
-    pd,
-    random,
-    tier_chart,
-):
-    _start = ch1_day_orders - 2  # where the story above left the count
-    _rng = random.Random(ch1_sim_timing.value)
-    _ops = {_rep: ["read", "save"] * ch1_sim_orders.value for _rep in "AB"}
-    _read, _count, _log = {}, _start, []
-    while _ops["A"] or _ops["B"]:
-        _rep = _rng.choice([_r for _r in "AB" if _ops[_r]])
-        _action = _ops[_rep].pop(0)
-        _before = _count
-        if _action == "read":
-            _read[_rep] = _count
-        else:
-            _count = _read[_rep] + 1
-        _log.append(
-            {
-                "step": len(_log) + 1,
-                "rep": f"rep {_rep}",
-                "action": _action,
-                "count before": _before,
-                "number the rep read": _read[_rep],
-                "count after": _count,
-                "note": "stale save" if _action == "save" and _read[_rep] != _before else "",
-            }
-        )
-
-    _booked = _start + 2 * ch1_sim_orders.value
-    _df = pd.DataFrame(_log)
-    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
-    # A read shows the number it got, a save the number it left; short labels once the steps get narrow.
-    _short = len(_df) > 12
-    _df["label"] = [
-        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
-        for _a, _v in zip(_df["action"], _df["count after"], strict=True)
-    ]
-    _df["orders booked"] = _start + (_df["action"] == "save").cumsum()
-    _df["orders counted"] = _df["count after"]
-    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
-    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("rep:N", title=None, axis=alt.Axis(minExtent=60)))
-    _lanes = (
-        _lane.mark_rect(cornerRadius=8).encode(
-            color=alt.Color(
-                "kind:N",
-                title=None,
-                scale=alt.Scale(domain=["read", "save", "stale save"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
-            )
-        )
-        # fixed text colours: the fills above are the same in both themes
-        + _lane.mark_text().encode(
-            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
-        )
-    ).properties(width="container", height=110)
-    _series = ["orders counted", "orders booked"]
-    _counter = (
-        alt.Chart(_df)
-        .transform_fold(_series, as_=["series", "value"])
-        .mark_line(point=True, strokeWidth=3)
-        .encode(
-            x=_x,
-            y=alt.Y("value:Q", title="orders today", scale=alt.Scale(zero=False), axis=alt.Axis(minExtent=60)),
-            color=alt.Color("series:N", title=None, scale=alt.Scale(domain=_series, range=[TIER["data"], TIER["muted"]])),
-            strokeDash=alt.StrokeDash("series:N", title=None, scale=alt.Scale(domain=_series, range=[[1, 0], [6, 4]])),
-        )
-        .properties(width="container", height=170)
-    )
-    _stale = int((_df["note"] == "stale save").sum())
-
-    mo.vstack(
-        [
-            mo.md("### Try it: rep A and rep B, step by step"),
-            mo.md(
-                f"Both reps start from the count of {_start} and book their orders. Every booking is two steps, "
-                "**read** the count, then **save** it plus one. The timing slider shuffles who moves when, as on "
-                "a real day: neither rep sees the other's screen."
-            ),
-            mo.hstack([ch1_sim_orders, ch1_sim_timing], widths="equal", gap=2),
-            mo.hstack(
-                [
-                    mo.stat(_booked, label="orders booked", bordered=True),
-                    mo.stat(_count, label="orders counted", bordered=True),
-                    mo.stat(_booked - _count, label="lost from the count", bordered=True),
-                ],
-                widths="equal",
-            ),
-            chart_or_table(
-                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
-                _log,
-                label="Every step, in order",
-            ),
-            mo.md(
-                f"**What to notice:** {_stale} red stale save{'s' if _stale != 1 else ''}. A save turns red when the "
-                "other rep saved between its read and its save, and it erases every order saved in that gap. "
-                "Try other timings: the count is only right when no save is stale."
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(box, diagram, in_plain, mo):
-    # Three reps who ask for the pen, one script that never does.
-    _people = "".join(
-        box(0, _y, _label, w=330, cls=_cls)
-        for _y, _label, _cls in [
-            (20, "rep 1 · holds the pen, books", "dg-tier"),
-            (92, "rep 2 · waits for the pen", "dg-box"),
-            (164, "rep 3 · waits for the pen", "dg-box"),
-            (240, "import script · never asks", "dg-box dg-hot"),
-        ]
-    )
-    _lock_map = diagram(
-        _people
-        + box(440, 64, "one pen per file", w=250, h=104, cls="dg-tier")
-        + '<text class="dg-muted" x="565" y="194" text-anchor="middle">the OS hands it out: flock</text>'
-        + box(820, 92, "orders_today.txt", w=200, h=48)
-        + '<path class="dg-edge dg-ok" d="M330 42 C 390 42, 380 92, 434 92"/>'
-        + '<path class="dg-edge" d="M330 114 H 434"/>'
-        + '<path class="dg-edge" d="M330 186 C 390 186, 380 140, 434 140"/>'
-        + '<path class="dg-edge dg-ok dg-flow" d="M690 116 H 814"/>'
-        + '<path class="dg-edge dg-hot" d="M330 262 H 920 V 146"/>'
-        + '<text class="dg-hot" x="625" y="250" text-anchor="middle">no flock call: saves straight away</text>',
-        width=1020,
-        height=290,
-        label="Three reps queue for one pen (the OS file lock); only the rep holding it saves to orders_today.txt. "
-        "An import script never asks for the pen and saves to the file directly.",
-        tier="data",
-    )
-    _more = mo.md(
-        """
-    - The OS takes the pen back from a program that crashes, so a crash in the middle of a booking does
-      **not** block the file forever.
-    - There is a second kind of lock that many may hold at once, for reading but not saving (`LOCK_SH`).
-      The lab below asks for the exclusive one, `LOCK_EX`.
-    - The pen lies on *one* desk. Two computers sharing a network drive each have their own desk, which is
-      why file locks are unreliable on a network filesystem.
-    - **Where it breaks:** the rule is only as good as the people. A database does not rely on an
-      agreement: every write goes through its lock, whether the program asked or not.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md("### A file lock is one booking pen at the sales desk"),
-            in_plain(
-                "A **file lock** lets one program at a time work on a file. Picture one pen at the sales desk: "
-                "only the rep holding it may update the count, and the others wait for it. The operating system "
-                "(OS) hands out the pen when a program calls `flock`, and only to programs that ask."
-            ),
-            _lock_map,
-            mo.md(
-                "**What to notice:** the import script at the bottom. A file lock is an agreement, not a door: "
-                "a program that never asks for the pen saves anyway."
-            ),
-            mo.accordion({"Where the picture holds, and where it breaks": _more}),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(in_plain, mo):
-    mo.vstack(
-        [
-            mo.md("### What a database promises: ACID"),
-            in_plain(
-                "A database groups changes into a **transaction**: a few steps it carries out as one unit, then "
-                "**commits** them (keeps them all) or **rolls them back** (undoes them all). ACID names four "
-                "promises a database makes about every transaction. A plain file makes none of them."
-            ),
-            mo.md(
-                """
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity: all or nothing</div>
-        <p>Moving a sale from Europe to Africa changes both region totals, or neither.</p>
-        <p class="tile-bad">File: a crash in between drops the sale from total revenue.</p></div>
-      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency: rules always hold</div>
-        <p>A rule such as "units sold is at least 1" is checked on every save.</p>
-        <p class="tile-bad">File: nothing checks; a sale with 0 units is saved.</p></div>
-      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation: one after the other</div>
-        <p>Two reps booking at once both get counted, as if one booked after the other.</p>
-        <p class="tile-bad">File: one save overwrites the other; the count is too low.</p></div>
-      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability: saved stays saved</div>
-        <p>A booking the rep saw confirmed survives a power cut a second later.</p>
-        <p class="tile-bad">File: only after flush and fsync, which force the bytes onto the disk.</p></div>
-    </div>
-                """
-            ),
-            mo.md(
-                "**What to notice:** the next lab tests **I**, reps booking at once. The one after it tests **A**, "
-                "a crash halfway through a change."
-            ),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    # Checkboxes, not a multiselect: the room sees every way of counting and whether it is on.
-    ch1_strategy_labels = {
-        "no_lock": "file, no lock",
-        "thread_lock": "file + lock in one program",
-        "file_lock": "file + OS lock (the pen)",
-        "sqlite_naive": "database: read, +1, save",
-        "sqlite": "database: one UPDATE",
-    }
-    ch1_strategies = mo.ui.dictionary(
-        {_key: mo.ui.checkbox(value=_key != "thread_lock", label=_label) for _key, _label in ch1_strategy_labels.items()}
-    )
-    ch1_reps = mo.ui.slider(2, 8, value=4, label="Sales reps booking at once", show_value=True, debounce=True)
-    # Capped so the slowest setting (8 x 120 x 2 ms, paid in a queue by flock) stays near 3 s in all.
-    ch1_orders_per_rep = mo.ui.slider(10, 120, step=5, value=35, label="Orders each rep books", show_value=True, debounce=True)
-    ch1_pause = mo.ui.slider(0, 2, value=1, step=1, label="Pause between reading and saving (ms)", show_value=True, debounce=True)
-    ch1_run_race = mo.ui.run_button(label="Run the bookings", kind="success")
-    return (
-        ch1_orders_per_rep,
-        ch1_pause,
-        ch1_reps,
-        ch1_run_race,
-        ch1_strategies,
-        ch1_strategy_labels,
-    )
-
-
-@app.cell
-def _(
-    Path,
-    TIER,
-    alt,
-    ch1_orders_per_rep,
-    ch1_pause,
-    ch1_reps,
-    ch1_run_race,
-    ch1_strategies,
-    ch1_strategy_labels,
-    chart_or_table,
-    mo,
-    pd,
-    shop_sales,
-    sqlite3,
-    tempfile,
-    threading,
-    tier_chart,
-    time,
-):
-    _notes = mo.md(
-        """
-    - **file, no lock**: every rep reads and saves the count file whenever they like.
-    - **file + lock in one program**: a Python `threading.Lock`, a pen only the reps inside this one program
-      can see. A second program would not wait for it.
-    - **file + OS lock (the pen)**: `flock`, held from the read to the save.
-    - **database: read, +1, save**: SQLite, but the rep reads the count, adds one in Python and saves the
-      result: the same gap as the file.
-    - **database: one UPDATE**: `UPDATE counter SET value = value + 1` in a transaction: the database reads
-      and saves in one step.
-
-    The **pause** is the time between reading the count and saving it. It widens the gap the race lives in,
-    and a locked strategy pays it one rep at a time.
-        """
-    )
-    _target = ch1_reps.value * ch1_orders_per_rep.value
-    _january = int((shop_sales["sale_date"].dt.to_period("M") == "2026-01").sum())
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: reps booking at once, five ways to keep the count"),
-            mo.md(
-                "Every rep books their orders as fast as they can, all at the same time, and each booking adds one "
-                f"to the same count. The start setting replays January 2026: 4 reps share its {_january} orders, "
-                "35 each. Tick the ways of keeping the count to compare."
-            ),
-            mo.hstack([ch1_reps, ch1_orders_per_rep, ch1_pause], widths="equal", gap=2),
-            mo.hstack(
-                [ch1_strategies.hstack(justify="start", gap=1.5, wrap=True), ch1_run_race],
-                justify="space-between",
-                align="center",
-            ),
-            mo.accordion({"What each way of keeping the count does": _notes}),
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not ch1_run_race.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    f"**Predict first:** {ch1_reps.value} reps × {ch1_orders_per_rep.value} orders = {_target:,} "
-                    "bookings. Which ways of keeping the count reach that number? Then click **Run the bookings**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-
-    from concurrent.futures import ThreadPoolExecutor as _Pool
-    from contextlib import nullcontext as _nullcontext
-
-    try:
-        import fcntl as _fcntl
-    except ImportError:  # Windows has no flock
-        _fcntl = None
-
-    _reps, _orders, _pause_s = ch1_reps.value, ch1_orders_per_rep.value, ch1_pause.value / 1000
-
-    def _race(rep):
-        """Run `rep` in every thread at once; return the seconds until the last one finished."""
-        start = time.perf_counter()
-        with _Pool(_reps) as pool:
-            for future in [pool.submit(rep) for _ in range(_reps)]:
-                future.result()  # a rep that crashed raises here instead of passing as a lost booking
-        return time.perf_counter() - start
-
-    def _file_counter(path, mode):
-        # Fixed width: nobody ever reads an empty or half-written number, so the only race
-        # left is the read-then-save gap this demo is about.
-        path.write_text(f"{0:010d}")
-        guard = threading.Lock() if mode == "thread_lock" else _nullcontext()
-
-        def rep():
-            for _ in range(_orders):
-                with guard, path.open("r+") as f:
-                    if mode == "file_lock" and _fcntl:
-                        _fcntl.flock(f, _fcntl.LOCK_EX)  # released when the file closes
-                    current = int(f.read())
-                    if _pause_s:
-                        time.sleep(_pause_s)
-                    f.seek(0)
-                    f.write(f"{current + 1:010d}")
-
-        return _race(rep), int(path.read_text())
-
-    def _sqlite_counter(path, one_statement):
-        con = sqlite3.connect(path)
-        con.executescript(
-            "PRAGMA journal_mode=WAL; CREATE TABLE counter (value INTEGER NOT NULL); INSERT INTO counter VALUES (0);"
-        )
-        con.close()
-
-        def rep():
-            conn = sqlite3.connect(path, timeout=30, isolation_level=None)
-            conn.execute("PRAGMA synchronous=OFF")  # this demo is about isolation, not durability
-            for _ in range(_orders):
-                if one_statement:
-                    conn.execute("BEGIN IMMEDIATE")
-                    conn.execute("UPDATE counter SET value = value + 1")
-                    conn.execute("COMMIT")
-                else:
-                    (current,) = conn.execute("SELECT value FROM counter").fetchone()
-                    if _pause_s:
-                        time.sleep(_pause_s)
-                    conn.execute("UPDATE counter SET value = ?", (current + 1,))
-            conn.close()
-
-        seconds = _race(rep)
-        con = sqlite3.connect(path)
-        (value,) = con.execute("SELECT value FROM counter").fetchone()
-        con.close()
-        return seconds, value
-
-    _labels = dict(ch1_strategy_labels)
-    if not _fcntl:
-        _labels["file_lock"] = "file, no OS lock on Windows"
-    _rows = []
-    # No mo.status.spinner here: as a slide, a cell whose output blanks while it runs drops into marimo's edit preview.
-    with tempfile.TemporaryDirectory() as _tmp:
-        for _key, _label in _labels.items():
-            if not ch1_strategies.value[_key]:
-                continue
-            if _key.startswith("sqlite"):
-                _seconds, _counted = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
-            else:
-                _seconds, _counted = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
-            _rows.append(
-                {
-                    "way of keeping the count": _label,
-                    "orders booked": _target,
-                    "orders counted": _counted,
-                    "lost from the count": _target - _counted,
-                    "time taken (ms)": round(_seconds * 1000, 1),
-                }
-            )
-    mo.stop(not _rows, mo.vstack([_top, mo.md("Tick at least one way of keeping the count.").callout(kind="warn")]))
-
-    _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all counted" for _lost in _df["lost from the count"]]
-    _y = alt.Y("way of keeping the count:N", sort=None, title=None)
-    # room to the right of the longest bar for its "all counted" label
-    _x = alt.X("orders counted:Q", title="orders counted", scale=alt.Scale(domain=[0, _target * 1.2], nice=False))
-    _reached = alt.Chart(_df).encode(y=_y, x=_x)
-    _counts = (
-        _reached.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum['lost from the count'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
-        )
-        + _reached.mark_text(align="left", dx=6).encode(text="verdict:N")
-        + alt.Chart(pd.DataFrame({"target": [_target]}))
-        .mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"])
-        .encode(x="target:Q")
-    ).properties(width="container", height=42 * len(_df), title=f"Orders counted (dashed line: {_target:,} booked)")
-    _durations = (
-        alt.Chart(_df)
-        .encode(y=alt.Y("way of keeping the count:N", sort=None, title=None, axis=None), x=alt.X("time taken (ms):Q", title=None))
-        .mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
-        .properties(width="container", height=42 * len(_df), title="Time taken (ms)")
-    )
-    _lost = {_r["way of keeping the count"]: _r["lost from the count"] for _r in _rows}
-    _worst = max(_lost, key=_lost.get)
-
-    mo.vstack(
-        [
-            _top,
-            chart_or_table(
-                mo.hstack([tier_chart(_counts, "data"), tier_chart(_durations, "data")], widths=[3, 1], gap=1),
-                _rows,
-                label="Bookings, counted five ways",
-            ),
-            mo.md(
-                f"**What to notice:** *{_worst}* lost {_lost[_worst]:,} of {_target:,} orders, without a single error. "
-                "Compare the two database bars: same database, but only the one-statement UPDATE counts every "
-                "order. A transaction protects the steps you put inside it, and nothing else."
-            ),
-            mo.accordion(
-                {
-                    "Why the unlocked bars stop near one rep's total": mo.md(
-                        """
-    With a pause, the unlocked reps fall into step: all read the same count, all pause, all save the same
-    +1. So they end near *one* rep's total, as if the others never booked. Set the pause to 0 and the file
-    race turns messy: its count changes from run to run.
-
-    The OS lock is correct but slow: reps queue, so every millisecond of pause is paid one rep at a time.
-    The one-statement UPDATE is quick too: there is no gap for the pause to widen, and the lock is held for
-    microseconds.
-                        """
-                    )
-                }
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    ch1_crash = mo.ui.switch(value=True, label="Crash between the two saves")
-    return (ch1_crash,)
-
-
-@app.cell
-def _(Path, ch1_crash, chart_or_table, diagram, json, mia_asks, mo, shop_sales, sqlite3, tempfile):
-    # The move: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
-    _sale = shop_sales.loc[shop_sales.loc[shop_sales["country"] == "Germany", "total_price"].idxmax()]
-    # Money in whole cents: an integer never picks up float rounding, so "the total held" is exact.
-    _move = int(round(float(_sale["total_price"]) * 100))
-    _initial = {_r: int(round(_v * 100)) for _r, _v in shop_sales.groupby("region")["total_price"].sum().items()}
-    _expected = sum(_initial.values())
-    _timeline = []
-
-    def _add_timeline(system, step, totals, note):
-        _timeline.append(
-            {
-                "system": system,
-                "step": step,
-                "Europe (CHF)": totals["Europe"] / 100,
-                "Africa (CHF)": totals["Africa"] / 100,
-                "total revenue (CHF)": sum(totals.values()) / 100,
-                "note": note,
-            }
-        )
-
-    with tempfile.TemporaryDirectory() as _tmp:
-        # File: the region totals in one JSON file; the two saves are separate and nothing ties them together.
-        _file_path = Path(_tmp) / "region_totals.json"
-        _totals = dict(_initial)
-        _file_path.write_text(json.dumps(_totals))
-        _add_timeline("file (JSON)", "start", _totals, "region totals before the move")
-        _totals["Europe"] -= _move
-        _file_path.write_text(json.dumps(_totals))
-        _add_timeline("file (JSON)", "take off Europe", _totals, "first save")
-        if ch1_crash.value:
-            _add_timeline("file (JSON)", "crash", _totals, "crash before the second save")
-        else:
-            _totals["Africa"] += _move
-            _file_path.write_text(json.dumps(_totals))
-            _add_timeline("file (JSON)", "add to Africa", _totals, "second save")
-        _file_total = sum(json.loads(_file_path.read_text()).values())
-
-        # SQLite: both saves inside one transaction.
-        _con = sqlite3.connect(Path(_tmp) / "region_totals.db", isolation_level=None)
-        _con.execute("CREATE TABLE region_totals (region TEXT PRIMARY KEY, cents INTEGER)")
-        _con.executemany("INSERT INTO region_totals VALUES (?, ?)", _initial.items())
-
-        def _db_totals():
-            return dict(_con.execute("SELECT region, cents FROM region_totals").fetchall())
-
-        _add_timeline("SQLite", "start", _db_totals(), "region totals before the move")
-        _con.execute("BEGIN")
-        _con.execute("UPDATE region_totals SET cents = cents - ? WHERE region = 'Europe'", (_move,))
-        _add_timeline("SQLite", "take off Europe", _db_totals(), "inside the transaction, not committed")
-        try:
-            if ch1_crash.value:
-                raise RuntimeError("simulated crash between the two saves")
-            _con.execute("UPDATE region_totals SET cents = cents + ? WHERE region = 'Africa'", (_move,))
-            _con.execute("COMMIT")
-            _add_timeline("SQLite", "commit", _db_totals(), "both saves kept")
-        except RuntimeError:
-            _con.execute("ROLLBACK")
-            _add_timeline("SQLite", "roll back", _db_totals(), "first save undone")
-        _db_total = sum(_db_totals().values())
-        _con.close()
-
-    # One lane per system, one box per step: the two region totals after it, and total revenue at the end.
-    _style = {"crash": "dg-box dg-hot", "add to Africa": "dg-box dg-ok", "commit": "dg-box dg-ok", "roll back": "dg-box dg-ok"}
-
-    def _lane(y, system, label, total):
-        steps = [_row for _row in _timeline if _row["system"] == system]
-        parts = [f'<text x="0" y="{y + 50}" font-weight="700">{label}</text>']
-        for _i, _row in enumerate(steps):
-            x = 110 + _i * 270
-            parts.append(
-                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
-                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
-                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_row["Europe (CHF)"]:,.0f}</text>'
-                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_row["Africa (CHF)"]:,.0f}</text>'
-            )
-            if _i:
-                parts.append(f'<path class="dg-edge" d="M{x - 36} {y + 48} H {x - 6}"/>')
-        _ok = total == _expected
-        parts.append(
-            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="930" y="{y + 44}" font-size="22">'
-            f"{'&#10003;' if _ok else '&#10007;'} {total / 100:,.0f}</text>"
-        )
-        if not _ok:
-            parts.append(f'<text class="dg-hot" x="930" y="{y + 72}">{(_expected - total) / 100:,.2f} missing</text>')
-        return "".join(parts)
-
-    _picture = diagram(
-        '<text x="930" y="18" font-weight="700">total revenue (CHF)</text>'
-        + _lane(36, "file (JSON)", "file", _file_total)
-        + '<rect x="370" y="176" width="520" height="120" rx="16" fill="none" stroke="currentColor"'
-        ' stroke-dasharray="8 6" opacity="0.45"/>'
-        + '<text class="dg-muted" x="630" y="322" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
-        + _lane(188, "SQLite", "SQLite", _db_total),
-        width=1160,
-        height=334,
-        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa: the file ends with total revenue CHF {_file_total / 100:,.2f}, "
-        f"SQLite with CHF {_db_total / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
-    )
-
-    _file_ok = _file_total == _expected
-    _file_callout = mo.md(
-        "**File:** the two saves are separate. "
-        + (
-            "Both landed, because nothing crashed."
-            if _file_ok
-            else f"The crash came between them: CHF {_move / 100:,.2f} left Europe and never reached Africa."
-        )
-    ).callout(kind="success" if _file_ok else "danger")
-    _db_callout = mo.md(
-        "**SQLite:** both saves sit in one transaction. "
-        + ("The crash rolled the first one back, so total revenue holds." if ch1_crash.value else "They committed together.")
-    ).callout(kind="success" if _db_total == _expected else "danger")
-
-    mo.vstack(
-        [
-            mo.md("### Try it: move a sale between regions, and crash halfway"),
-            mia_asks(
-                f"We moved one sale to the right region, and total revenue dropped by CHF {_move / 100:,.2f}. "
-                "Where did the money go?"
-            ),
-            mo.md(
-                f"Sale #{_sale['sale_id']} ({_sale['product']}, CHF {_sale['total_price']:,.2f}) was booked under "
-                "Germany, but say it belongs to Kenya. Moving it takes two saves to the region totals (in CHF) that "
-                "Mia's dashboard reads: **take it off Europe**, then **add it to Africa**. Moving a sale must never "
-                "change total revenue."
-            ),
-            ch1_crash,
-            chart_or_table(_picture, _timeline, label="Every step, in order"),
-            mo.hstack([_file_callout, _db_callout], widths="equal"),
-            mo.md("**What to notice:** the total revenue column. With the crash on, only the transaction keeps it at "
-                  f"CHF {_expected / 100:,.2f}."),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion: Atomicity & Concurrency</h3>
-      <details>
-        <summary><strong>Q1:</strong> With only files (no database), how could moving a sale between regions be made all-or-nothing?</summary>
-        <p><strong>Answer:</strong> Write the new totals to a temporary file, then rename it over the old one: a rename is
-        atomic, so a reader sees the old totals or the new ones, never half a move. Or write a small log entry first
-        (a write-ahead log, WAL), and replay or roll it back on restart.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> What must always stay true here, and how would we notice it breaking?</summary>
-        <p><strong>Answer:</strong> Orders counted equals orders booked, and moving a sale never changes total revenue.
-        Check both after crashes and retries: counting the order book every night and comparing it with the counter
-        catches a lost update.</p>
-      </details>
-      <details>
-        <summary><strong>Q3:</strong> Should a system stop on an error, or allow a short mismatch?</summary>
-        <p><strong>Answer:</strong> Invoices and payments fail fast. Mia's dashboard may show a count a minute behind and
-        repair it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
-      </details>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(SALES_SEED, format_bytes, mo, shop_sales):
-    _raw = ["sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"]
-    _csv_bytes = len(shop_sales[_raw].to_csv(index=False).encode())
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Chapter 1 Conclusion
-
-    - Two reps who both read before either saves lose an order: no error, just a count too low.
-    - A lock (the booking pen) or a database transaction closes the gap between reading and saving.
-    - A database is not magic: read, +1 in Python, save loses orders in SQLite too. Make the read and the
-      save one statement, or one transaction.
-    - A transaction makes a two-step change all or nothing: the crashed move rolled back, and total revenue held.
-    - Check what must stay true (orders counted = orders booked; a move leaves total revenue alone) to catch
-      these bugs early.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                f"""
-    ### Bridge to Next Chapter
-
-    The counted sales now have to be saved to files and sent to partners. A partner waits for every byte,
-    then for reading it: EdgeWorks' {len(shop_sales):,} sales take {format_bytes(_csv_bytes)} as CSV and
-    {format_bytes(SALES_SEED.stat().st_size)} as the Parquet file in `data/seed/`.
-                """
-                + """
-    $$
-    \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
-    $$
-
-    Better formats cut the wait by shrinking the bytes or speeding up the reading.
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(chapter_intro, mo):
-    mo.vstack(
-        [
-            mo.md("## 2. Serialization & Deserialization Benchmarks"),
-            chapter_intro(
-                "data",
-                "We send sales files to partners. Which format, and why did the CSV turn store code 007 into 7?",
-                "Chapter 1 made every save land. Now: what the bytes of a sales file look like, and what each format "
-                "costs, keeps and loses on its way to a partner.",
+                "In which format should the sales data be stored and exchanged?",
+                "How a table becomes bytes, what each format preserves and loses, and how to choose between formats.",
+                topics=(
+                    "Serialization",
+                    "Text and binary formats",
+                    "Encodings and CSV dialects",
+                    "Schemas and schema evolution",
+                    "Arrow and Pickle",
+                    "Latency and throughput",
+                    "Format benchmark",
+                ),
             ),
         ],
         gap=1,
@@ -1216,9 +469,9 @@ def _(diagram, in_plain, json, mo, shop_sales):
         )
         + '<text class="dg-muted" x="560" y="208" text-anchor="middle">... and so on</text>'
         + _arrow(708, "deserialize", "read")
-        + _object(840, "the sale again")
+        + _object(840, "the same sale")
         + '<text class="dg-muted" x="560" y="262" text-anchor="middle">'
-        "on disk or on the wire: files for partners, API answers, queues, caches</text>",
+        "on disk or over the network: partner files, API responses, queues, caches</text>",
         width=1120,
         height=276,
         label="EdgeWorks' first sale is serialized into bytes for a file or the network, and deserialized back into "
@@ -1229,14 +482,14 @@ def _(diagram, in_plain, json, mo, shop_sales):
         [
             mo.md("### Serialization: from a sale to bytes, and back"),
             in_plain(
-                "**Serialization** turns an object in memory, here one EdgeWorks sale, into bytes that can be saved "
-                "to a file or sent to a partner. **Deserialization** turns the bytes back into an object. The "
-                "**format** (JSON, CSV, Parquet, ...) decides what those bytes look like."
+                "**Serialization** converts an in-memory object, here one EdgeWorks sale, into a sequence of bytes "
+                "that can be stored in a file or sent to a partner. **Deserialization** reconstructs the object from "
+                "the bytes. The **format** (JSON, CSV, Parquet, ...) determines the byte representation."
             ),
             _pipeline,
             mo.md(
-                f"**What to notice:** as JSON this sale takes {len(_bytes)} bytes, and only {_value_bytes} of them are "
-                "the values. The rest is field names and punctuation, written again for each of the "
+                f"**Observation:** as JSON, this sale occupies {len(_bytes)} bytes, of which only {_value_bytes} "
+                "encode values. The remainder consists of field names and punctuation, repeated for each of the "
                 f"{len(shop_sales):,} sales."
             ),
         ],
@@ -1246,10 +499,244 @@ def _(diagram, in_plain, json, mo, shop_sales):
 
 
 @app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### Five format families and their use at EdgeWorks"),
+            in_plain(
+                "Text formats (JSON, CSV) are readable by any tool and by humans. Binary formats are smaller and "
+                "faster but require a library to read. The choice depends on who reads the file and for what purpose."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
+      <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
+        <p>The sales API responds to the dashboard in JSON; partners open CSV in Excel.</p></div>
+      <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
+        <p>The order event stream: each order is sent when it occurs.</p></div>
+      <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
+        <p>Arrow / Feather: passes the sales table from DuckDB to pandas without conversion.</p></div>
+      <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
+        <p>EdgeWorks' sales files: <code>data/*.parquet</code>.</p></div>
+      <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
+        <p>Python only.</p><p class="tile-bad">Loading it can execute code: never from a partner.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**Comparison criteria:** speed, size, interoperability (which tools can read a file), type fidelity, "
+                "schema evolution and safety. The following slides examine each of them on the EdgeWorks sales data."
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(fastavro, html, in_plain, io, json, mo, pa, pickle, pq, shop_sales):
+    _first = shop_sales.head(3)
+    _three = _first[["sale_id", "sale_date", "product", "units_sold", "total_price"]].assign(
+        sale_date=_first["sale_date"].dt.strftime("%Y-%m-%d")
+    )
+    _records = _three.to_dict("records")
+    _table = pa.Table.from_pylist(_records)
+
+    def _avro():
+        _schema = {
+            "type": "record",
+            "name": "Sale",
+            "fields": [
+                {"name": "sale_id", "type": "long"},
+                {"name": "sale_date", "type": "string"},
+                {"name": "product", "type": "string"},
+                {"name": "units_sold", "type": "long"},
+                {"name": "total_price", "type": "double"},
+            ],
+        }
+        _buf = io.BytesIO()
+        fastavro.writer(_buf, _schema, _records)
+        return _buf.getvalue()
+
+    def _parquet():
+        _buf = io.BytesIO()
+        pq.write_table(_table, _buf)
+        return _buf.getvalue()
+
+    def _arrow():
+        # the Arrow IPC file format, which is what a Feather file is
+        _sink = pa.BufferOutputStream()
+        with pa.ipc.new_file(_sink, _table.schema) as _writer:
+            _writer.write_table(_table)
+        return _sink.getvalue().to_pybytes()
+
+    _files = [
+        ("CSV", "text", _three.to_csv(index=False).encode(), "one line per sale; the header names the columns"),
+        ("JSON", "text", json.dumps(_records).encode(), "every record repeats the field names"),
+        ("Avro", "binary", _avro(), "starts with Obj, followed by its schema as JSON"),
+        ("Parquet", "binary", _parquet(), "starts and ends with PAR1"),
+        ("Arrow / Feather", "binary", _arrow(), "starts and ends with ARROW1"),
+        ("Pickle", "binary", pickle.dumps(_records, protocol=pickle.HIGHEST_PROTOCOL), "Python's own format, for Python only"),
+    ]
+
+    def _as_text(data):
+        """Printable characters as they are, a line break as ↵, every other byte as a dot."""
+        return html.escape("".join(chr(_b) if 32 <= _b < 127 else "↵" if _b == 10 else "·" for _b in data))
+
+    def _excerpt(data):
+        return _as_text(data) if len(data) <= 110 else _as_text(data[:90]) + " … " + _as_text(data[-14:])
+
+    _tiles = "".join(
+        f'<div class="tile"><div class="tile-key">{_name}</div><div class="tile-title">{_kind} · {len(_data):,} bytes</div>'
+        '<pre style="margin: 6px 0; white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.35">'
+        f"{_excerpt(_data)}</pre><p>{_note}</p></div>"
+        for _name, _kind, _data, _note in _files
+    )
+    _sizes = {_name: len(_data) for _name, _, _data, _ in _files}
+    mo.vstack(
+        [
+            mo.md("### What a file contains: the same three sales in six formats"),
+            in_plain(
+                "A **text format** stores characters that any editor can display. A **binary format** stores numbers "
+                "and structures as raw bytes that only a library can interpret; it usually begins with a fixed "
+                "signature, the *magic number*, that identifies the format."
+            ),
+            mo.Html(f'<div class="tiles tier-data" style="grid-template-columns: repeat(3, 1fr)">{_tiles}</div>'),
+            mo.md(
+                f"**Observation:** CSV and JSON can be read as plain text; in the binary files only fragments such as "
+                f"field names are legible. For three sales, Parquet ({_sizes['Parquet']:,} bytes) is larger than CSV "
+                f"({_sizes['CSV']:,} bytes) because its metadata dominates; with thousands of rows the ranking reverses."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(box, diagram, in_plain, mo):
+    _word = "Zürich"
+    _parts = [
+        '<text x="0" y="34" font-weight="700">character</text>',
+        '<text x="0" y="114" font-weight="700">UTF-8 bytes</text>',
+    ]
+    _x = 150
+    for _char in _word:
+        _code = _char.encode("utf-8")
+        _w = 58 * len(_code) + 10 * (len(_code) - 1)
+        _cls = "dg-tier" if len(_code) > 1 else "dg-box"
+        _parts.append(box(_x, 6, _char, w=_w, cls=_cls))
+        _parts.append(f'<path class="dg-edge" d="M{_x + _w / 2:.0f} 54 V 82"/>')
+        _parts.append(box(_x, 88, " ".join(f"{_b:02X}" for _b in _code), w=_w, cls=_cls))
+        _x += _w + 12
+    _bytes = diagram(
+        "".join(_parts),
+        width=int(_x),
+        height=138,
+        label="Zürich as six characters and their UTF-8 bytes: Z is 5A, ü is C3 BC, r 72, i 69, c 63, h 68. "
+        "The ü takes two bytes.",
+        tier="data",
+    )
+    _misread = _word.encode("utf-8").decode("latin-1")
+    try:
+        _word.encode("latin-1").decode("utf-8")
+        _error = "no error"
+    except UnicodeDecodeError as _exc:
+        _error = f"UnicodeDecodeError: {_exc.reason}"
+    mo.vstack(
+        [
+            mo.md("### Text encodings: characters are stored as bytes"),
+            in_plain(
+                "A file stores bytes, not characters. An **encoding** maps each character to bytes: **UTF-8**, today's "
+                "standard, uses one byte for each ASCII character and two to four bytes for others, such as ü. "
+                "Writer and reader must use the same encoding."
+            ),
+            _bytes,
+            mo.hstack(
+                [
+                    mo.md(f"**Written as UTF-8, read as UTF-8**\n\n`{_word}`").callout(kind="success"),
+                    mo.md(f"**Written as UTF-8, read as Latin-1**\n\n`{_misread}`").callout(kind="danger"),
+                    mo.md(f"**Written as Latin-1, read as UTF-8**\n\n`{_error}`").callout(kind="danger"),
+                ],
+                widths="equal",
+                gap=1,
+            ),
+            mo.md(
+                f"**Observation:** '{_word}' has {len(_word)} characters but {len(_word.encode('utf-8'))} bytes in UTF-8. "
+                f"Read with the wrong encoding, the same bytes appear as '{_misread}', a frequent error with CSV files "
+                "exported in a regional code page such as Windows-1252. Text files should therefore be read and written "
+                'with an explicit encoding, for example `pd.read_csv(path, encoding="utf-8")`.'
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    p1_csv_reader = mo.ui.radio(
+        options={
+            "pd.read_csv(f)": {},
+            'pd.read_csv(f, sep=";")': {"sep": ";"},
+            'pd.read_csv(f, sep=";", decimal=",")': {"sep": ";", "decimal": ","},
+        },
+        value="pd.read_csv(f)",
+        label="Reader settings:",
+    )
+    return (p1_csv_reader,)
+
+
+@app.cell
+def _(in_plain, io, mo, p1_csv_reader, pd, shop_sales, static_table):
+    _source = shop_sales.head(4)[["sale_id", "sale_date", "units_sold", "total_price"]]
+    # The same rows as Excel writes them with German regional settings: semicolons, decimal commas, day-first dates.
+    _exported = _source.to_csv(index=False, sep=";", decimal=",", date_format="%d.%m.%Y")
+    _read = pd.read_csv(io.StringIO(_exported), **p1_csv_reader.value)
+    _shown = _read if isinstance(_read.index, pd.RangeIndex) else _read.reset_index()
+    _last = _read[_read.columns[-1]].sum()
+    if len(_read.columns) == 1:
+        _verdict = mo.md(
+            "**One column.** The comma inside `4034,91` was taken as the separator; the rest of each line became an "
+            f"unnamed index, and the 'sum' of the remaining column is {_last:,}: a meaningless number, without an error."
+        ).callout(kind="danger")
+    elif isinstance(_last, str):
+        _verdict = mo.md(
+            "**Four columns, but `total_price` is text.** Its `.sum()` therefore concatenates the strings: "
+            f"`{_last[:32]}…`"
+        ).callout(kind="danger")
+    else:
+        _verdict = mo.md(
+            f"**Correct:** four columns, `total_price` is a number, and the total is CHF {_last:,.2f}, as in the "
+            "source. `sale_date` is still text; `parse_dates=['sale_date'], dayfirst=True` converts it."
+        ).callout(kind="success")
+    mo.vstack(
+        [
+            mo.md("### CSV is not one format: separators, decimal marks, dates"),
+            in_plain(
+                "CSV has no single standard. Separator, decimal mark, quoting, date format and encoding depend on the "
+                "program and its regional settings, and the reader must be told which ones a file uses."
+            ),
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("**The file**, exported with German regional settings"), mo.md(f"```text\n{_exported}```")]),
+                    mo.vstack([p1_csv_reader, static_table(_shown, label="What pandas reads")]),
+                ],
+                widths=[2, 3],
+                gap=2,
+            ),
+            _verdict,
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
 def _(box, diagram, fastavro, html, in_plain, io, mo, shop_sales):
     _first, _second = shop_sales.iloc[0], shop_sales.iloc[1]
-    _typo = f"about {round(_second['total_price'], -3):,.0f}"  # what a hurried rep types instead of the price
-    # The printed form refuses an answer that does not fit its box: the real error from the Avro writer.
+    _typo = f"about {round(_second['total_price'], -3):,.0f}"  # a free-text entry instead of the price
+    # Avro's writer rejects a value that does not match the schema: the actual error from the Avro writer.
     try:
         fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": _typo}])
         _refusal = "accepted"
@@ -1276,54 +763,45 @@ def _(box, diagram, fastavro, html, in_plain, io, mo, shop_sales):
         return "".join(parts)
 
     _forms = diagram(
-        '<text x="0" y="22" font-weight="700">JSON: answers on blank paper</text>'
+        '<text x="0" y="22" font-weight="700">JSON: text records, no schema</text>'
         + _sheet(40, _first, f"{_first['total_price']}")
         + _sheet(124, _second, f'<tspan class="dg-hot">"{_typo}"</tspan>')
-        + '<text class="dg-muted" x="0" y="222">every sheet writes the field names out again</text>'
-        + f'<text class="dg-hot" x="0" y="248">and nothing stops "{_typo}" in the price box</text>'
-        + '<text x="540" y="22" font-weight="700">Avro: a printed order form</text>'
+        + '<text class="dg-muted" x="0" y="222">every record repeats the field names</text>'
+        + f'<text class="dg-hot" x="0" y="248">and nothing rejects "{_typo}" as a price</text>'
+        + '<text x="540" y="22" font-weight="700">Avro: binary records with a schema</text>'
         + _form_row(40, [_label for _label, _ in _form_cells], "dg-tier")
         + _form_row(92, [f"{_first['sale_id']}", _date(_first), f"{_first['total_price']}"], "dg-box")
         + _form_row(140, [f"{_second['sale_id']}", _date(_second), f'<tspan class="dg-hot" text-decoration="line-through">{_typo}</tspan>'], "dg-box")
-        + '<text class="dg-muted" x="540" y="222">names printed once; each row holds only answers</text>'
-        + f'<text class="dg-hot" x="540" y="248" font-size="15">refused: {html.escape(_refusal, quote=False)}</text>'
-        + '<text x="0" y="306" font-weight="700">The form comes back:</text>'
+        + '<text class="dg-muted" x="540" y="222">field names stored once; rows hold only values</text>'
+        + f'<text class="dg-hot" x="540" y="248" font-size="15">rejected: {html.escape(_refusal, quote=False)}</text>'
+        + '<text x="0" y="306" font-weight="700">The schema recurs:</text>'
         + '<g class="tier-data"><rect class="dg-tier" x="190" y="282" width="250" height="40" rx="12"/>'
-        '<text x="315" y="307" text-anchor="middle">5 · DuckDB <tspan font-weight="700">guesses</tspan> it</text></g>'
+        '<text x="315" y="307" text-anchor="middle">Part 2 · DuckDB <tspan font-weight="700">infers</tspan> it</text></g>'
         + '<g class="tier-logic"><rect class="dg-tier" x="456" y="282" width="270" height="40" rx="12"/>'
-        '<text x="591" y="307" text-anchor="middle">7 · Pydantic <tspan font-weight="700">enforces</tspan> it</text>'
+        '<text x="591" y="307" text-anchor="middle">Part 3 · Pydantic <tspan font-weight="700">enforces</tspan> it</text>'
         '<rect class="dg-tier" x="742" y="282" width="270" height="40" rx="12"/>'
-        '<text x="877" y="307" text-anchor="middle">8 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
+        '<text x="877" y="307" text-anchor="middle">Part 3 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
         width=1040,
         height=330,
-        label=f"Left: JSON sheets repeat every field name, and one has '{_typo}' in the price box. Right: an Avro form "
-        f"prints the names once, each row holds only the answers, and the writer refuses '{_typo}'. "
-        "The same form returns in chapters 5, 7 and 8.",
+        label=f"Left: JSON records repeat every field name, and one has '{_typo}' as its price. Right: an Avro file "
+        f"stores the field names once in its schema, each row holds only values, and the writer rejects '{_typo}'. "
+        "The schema recurs in Parts 2 and 3.",
         tier="data",
-    )
-    _breaks = mo.md(
-        """
-    - A paper form travels with its answers: true for Avro, which stores the form in the file, and false
-      for JSON and CSV. There the form exists only in the head of whoever reads the file, which is why a
-      partner and EdgeWorks can disagree about what the same file means. That is the reason chapter 7 exists.
-    - **Schema evolution** is what happens when EdgeWorks adds a box to the form: do last year's sales,
-      written on the old form, still get read? A slide later in this chapter tests exactly that.
-        """
     )
     mo.vstack(
         [
-            mo.md("### The schema is the blank order form"),
+            mo.md("### The schema: structure and types, separate from the values"),
             in_plain(
-                "A **schema** is the blank form, not the answers: which fields a sale has, in what order, and what "
-                "kind of value goes in each box. JSON and CSV send only filled-in sheets. Avro sends the form inside "
-                "the file, and its writer refuses an answer that does not fit the box."
+                "A **schema** describes the structure of the data, not the values: which fields a sale has, in which "
+                "order, and which type each field takes. JSON and CSV transmit only the values. Avro stores the schema "
+                "in the file, and its writer rejects any value that does not match the declared type."
             ),
             _forms,
             mo.md(
-                f"**What to notice:** the price of sale #{_second['sale_id']}. A rep typed \"{_typo}\". JSON keeps "
-                "it without a word; Avro refuses it before it ever reaches a partner."
+                f"**Observation:** the price of sale #{_second['sale_id']} was entered as \"{_typo}\". JSON stores it "
+                "without complaint; Avro rejects it before it reaches a partner."
             ),
-            mo.accordion({"Where the picture breaks, and what schema evolution means": _breaks}),
+
         ],
         gap=0.8,
     )
@@ -1331,47 +809,293 @@ def _(box, diagram, fastavro, html, in_plain, io, mo, shop_sales):
 
 
 @app.cell
-def _(in_plain, mo):
-    _criteria = mo.md(
-        """
-    - **Speed**: how long writing and reading take
-    - **Size**: how many bytes hit the disk and the network
-    - **Interoperability**: which languages and tools can read it (Excel, R, a partner's script)
-    - **Type fidelity**: do dates and store codes come back as dates and store codes?
-    - **Schema evolution**: do old files survive a new field?
-    - **Safety**: can loading a file run someone else's code?
-        """
+def _(Path, box, diagram, in_plain, mo, pd, shop_sales, tempfile):
+    # Each partner store has a three-digit code. For this demo, the code is the country's number:
+    # South Africa's partner store is 007, the classic case of a code that looks like a number and is not.
+    _src = shop_sales[["sale_id", "sale_date", "total_price"]].copy()
+    _src["store_code"] = [f"{_n:03d}" for _n in shop_sales["country_id"]]
+    _sa_sale = int(shop_sales.loc[shop_sales["country"] == "South Africa", "sale_id"].iloc[0])
+
+    with tempfile.TemporaryDirectory() as _td:
+        _csv_p = Path(_td) / "sales.csv"
+        _pq_p = Path(_td) / "sales.parquet"
+        _src.to_csv(_csv_p, index=False)
+        _src.to_parquet(_pq_p, index=False)
+        _from_csv = pd.read_csv(_csv_p)
+        _from_pq = pd.read_parquet(_pq_p)
+
+    # One row per column: the type written, then the type each file hands back, ticked where it matches.
+    _xs = {"written": 190, "read from CSV": 470, "read from Parquet": 750}
+    _parts = [f'<text x="{_x + 130}" y="22" text-anchor="middle" font-weight="700">{_name}</text>' for _name, _x in _xs.items()]
+    for _i, _c in enumerate(_src.columns):
+        _y = 40 + _i * 56
+        _wrote = str(_src[_c].dtype)
+        _parts.append(f'<text x="0" y="{_y + 27}" font-family="monospace" font-weight="700">{_c}</text>')
+        _parts.append(box(_xs["written"], _y, _wrote, w=260))
+        for _x, _back_df in ((_xs["read from CSV"], _from_csv), (_xs["read from Parquet"], _from_pq)):
+            _back = str(_back_df[_c].dtype)
+            if _back == _wrote:
+                _parts.append(box(_x, _y, f"&#10003; {_back}", w=260, cls="dg-box dg-ok"))
+            else:
+                _parts.append(box(_x, _y, f'<tspan class="dg-hot">&#10007; {_back}</tspan>', w=260, cls="dg-box dg-hot"))
+    _types = diagram(
+        "".join(_parts),
+        width=1010,
+        height=264,
+        label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
+        "CSV returns sale_date as text and store_code as a whole number.",
+    )
+
+    def _span(_df):
+        try:
+            return str(_df["sale_date"].max() - _df["sale_date"].min())
+        except TypeError as _exc:
+            return f"TypeError: {_exc}"
+
+    def _ask(name, df, kind):
+        _code = df.loc[df["sale_id"] == _sa_sale, "store_code"].tolist()[0]
+        return mo.md(
+            f"""
+    **Query on the {name} copy**
+
+    - Time span of the sales: `{_span(df)}`
+    - South Africa's store code: `{_code!r}`
+            """
+        ).callout(kind=kind)
+
+    mo.vstack(
+        [
+            mo.md("### Type loss in CSV: store code 007 becomes 7"),
+            in_plain(
+                "CSV is plain text without type information, so the reader infers the types: `2024-03-07` remains "
+                "text, and the store code `007` resembles a number, so it becomes `7`. Parquet stores the type with "
+                f"the data. Here all {len(_src):,} sales, each with a three-digit store code, are written to both "
+                "formats and read back."
+            ),
+            _types,
+            mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
+            mo.md(
+                "**Observation:** the date error is explicit (a `TypeError`); the store code error is silent and "
+                "would therefore propagate into a partner's report."
+            ),
+
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(csv, diagram, fastavro, html, in_plain, io, mo, shop_sales):
+    # Next March, EdgeWorks starts recording each sale's channel: online or partner. Two years of old files sit
+    # on disk, and one old program nobody redeployed is still running. What happens?
+    _v1 = {
+        "type": "record",
+        "name": "Sale",
+        "fields": [{"name": "sale_id", "type": "long"}, {"name": "total_price", "type": "double"}],
+    }
+    _v2 = {
+        "type": "record",
+        "name": "Sale",
+        "fields": [
+            {"name": "sale_id", "type": "long"},
+            {"name": "total_price", "type": "double"},
+            {"name": "channel", "type": "string", "default": "unknown"},
+        ],
+    }
+
+    def _avro_bytes(_schema, _rows):
+        _buf = io.BytesIO()
+        fastavro.writer(_buf, _schema, _rows)
+        return _buf.getvalue()
+
+    _first, _last = shop_sales.iloc[0], shop_sales.iloc[-1]
+    _old_file = _avro_bytes(_v1, [{"sale_id": int(_first["sale_id"]), "total_price": float(_first["total_price"])}])
+    _new_file = _avro_bytes(
+        _v2, [{"sale_id": int(_last["sale_id"]), "total_price": float(_last["total_price"]), "channel": "online"}]
+    )
+
+    _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
+    _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
+
+    _csv_row = next(csv.DictReader(io.StringIO(f"sale_id,total_price\n{_first['sale_id']},{_first['total_price']}\n")))
+    try:
+        _csv_row["channel"]
+        _csv_result = "no error"
+    except KeyError as _exc:
+        _csv_result = f"KeyError: {_exc}"
+
+    def _card(x, y, w, title, sub, cls="dg-box"):
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="64" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 26}" text-anchor="middle" font-weight="700">{html.escape(title, quote=False)}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 50}" text-anchor="middle">{sub}</text>'
+        )
+
+    def _fields(record):
+        return " · ".join(f"{_k} {_v}" for _k, _v in record.items())
+
+    _lanes = [
+        ("last year's Avro file", "old schema", "this year's code", "new schema: + channel",
+         _fields(_old_by_new[0]), "&#10003; the reader filled in the default", "dg-box dg-ok"),
+        ("this year's Avro file", "new schema", "the old program", "old schema",
+         _fields(_new_by_old[0]), "&#10003; the extra field is skipped", "dg-box dg-ok"),
+        ("last year's CSV file", "no embedded schema", "this year's code", "expects channel",
+         _csv_result, "&#10007; only remedy: change every reader", "dg-box dg-hot"),
+    ]
+    _parts = [
+        '<text x="120" y="20" text-anchor="middle" font-weight="700">the file</text>'
+        '<text x="390" y="20" text-anchor="middle" font-weight="700">read by</text>'
+        '<text x="790" y="20" text-anchor="middle" font-weight="700">what comes back</text>'
+    ]
+    for _i, (_file, _file_sub, _reader, _reader_sub, _result, _verdict, _cls) in enumerate(_lanes):
+        _y = 36 + _i * 84
+        _parts += [
+            _card(0, _y, 240, _file, _file_sub),
+            f'<path class="dg-edge" d="M246 {_y + 32} H 284"/>',
+            _card(290, _y, 200, _reader, _reader_sub, "dg-tier"),
+            f'<path class="dg-edge" d="M496 {_y + 32} H 534"/>',
+            _card(540, _y, 500, _result, _verdict, _cls),
+        ]
+    _lanes_svg = diagram(
+        "".join(_parts),
+        width=1040,
+        height=290,
+        label="Avro: last year's file read by this year's code gets the default channel; this year's file read by the "
+        "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
+        tier="data",
     )
     mo.vstack(
         [
-            mo.md("### Five kinds of format, and where EdgeWorks uses each"),
+            mo.md("### Schema evolution: adding a `channel` field"),
             in_plain(
-                "Text formats (JSON, CSV) can be read by any tool and by people. Binary formats are smaller and "
-                "faster, but need a library to read. Choose by who reads the file and what they do with it."
+                "**Schema evolution** means changing the schema while old files and old programs remain in use. "
+                "EdgeWorks starts recording each sale's `channel`: `online` or `partner`. Old sales lack this field, "
+                "so the new schema defines a **default**, `unknown`, for any sale written without it."
             ),
+            _lanes_svg,
             mo.md(
-                """
-    <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
-      <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
-        <p>The sales API answers the dashboard in JSON; a partner opens CSV in Excel.</p></div>
-      <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
-        <p>The order event stream: each booking sent as it happens.</p></div>
-      <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
-        <p>Arrow / Feather: hands the sales table from DuckDB to pandas without converting it.</p></div>
-      <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
-        <p>EdgeWorks' sales files: <code>data/*.parquet</code>.</p></div>
-      <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
-        <p>Python only.</p><p class="tile-bad">Loading it can run code: never from a partner.</p></div>
-    </div>
-                """
+                "**Observation:** CSV carries no schema, so the agreement on its structure exists only as implicit "
+                "knowledge, and every reader must be changed manually."
             ),
-            mo.md(
-                "**What to notice:** compare them on speed, size, interoperability, type fidelity, schema evolution "
-                "and safety. The labs in this chapter measure four of the six on EdgeWorks' sales."
-            ),
-            mo.accordion({"What each criterion asks": _criteria}),
         ],
         gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(SALES_SEED, best_seconds, box, diagram, duckdb, in_plain, io, mo, pd, static_table):
+    with duckdb.connect() as _con:
+        _arrow = _con.sql(f"SELECT * FROM read_parquet('{SALES_SEED.as_posix()}')").to_arrow_table()
+    _df = _arrow.to_pandas()
+    _csv_text = _df.to_csv(index=False)
+    _from_csv = pd.read_csv(io.StringIO(_csv_text))
+    _arrow_ms = best_seconds(_arrow.to_pandas, repeat=5) * 1000
+    _csv_ms = best_seconds(lambda: pd.read_csv(io.StringIO(_csv_text)), repeat=5) * 1000
+
+    _hub = diagram(
+        box(0, 0, "DuckDB", w=170)
+        + box(0, 64, "pandas", w=170)
+        + box(0, 128, "Polars, Spark, R", w=170)
+        + box(270, 48, "Arrow table in memory", w=260, h=68, cls="dg-tier")
+        + box(630, 10, "Feather file: Arrow as is", w=310)
+        + box(630, 118, "Parquet file: encoded, compressed", w=310)
+        + '<path class="dg-edge" d="M170 22 C 220 22, 220 70, 264 70"/>'
+        + '<path class="dg-edge" d="M170 86 H 264"/>'
+        + '<path class="dg-edge" d="M170 150 C 220 150, 220 100, 264 100"/>'
+        + '<path class="dg-edge" d="M530 70 C 580 70, 580 32, 624 32"/>'
+        + '<path class="dg-edge" d="M530 100 C 580 100, 580 140, 624 140"/>'
+        + '<text class="dg-muted" x="400" y="140" text-anchor="middle">shared without conversion</text>',
+        width=940,
+        height=176,
+        label="DuckDB, pandas and other tools share one Arrow table in memory without converting it. A Feather file "
+        "stores this table as it is; a Parquet file stores it encoded and compressed.",
+        tier="data",
+    )
+    _types = static_table(
+        [
+            {
+                "column": _field.name,
+                "Arrow type": str(_field.type),
+                "pandas, via Arrow": str(_df[_field.name].dtype),
+                "pandas, via CSV text": str(_from_csv[_field.name].dtype),
+            }
+            for _field in _arrow.schema
+        ],
+        label="Column types after each route",
+    )
+    mo.vstack(
+        [
+            mo.md("### Arrow: one table format for all tools in memory"),
+            in_plain(
+                "**Apache Arrow** defines a standard columnar layout for tables in memory. Tools that support it, such as "
+                "DuckDB, pandas, Polars and Spark, exchange tables without converting them. **Feather** writes this "
+                "layout unchanged to a file; **Parquet** encodes and compresses it for long-term storage."
+            ),
+            mo.hstack([_hub, _types], widths=[3, 2], gap=2, align="center"),
+            mo.md(
+                f"**Observation:** DuckDB returns its result as an Arrow table with typed columns. Converting it to pandas "
+                f"takes {_arrow_ms:.1f} ms; parsing the same {len(_df):,} rows from CSV text takes {_csv_ms:.1f} ms, and "
+                f"`sale_date` arrives as `{_from_csv['sale_date'].dtype}` instead of a date."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(html, in_plain, mo, pickle):
+    import platform as _platform
+
+    class _Payload:
+        def __reduce__(self):
+            return (_platform.platform, ())
+
+    _data = pickle.dumps(_Payload())
+    _loaded = pickle.loads(_data)  # this call runs platform.platform(): the file decides what is executed
+    _as_text = html.escape("".join(chr(_b) if 32 <= _b < 127 else "·" for _b in _data))
+    _code = """
+class Payload:
+    def __reduce__(self):               # tells pickle how to rebuild the object
+        return (platform.platform, ())  # "call this function"
+
+data = pickle.dumps(Payload())          # the sender saves this as sales.pkl
+pickle.loads(data)                      # the receiver only loads the "data"
+"""
+    mo.vstack(
+        [
+            mo.md("### Pickle: loading a file can execute code"),
+            in_plain(
+                "**Pickle** stores arbitrary Python objects, including trained models. The file records how to rebuild "
+                "each object, which can mean calling a function. Loading a pickle file therefore executes code chosen "
+                "by whoever created the file."
+            ),
+            mo.hstack(
+                [
+                    mo.md(f"```python\n{_code.strip()}\n```"),
+                    mo.vstack(
+                        [
+                            mo.md(f"**The file as text** ({len(_data)} bytes):"),
+                            mo.Html(f'<pre style="margin: 0; white-space: pre-wrap; word-break: break-all">{_as_text}</pre>'),
+                            mo.md(f"**Loading it returned:** `{_loaded}`").callout(kind="danger"),
+                        ],
+                        gap=0.4,
+                    ),
+                ],
+                widths="equal",
+                gap=2,
+                align="start",
+            ),
+            mo.md(
+                f"**Observation:** loading these {len(_data)} bytes called `platform.platform()` and returned this "
+                "computer's operating system. A malicious file could call any other function instead, for example one "
+                "that deletes or uploads files. Pickle files, including saved models, may only be loaded from trusted "
+                "sources."
+            ),
+        ],
+        gap=0.6,
     )
     return
 
@@ -1402,7 +1126,7 @@ def _(box, diagram, in_plain, mo, shop_sales):
         + '<path class="dg-edge" d="M92 92 H 300"/>'
         + '<text x="196" y="80" text-anchor="middle" font-weight="700">write · send · read</text>'
         + box(308, 68, "partner in Kenya", w=180, h=48)
-        + '<text x="560" y="24" font-weight="700">Throughput: how much one run gets through</text>'
+        + '<text x="560" y="24" font-weight="700">Throughput: how much one run processes</text>'
         + '<rect class="dg-tier" x="570" y="48" width="300" height="88" rx="10"/>'
         + '<text x="720" y="84" text-anchor="middle" font-weight="700">nightly export</text>'
         + f'<text x="720" y="112" text-anchor="middle">{_files} files · {len(shop_sales):,} sales</text>'
@@ -1410,7 +1134,7 @@ def _(box, diagram, in_plain, mo, shop_sales):
         + '<text x="990" y="86" text-anchor="middle" font-weight="700">sales</text>'
         + '<text x="990" y="108" text-anchor="middle" font-weight="700">per second</text>'
         # the trade: the export waits for the last sale of the day, so the first one waits longest
-        + '<text x="0" y="214" font-weight="700">They trade:</text>'
+        + '<text x="0" y="214" font-weight="700">Trade-off:</text>'
         + f'<path d="M{_at(8)} 262 H {_at(22) - 60}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
         + "".join(
             _doc(_at(_h) - 12, 238, 24, 28)
@@ -1421,40 +1145,29 @@ def _(box, diagram, in_plain, mo, shop_sales):
         + f'<text x="{_at(22)}" y="257" text-anchor="middle">export 22:00</text>'
         + f'<path class="dg-edge dg-hot" d="M{_at(8)} 310 H {_at(22) - 64}"/>'
         + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="336" text-anchor="middle">'
-        "a sale booked at 08:00 reaches its partner 14 hours later</text>",
+        "a sale recorded at 08:00 reaches its partner 14 hours later</text>",
         width=1060,
         height=350,
         label=f"Latency: one partner, in Kenya, waits for its file of {_kenya} sales to be written, sent and read. "
         f"Throughput: the nightly export writes {_files} files with {len(shop_sales):,} sales and is measured in sales "
-        "per second. Sales booked from 08:00 all wait for the 22:00 export, so batching raises throughput and makes "
+        "per second. Sales recorded from 08:00 all wait for the 22:00 export, so batching raises throughput and makes "
         "the first sale wait 14 hours.",
         tier="data",
-    )
-    _more = mo.md(
-        """
-    - A container ship has terrible latency and huge throughput; a bicycle courier is the opposite.
-    - In the benchmark, one round trip is a file written and read back, and throughput counts sales,
-      not bytes.
-    - *Sometimes you get both*, by making the file smaller. That is what chapter 4 is for.
-        """
     )
     mo.vstack(
         [
             mo.md("### Latency vs throughput: two meanings of \"fast\""),
             in_plain(
-                "**Latency** is how long one thing takes: a partner asks for its file, how long until it has it? "
-                "**Throughput** is how much gets through per second: how many sales the nightly export writes. "
-                "Collecting work into one big run raises throughput, and makes each single sale wait longer."
+                "**Latency** is the time one operation takes: from a partner's request for its file until the file "
+                "is available. **Throughput** is the amount processed per unit of time: how many sales per second the "
+                "nightly export writes. Batching raises throughput and increases the latency of each single sale."
             ),
             _picture,
             mo.md(
-                "**What to notice:** the 08:00 sale. The export sends everything in one efficient run at 22:00, so "
-                "that sale is 14 hours late. When someone asks for \"fast\", ask which one they mean."
+                "**Observation:** the export sends all sales in one efficient run at 22:00, so a sale recorded at "
+                "08:00 arrives 14 hours later. Batch processing favours throughput; streaming each event as it occurs "
+                "favours latency. A requirement for \"fast\" must state which of the two is meant."
             ),
-            mo.md(
-                "**In one line:** latency = write time + read time of one file; throughput = sales written per second."
-            ),
-            mo.accordion({"Container ships, and how to get both": _more}),
         ],
         gap=0.8,
     )
@@ -1489,16 +1202,15 @@ def _(
     pickle,
     pq,
     shop_sales,
-    static_table,
     tempfile,
     tier_chart,
 ):
     _top = mo.vstack(
         [
-            mo.md("### Try it: six formats, the same EdgeWorks sales"),
+            mo.md("### Six formats on the same EdgeWorks sales"),
             mo.md(
-                "Each format writes EdgeWorks' first sales to a file and reads them back, the best of 3 tries. The "
-                f"slider sets how many: one month is 140, the whole history {len(shop_sales):,}."
+                "Each format writes the first EdgeWorks sales to a file and reads them back; the best of 3 runs is "
+                f"reported. The slider sets the number of sales: one month is 140, the whole history {len(shop_sales):,}."
             ),
             mo.hstack([ch2_rows, ch2_run_bench], justify="start", align="center", gap=3),
         ],
@@ -1510,7 +1222,7 @@ def _(
             [
                 _top,
                 mo.md(
-                    "**Predict first:** is the smallest file also the fastest? Then click **Run the format benchmark**."
+                    "**Question:** is the smallest file also the fastest?"
                 ).callout(kind="neutral"),
             ],
             gap=0.6,
@@ -1607,7 +1319,7 @@ def _(
         _base.mark_circle(size=260, opacity=1).encode(color=_color)
         + _base.transform_filter("!datum.left").mark_text(align="left", dx=14).encode(text="format:N")
         + _base.transform_filter("datum.left").mark_text(align="right", dx=-14).encode(text="format:N")
-    ).properties(width="container", height=300, title="Size vs latency: the bottom-left corner wins")
+    ).properties(width="container", height=300, title="Size vs latency (lower left is better)")
     _speed = alt.Chart(_df).encode(
         y=alt.Y("format:N", sort="-x", title=None),
         x=alt.X(
@@ -1638,213 +1350,16 @@ def _(
                 label=f"{len(_records):,} sales, best of 3",
             ),
             mo.md(
-                f"**What to notice:** the smallest file is {_name(_smallest)} ({_smallest['size (KB)']:,} KB, "
-                f"against {_by['JSON']['size (KB)']:,} KB for JSON); the quickest round trip is "
+                f"**Observation:** the smallest file is {_name(_smallest)} ({_smallest['size (KB)']:,} KB, "
+                f"compared with {_by['JSON']['size (KB)']:,} KB for JSON); the fastest round trip is "
                 f"{_name(_quickest)} ({_quickest['latency (ms)']:,} ms)."
-                + (" Quick, and the one format a partner could never safely open." if _quickest["format"].startswith("Pickle") else "")
-                + " Do latency and throughput rank the formats the same way? "
-                + f"Try {140 if len(_records) > 140 else len(shop_sales):,} sales too: does the ranking hold?"
-            ),
-            mo.accordion(
-                {
-                    "The sales being saved, and why the reads are not quite like for like": mo.vstack(
-                        [
-                            static_table(_records[:3], label="The first three sales, as every format receives them"),
-                            mo.md(
-                                "Numbers vary by machine and caching, so compare the formats with each other, not with "
-                                "another laptop. Arrow and Parquet stop at a columnar table without building Python "
-                                "objects, and CSV hands back strings it never converts to numbers."
-                            ),
-                        ]
-                    )
-                }
+                + (" It is also the one format a partner could not open safely." if _quickest["format"].startswith("Pickle") else "")
+                + " Do latency and throughput rank the formats in the same order? "
+                + f"Does the ranking hold for {140 if len(_records) > 140 else len(shop_sales):,} sales? "
+                "Timings depend on the machine, so only the relative order is meaningful."
             ),
         ],
         gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(Path, box, diagram, in_plain, mo, pd, shop_sales, tempfile):
-    # Each partner store has a three-digit code. For this demo, the code is the country's number:
-    # South Africa's partner store is 007, the classic case of a code that looks like a number and is not.
-    _src = shop_sales[["sale_id", "sale_date", "total_price"]].copy()
-    _src["store_code"] = [f"{_n:03d}" for _n in shop_sales["country_id"]]
-    _sa_sale = int(shop_sales.loc[shop_sales["country"] == "South Africa", "sale_id"].iloc[0])
-
-    with tempfile.TemporaryDirectory() as _td:
-        _csv_p = Path(_td) / "sales.csv"
-        _pq_p = Path(_td) / "sales.parquet"
-        _src.to_csv(_csv_p, index=False)
-        _src.to_parquet(_pq_p, index=False)
-        _from_csv = pd.read_csv(_csv_p)
-        _from_pq = pd.read_parquet(_pq_p)
-
-    # One row per column: the type written, then the type each file hands back, ticked where it matches.
-    _xs = {"wrote": 190, "back from CSV": 470, "back from Parquet": 750}
-    _parts = [f'<text x="{_x + 130}" y="22" text-anchor="middle" font-weight="700">{_name}</text>' for _name, _x in _xs.items()]
-    for _i, _c in enumerate(_src.columns):
-        _y = 40 + _i * 56
-        _wrote = str(_src[_c].dtype)
-        _parts.append(f'<text x="0" y="{_y + 27}" font-family="monospace" font-weight="700">{_c}</text>')
-        _parts.append(box(_xs["wrote"], _y, _wrote, w=260))
-        for _x, _back_df in ((_xs["back from CSV"], _from_csv), (_xs["back from Parquet"], _from_pq)):
-            _back = str(_back_df[_c].dtype)
-            if _back == _wrote:
-                _parts.append(box(_x, _y, f"&#10003; {_back}", w=260, cls="dg-box dg-ok"))
-            else:
-                _parts.append(box(_x, _y, f'<tspan class="dg-hot">&#10007; {_back}</tspan>', w=260, cls="dg-box dg-hot"))
-    _types = diagram(
-        "".join(_parts),
-        width=1010,
-        height=264,
-        label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
-        "CSV returns sale_date as text and store_code as a whole number.",
-    )
-
-    def _span(_df):
-        try:
-            return str(_df["sale_date"].max() - _df["sale_date"].min())
-        except TypeError as _exc:
-            return f"TypeError: {_exc}"
-
-    def _ask(name, df, kind):
-        _code = df.loc[df["sale_id"] == _sa_sale, "store_code"].tolist()[0]
-        return mo.md(
-            f"""
-    **Ask the {name} copy**
-
-    - How long did sales run? `{_span(df)}`
-    - South Africa's store code: `{_code!r}`
-            """
-        ).callout(kind=kind)
-
-    _why = mo.md(
-        """
-    Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not lose the
-    date. They lost **the note saying it was a date**, and that note is what the analysis was standing
-    on. Parquet stores the date as a plain number and keeps the note in its schema, which is why it came
-    back as a date.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md("### Why the CSV turned store code 007 into 7"),
-            in_plain(
-                "CSV is plain text with no note of what type each column is, so the reader guesses. "
-                "`2024-03-07` stays text, and `007` looks like a number, so it becomes `7`. Parquet stores the "
-                f"type next to the data. Here all {len(_src):,} sales, with each partner store's code (for this demo, "
-                "the country number: South Africa is 007), go into both files and come back out."
-            ),
-            _types,
-            mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
-            mo.md(
-                "**What to notice:** the date failure shouted (a `TypeError`); the store code failed silently. "
-                "**That one ends up in a partner's report.**"
-            ),
-            mo.accordion({"What the CSV actually lost": _why}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(csv, diagram, fastavro, html, in_plain, io, mo, shop_sales):
-    # Next March, EdgeWorks starts recording each sale's channel: online or partner. Two years of old files sit
-    # on disk, and one old program nobody redeployed is still running. What happens?
-    _v1 = {
-        "type": "record",
-        "name": "Sale",
-        "fields": [{"name": "sale_id", "type": "long"}, {"name": "total_price", "type": "double"}],
-    }
-    _v2 = {
-        "type": "record",
-        "name": "Sale",
-        "fields": [
-            {"name": "sale_id", "type": "long"},
-            {"name": "total_price", "type": "double"},
-            {"name": "channel", "type": "string", "default": "unknown"},
-        ],
-    }
-
-    def _avro_bytes(_schema, _rows):
-        _buf = io.BytesIO()
-        fastavro.writer(_buf, _schema, _rows)
-        return _buf.getvalue()
-
-    _first, _last = shop_sales.iloc[0], shop_sales.iloc[-1]
-    _old_file = _avro_bytes(_v1, [{"sale_id": int(_first["sale_id"]), "total_price": float(_first["total_price"])}])
-    _new_file = _avro_bytes(
-        _v2, [{"sale_id": int(_last["sale_id"]), "total_price": float(_last["total_price"]), "channel": "online"}]
-    )
-
-    _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
-    _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
-
-    _csv_row = next(csv.DictReader(io.StringIO(f"sale_id,total_price\n{_first['sale_id']},{_first['total_price']}\n")))
-    try:
-        _csv_row["channel"]
-        _csv_result = "no error"
-    except KeyError as _exc:
-        _csv_result = f"KeyError: {_exc}"
-
-    def _card(x, y, w, title, sub, cls="dg-box"):
-        return (
-            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="64" rx="12"/>'
-            f'<text x="{x + w / 2:.0f}" y="{y + 26}" text-anchor="middle" font-weight="700">{html.escape(title, quote=False)}</text>'
-            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 50}" text-anchor="middle">{sub}</text>'
-        )
-
-    def _fields(record):
-        return " · ".join(f"{_k} {_v}" for _k, _v in record.items())
-
-    _lanes = [
-        ("last year's Avro file", "old form", "this year's code", "new form: + channel",
-         _fields(_old_by_new[0]), "&#10003; the reader filled in the default", "dg-box dg-ok"),
-        ("this year's Avro file", "new form", "the old program", "old form",
-         _fields(_new_by_old[0]), "&#10003; the extra box is skipped", "dg-box dg-ok"),
-        ("last year's CSV file", "no form inside", "this year's code", "expects channel",
-         _csv_result, "&#10007; only fix: change every reader", "dg-box dg-hot"),
-    ]
-    _parts = [
-        '<text x="120" y="20" text-anchor="middle" font-weight="700">the file</text>'
-        '<text x="390" y="20" text-anchor="middle" font-weight="700">read by</text>'
-        '<text x="790" y="20" text-anchor="middle" font-weight="700">what comes back</text>'
-    ]
-    for _i, (_file, _file_sub, _reader, _reader_sub, _result, _verdict, _cls) in enumerate(_lanes):
-        _y = 36 + _i * 84
-        _parts += [
-            _card(0, _y, 240, _file, _file_sub),
-            f'<path class="dg-edge" d="M246 {_y + 32} H 284"/>',
-            _card(290, _y, 200, _reader, _reader_sub, "dg-tier"),
-            f'<path class="dg-edge" d="M496 {_y + 32} H 534"/>',
-            _card(540, _y, 500, _result, _verdict, _cls),
-        ]
-    _lanes_svg = diagram(
-        "".join(_parts),
-        width=1040,
-        height=290,
-        label="Avro: last year's file read by this year's code gets the default channel; this year's file read by the "
-        "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
-        tier="data",
-    )
-    mo.vstack(
-        [
-            mo.md("### Schema evolution: EdgeWorks adds a channel box to the form"),
-            in_plain(
-                "**Schema evolution** means changing the form while old files and old programs live on. EdgeWorks "
-                "starts recording each sale's `channel`: `online` or `partner`. Old sales have no such box, so the "
-                "new form gives it a **default**, `unknown`, for any sale written without it."
-            ),
-            _lanes_svg,
-            mo.md(
-                "**What to notice:** the bottom row. CSV ships without the form, so the agreement lives only in "
-                "someone's memory, and every reader has to be changed by hand."
-            ),
-        ],
-        gap=0.8,
     )
     return
 
@@ -1854,12 +1369,12 @@ def _(mo):
     ch2_use_case = mo.ui.dropdown(
         options=["Sales files for partners", "Dashboard cache", "Sales history for analysis", "Order event stream"],
         value="Sales files for partners",
-        label="EdgeWorks job",
+        label="Use case",
     )
     ch2_priority = mo.ui.dropdown(
         options=["Interoperability", "Speed", "Small size", "Safety"],
         value="Interoperability",
-        label="What matters most",
+        label="Primary criterion",
     )
     return ch2_priority, ch2_use_case
 
@@ -1868,10 +1383,10 @@ def _(mo):
 def _(ch2_priority, ch2_use_case, mo):
     # one row per job, one entry per priority in the order of the priority dropdown
     _recommendations = {
-        "Sales files for partners": ["CSV for spreadsheets, Parquet for data teams", "Parquet", "Parquet, compressed with zstd (chapter 4)", "CSV or Parquet; never Pickle"],
-        "Dashboard cache": ["Parquet / Arrow", "Arrow (Feather), or Pickle we wrote ourselves", "Parquet", "Arrow or Parquet; no Pickle from outside"],
+        "Sales files for partners": ["CSV for spreadsheets, Parquet for data teams", "Parquet", "Parquet, compressed with zstd (Part 2)", "CSV or Parquet; never Pickle"],
+        "Dashboard cache": ["Parquet / Arrow", "Arrow (Feather), or self-produced Pickle", "Parquet", "Arrow or Parquet; no external Pickle"],
         "Sales history for analysis": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
-        "Order event stream": ["Avro / JSON", "Avro", "Avro with compression", "Avro + a schema registry: one shared copy of every form"],
+        "Order event stream": ["Avro / JSON", "Avro", "Avro with compression", "Avro + a schema registry: one shared copy of every schema"],
     }
     _priorities = list(ch2_priority.options)
     _pick = (ch2_use_case.value, _priorities.index(ch2_priority.value))
@@ -1886,11 +1401,11 @@ def _(ch2_priority, ch2_use_case, mo):
         _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
     mo.vstack(
         [
-            mo.md("### Try it: which format for which EdgeWorks job?"),
+            mo.md("### Format selection by use case and criterion"),
             mo.md(
-                "Pick a job and what matters most for it. **Interoperability** means how many tools can read the "
-                "file: Excel, R, a partner's script. A **cache** is a saved copy the dashboard reloads instead of "
-                "asking again."
+                "Each use case is combined with its primary criterion. **Interoperability** is the range of tools that "
+                "can read the file: Excel, R, a partner's script. A **cache** is a stored copy the dashboard reloads "
+                "instead of requesting the data again."
             ),
             mo.hstack([ch2_use_case, ch2_priority], justify="start", gap=2),
             mo.md(
@@ -1903,8 +1418,8 @@ def _(ch2_priority, ch2_use_case, mo):
                 """
             ),
             mo.md(
-                f"**Starting point: {_recommendations[_pick[0]][_pick[1]]}.** A default to benchmark on EdgeWorks' own "
-                "files, not a rule."
+                f"**Starting point: {_recommendations[_pick[0]][_pick[1]]}.** A default to be validated by benchmarks "
+                "on the EdgeWorks files, not a fixed rule."
             ),
         ],
         gap=0.6,
@@ -1916,21 +1431,27 @@ def _(ch2_priority, ch2_use_case, mo):
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion: Serialization Choices</h3>
+      <h3>Discussion: File Formats</h3>
       <details>
-        <summary><strong>Q1:</strong> A partner in Japan asks for "the sales as a file". CSV, JSON or Parquet?</summary>
-        <p><strong>Answer:</strong> Ask what they open it with. Excel: CSV, with the column types written down
-        (store codes are text). A data team: Parquet, which carries the types itself. A web app: JSON.</p>
+        <summary><strong>Q1:</strong> A partner asks for "the sales as a file". CSV, JSON or Parquet?</summary>
+        <p><strong>Answer:</strong> It depends on the consuming tool. Excel: CSV in UTF-8, with documented column types
+        (store codes are text). A data team: Parquet, which carries the types itself. A web application: JSON.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> A partner sends us their sales as a Pickle file. Do we load it?</summary>
-        <p><strong>Answer:</strong> No. Loading Pickle can run any code the sender put in it. Ask for Parquet or
-        CSV, and validate whatever comes in.</p>
+        <summary><strong>Q2:</strong> A CSV file opened in Excel shows "ZÃ¼rich" instead of "Zürich". What happened?</summary>
+        <p><strong>Answer:</strong> The file was written as UTF-8 and read as Windows-1252. It has to be imported with
+        the correct encoding (in Excel: Data, From Text/CSV, UTF-8), or written for Excel with
+        <code>encoding="utf-8-sig"</code>, which adds a marker that Excel recognises.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Before switching the nightly export to a new format, where do we measure size and speed?</summary>
-        <p><strong>Answer:</strong> On the real export in a test setup (staging), then on a canary: one partner gets
-        the new format first, while the others keep the old one.</p>
+        <summary><strong>Q3:</strong> A partner sends its sales as a Pickle file. Should it be loaded?</summary>
+        <p><strong>Answer:</strong> No. Loading a Pickle file can execute arbitrary code embedded by the sender.
+        Parquet or CSV should be requested instead, and all incoming data validated.</p>
+      </details>
+      <details>
+        <summary><strong>Q4:</strong> Which format suits the order event stream, in which each order is sent as it occurs?</summary>
+        <p><strong>Answer:</strong> Avro: compact rows with a schema, written one record at a time. New fields with
+        defaults keep old and new consumers compatible; a schema registry stores one shared copy of every schema.</p>
       </details>
     </div>
     """)
@@ -1944,22 +1465,23 @@ def _(mo, shop_sales):
         [
             mo.md(
                 """
-    ### Chapter 2 Conclusion
+    ### Part 1 Summary
 
-    - Formats trade speed, size, interoperability and safety: benchmark on EdgeWorks' own sales.
-    - CSV keeps the values and drops the types (dates come back as text, store code `007` as `7`);
-      Parquet and Avro carry the schema with the data.
-    - Avro's reader defaults let old files and new code agree when the form changes.
-    - Never load Pickle from a partner, or from anyone you do not trust.
+    - Serialization converts objects into bytes; the format determines these bytes. Text formats (CSV, JSON)
+      are readable, binary formats (Avro, Parquet, Arrow, Pickle) are compact and typed.
+    - Text files require the matching encoding (UTF-8) and CSV dialect (separator, decimal mark).
+    - CSV stores no types (`007` becomes `7`); Avro, Parquet and Arrow carry a schema, and Avro's defaults
+      support schema evolution.
+    - Arrow exchanges tables between tools in memory; Pickle executes code when it is loaded.
+    - Latency and throughput are different goals; benchmarks on the actual data decide.
                 """
             ).callout(kind="success"),
             mo.md(
                 f"""
-    ### Bridge to Next Chapter
+    ### Next: Part 2
 
-    Next: **lay the bytes out** on disk, by row or by column. Mia's "total revenue" needs one field of
-    the {_fields} in each sale. A file laid out row by row still passes through all {_fields} fields of every
-    sale: {_fields * len(shop_sales):,} values read to use {len(shop_sales):,}.
+    Total revenue needs one of the {_fields} fields of each sale. A row-oriented file nevertheless passes
+    through all {_fields} fields of every sale: {_fields * len(shop_sales):,} values read to use {len(shop_sales):,}.
                 """
                 + """
     $$
@@ -1977,12 +1499,20 @@ def _(mo, shop_sales):
 def _(chapter_intro, mo):
     mo.vstack(
         [
-            mo.md("## 3. Column-Based vs Row-Based Storage"),
+            mo.md("## Part 2 · Storage: Layout, Compression and Queries"),
             chapter_intro(
                 "data",
-                '"Total revenue" reads one column. Why does it read the whole file?',
-                "The same sales can sit on disk sale by sale or field by field, and that choice decides how much "
-                "of the file a question has to read.",
+                "Total revenue needs one column. Why does the query read the whole CSV file but only part of the Parquet file?",
+                "How the bytes are arranged on disk, how they are compressed, how SQL reads them directly, and what a "
+                "database adds to plain files.",
+                topics=(
+                    "Row vs column layout",
+                    "Inside a Parquet file",
+                    "Compression",
+                    "SQL on files with DuckDB",
+                    "Schema on read and on write",
+                    "Transactions and ACID",
+                ),
             ),
         ],
         gap=1,
@@ -1993,9 +1523,9 @@ def _(chapter_intro, mo):
 @app.cell
 def _(mo):
     ch3_query = mo.ui.radio(
-        options=["Total revenue", "Show me sale 3,082", "Revenue in January 2026"],
+        options=["Total revenue", "Look up sale 3,082", "Revenue in January 2026"],
         value="Total revenue",
-        label="Mia asks:",
+        label="Query:",
         inline=True,
     )
     return (ch3_query,)
@@ -2009,7 +1539,7 @@ def _(ch3_query, diagram, in_plain, mo, shop_sales):
     _q = ch3_query.value
 
     def _needed(sale, field):
-        """Does Mia's question use this field of this sale?"""
+        """Does the query use this field of this sale?"""
         if _q == "Total revenue":
             return field == "price"
         if _q == "Revenue in January 2026":  # every date, to find January; the price of January's sales
@@ -2017,12 +1547,12 @@ def _(ch3_query, diagram, in_plain, mo, shop_sales):
         return sale == _lookup
 
     def _row_reads(sale, field):
-        """A slip is picked up whole: every field of a sale the question touches is read."""
+        """A row is read whole: every field of a sale the query touches is read."""
         return any(_needed(sale, _f) for _f in _fields)
 
     def _col_reads(sale, field):
-        """A total reads a page top to bottom; a lookup jumps to one line of every page."""
-        if _q.startswith("Show me"):
+        """An aggregate reads a column top to bottom; a lookup jumps to one value of every column."""
+        if _q.startswith("Look up"):
             return sale == _lookup
         return any(_needed(_s, field) for _s in _sales)
 
@@ -2034,8 +1564,8 @@ def _(ch3_query, diagram, in_plain, mo, shop_sales):
         return f'<rect class="{_cls[state]}" x="{x}" y="{y}" width="52" height="26" rx="4"{opacity}/>'
 
     _parts = [
-        '<text x="0" y="20" font-weight="700">Row layout: one slip per sale</text>',
-        '<text x="600" y="20" font-weight="700">Column layout: one page per field</text>',
+        '<text x="0" y="20" font-weight="700">Row layout: one record after another</text>',
+        '<text x="600" y="20" font-weight="700">Column layout: one field after another</text>',
     ]
     for _j, _f in enumerate(_fields):
         _parts.append(f'<text class="dg-muted" x="{134 + _j * 56}" y="54" text-anchor="middle">{_f}</text>')
@@ -2070,76 +1600,56 @@ def _(ch3_query, diagram, in_plain, mo, shop_sales):
         hot = ' class="dg-hot"' if read > _used else ""
         return f'<text x="{x}" y="{_tally_y}">{grabbed} · reads <tspan font-weight="700"{hot}>{read} fields</tspan> to use {_used}</text>'
 
-    _parts.append(_tally(0, f"picks up {_slips} slip{'s' if _slips > 1 else ''}", _row_read))
-    _parts.append(_tally(600, f"opens {_pages} page{'s' if _pages > 1 else ''}", _col_read))
+    _parts.append(_tally(0, f"scans {_slips} record{'s' if _slips > 1 else ''}", _row_read))
+    _parts.append(_tally(600, f"scans {_pages} column{'s' if _pages > 1 else ''}", _col_read))
     _parts += [
         f'<rect class="{_cls[_state]}" x="{_x}" y="{_tally_y + 22}" width="22" height="16" rx="3"/>'
         f'<text class="dg-muted" x="{_x + 30}" y="{_tally_y + 35}">{_label}</text>'
-        for _x, _state, _label in [(0, "used", "needed"), (130, "wasted", "read, not needed"), (330, "idle", "left alone")]
+        for _x, _state, _label in [(0, "used", "needed"), (130, "wasted", "read, not needed"), (330, "idle", "not read")]
     ]
     _picture = diagram(
         "".join(_parts),
         width=1060,
         height=_tally_y + 44,
-        label=f"{_q}: on six sales, the row layout picks up {_slips} slips and reads {_row_read} fields; the column "
-        f"layout opens {_pages} pages and reads {_col_read} fields; the question needs {_used}.",
+        label=f"{_q}: on six sales, the row layout scans {_slips} records and reads {_row_read} fields; the column "
+        f"layout scans {_pages} columns and reads {_col_read} fields; the query needs {_used}.",
         tier="data",
     )
 
-    # The same counts on the whole file, and Mia's answer.
+    # The same counts on the whole file, and the query result.
     _n = len(shop_sales)
     _jan = shop_sales[shop_sales["sale_date"].dt.strftime("%Y-%m") == "2026-01"]
     _one = shop_sales[shop_sales["sale_id"] == _lookup].iloc[0]
     if _q == "Total revenue":
         _notice = (
-            f"**What to notice:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
-            f"**{_n:,}**: just the prices. Mia's answer: CHF {shop_sales['total_price'].sum():,.2f}."
+            f"**Observation:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
+            f"**{_n:,}**: only the prices. Result: CHF {shop_sales['total_price'].sum():,.2f}."
         )
     elif _q == "Revenue in January 2026":
         _notice = (
-            f"**What to notice:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
-            f"**{_n * 2:,}** (every date, every price) to use {_n + len(_jan):,}. Mia's answer: "
+            f"**Observation:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
+            f"**{_n * 2:,}** (every date, every price) to use {_n + len(_jan):,}. Result: "
             f"CHF {_jan['total_price'].sum():,.2f} from {len(_jan)} sales."
         )
     else:
         _notice = (
-            "**What to notice:** one sale is the row layout's home game. All 7 fields lie on one slip, while the column layout "
-            f"opens 7 pages for one line each. Sale {_lookup:,}: {_one['sale_date'].day} {_one['sale_date']:%B %Y}, {_one['product']}, "
+            "**Observation:** a single-record lookup is the best case for the row layout. All 7 fields are stored together, "
+            f"while the column layout accesses 7 columns for one value each. Sale {_lookup:,}: {_one['sale_date'].day} {_one['sale_date']:%B %Y}, {_one['product']}, "
             f"{_one['country']}, {_one['units_sold']} units, CHF {_one['total_price']:,.2f}."
         )
 
-    _story = mo.md(
-        """
-    **The shoebox.** Every sale is one till receipt: number, date, product, country, units, price and
-    rating printed together on one slip. To total January you pick up every slip, read the date and
-    the price, and put the other five fields down unread. That is a **row store**, and it is exactly
-    right for *show me sale 3,082*: one slip, one grab. Row stores suit OLTP (Online Transaction
-    Processing): booking, looking up and correcting single records, like the sales reps' order system.
-
-    **The ledger.** The same sales copied into a ledger, one field per page. A total now means taking
-    down one or two pages and leaving the rest on the shelf. That is a **column store**: right for
-    totals over many sales and for compression, wrong for *show me sale 3,082*, which is now one line
-    on seven different pages.
-
-    *Two things the picture does not show.* The ledger pages are written in shorthand, so they are not
-    all the same size: chapter 4. And a real ledger is cut into sections with an index at the back:
-    two slides from here.
-        """
-    )
     mo.vstack(
         [
             mo.md("### Two Ways to Lay Out the Same Sales"),
             in_plain(
-                "A file is one long line of bytes, so the sales have to go in some order. A **row layout** writes "
-                "one whole sale after another, like a box of till receipts (CSV, Avro, most databases). A **column "
-                "layout** writes one field after another, all 3,360 dates, then all 3,360 prices, like a ledger "
-                "with one page per field (Parquet)."
+                "A file is a linear sequence of bytes, so the sales must be stored in some order. A **row layout** "
+                "stores one complete sale after another (CSV, Avro, transactional databases) and suits single records "
+                "(OLTP). A **column layout** stores one field after another, all 3,360 dates, then all 3,360 prices "
+                "(Parquet), and suits aggregates over many records (OLAP)."
             ),
             ch3_query,
             _picture,
             mo.md(_notice),
-            mo.md("**In short:** a total over $N$ sales reads $N \\times 7$ fields in a row layout, $N \\times$ the fields it needs in a column layout."),
-            mo.accordion({"The shoebox and the ledger, told in full": _story}),
         ],
         gap=0.6,
     )
@@ -2148,119 +1658,99 @@ def _(ch3_query, diagram, in_plain, mo, shop_sales):
 
 @app.cell
 def _(mo):
-    n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Sales in memory (thousands)", show_value=True, debounce=True)
-    run_storage = mo.ui.run_button(label="Run storage benchmark", kind="success")
-    return n_rows, run_storage
+    p2_read_rows = mo.ui.slider(
+        steps=[100_000, 300_000, 1_000_000], value=300_000, label="Sales in the file", show_value=True, debounce=True
+    )
+    p2_read_run = mo.ui.run_button(label="Run the read benchmark", kind="success")
+    return p2_read_rows, p2_read_run
 
 
 @app.cell
-def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, shop_sales, tier_chart):
+def _(
+    Path,
+    TIER,
+    alt,
+    best_seconds,
+    chart_or_table,
+    format_bytes,
+    in_plain,
+    mo,
+    p2_read_rows,
+    p2_read_run,
+    pd,
+    shop_sales,
+    tempfile,
+    tier_chart,
+):
     _top = mo.vstack(
         [
-            mo.md("### Try it: Total Revenue From a Row Layout and a Column Layout"),
-            mo.md(
-                "Our 3,360 real sales, repeated until there are up to a million (so the times are long enough to "
-                "measure), kept twice in memory: sale by sale and field by field. Each run adds up one field, the "
-                "price, while every sale carries 2, 4, 7 (our sales file) or 10 fields (list price, category and "
-                "region joined in)."
+            mo.md("### Reading one column: CSV vs Parquet"),
+            in_plain(
+                "In a row layout (CSV), the reader has to scan every line, even if only one column is needed. In a "
+                "column layout (Parquet), it loads only the bytes of the requested column."
             ),
-            mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2),
+            mo.md(
+                "The sales, repeated to the chosen size, written once as CSV and once as Parquet, then read with pandas: "
+                'all columns, and only `total_price` (`usecols=["total_price"]` or `columns=["total_price"]`). Best of 3 runs.'
+            ),
+            mo.hstack([p2_read_rows, p2_read_run], justify="start", align="center", gap=2),
         ],
         gap=0.6,
     )
     mo.stop(
-        not run_storage.value,
+        not p2_read_run.value,
         mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** as every sale carries more fields, which layout gets slower at adding up the "
-                    "prices? Then click **Run storage benchmark**."
-                ).callout(kind="neutral"),
-            ],
+            [_top, mo.md("**Question:** how much faster is reading only `total_price` from Parquet than from CSV?").callout(kind="neutral")],
             gap=0.6,
         ),
     )
-
-    # The price first, then the rest of the sale row, then three fields joined in from products and countries.
-    _fields = ["total_price", "sale_id", "sale_date", "product_id", "country_id", "units_sold", "customer_rating", "list_price", "category_id", "region_id"]
-    _real = shop_sales[_fields].assign(sale_date=shop_sales["sale_date"].astype("int64")).to_numpy(dtype=float)
-    _n = n_rows.value * 1000
-    _all = np.tile(_real, (-(-_n // len(_real)), 1))[:_n]  # the real sales, repeated to n rows
-    _operations = {
-        "Total revenue (sum of prices)": lambda t: t[:, 0].sum(),
-        "Big deals (count of sales over CHF 50,000)": lambda t: np.count_nonzero(t[:, 0] > 50_000),
-    }
-    _results = []
-    for _cols in (2, 4, 7, 10):
-        _row_store = np.ascontiguousarray(_all[:, :_cols])  # C order: each sale's fields side by side
-        _col_store = np.asfortranarray(_row_store)  # F order: each field's values side by side
-        for _operation, _fn in _operations.items():
-            # best of 5: each operation takes milliseconds, so a stray hiccup would dominate
-            _row_ms = best_seconds(_fn, _row_store, repeat=5) * 1000
-            _col_ms = best_seconds(_fn, _col_store, repeat=5) * 1000
-            _results.append(
-                {
-                    "question": _operation,
-                    "fields per sale": _cols,
-                    "row layout (ms)": round(_row_ms, 3),
-                    "column layout (ms)": round(_col_ms, 3),
-                    "column is faster by": f"{_row_ms / _col_ms:.1f}x",
-                }
-            )
-
-    _df = pd.DataFrame(_results)
-    _long = _df.melt(
-        id_vars=["question", "fields per sale"], value_vars=["row layout (ms)", "column layout (ms)"], var_name="layout", value_name="ms"
+    _cols = ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"]
+    _n = p2_read_rows.value
+    _sales = pd.concat([shop_sales[_cols]] * -(-_n // len(shop_sales)), ignore_index=True).head(_n)
+    _rows = []
+    with tempfile.TemporaryDirectory() as _td:
+        _csv, _pq = Path(_td) / "sales.csv", Path(_td) / "sales.parquet"
+        _sales.to_csv(_csv, index=False)
+        _sales.to_parquet(_pq, index=False)
+        for _format, _path, _all, _one in (
+            ("CSV", _csv, lambda: pd.read_csv(_csv), lambda: pd.read_csv(_csv, usecols=["total_price"])),
+            ("Parquet", _pq, lambda: pd.read_parquet(_pq), lambda: pd.read_parquet(_pq, columns=["total_price"])),
+        ):
+            for _what, _read in (("all 7 columns", _all), ("only total_price", _one)):
+                _rows.append(
+                    {
+                        "format": _format,
+                        "columns read": _what,
+                        "ms": round(best_seconds(_read) * 1000, 1),
+                        "file size": format_bytes(_path.stat().st_size),
+                    }
+                )
+    _df = pd.DataFrame(_rows)
+    _order = ["all 7 columns", "only total_price"]
+    _bars = alt.Chart(_df).encode(
+        y=alt.Y("format:N", sort=["CSV", "Parquet"], title=None),
+        yOffset=alt.YOffset("columns read:N", sort=_order),
+        x=alt.X("ms:Q", title="milliseconds", scale=alt.Scale(domain=[0, _df["ms"].max() * 1.25])),
+        tooltip=list(_rows[0]),
     )
-    _long["layout"] = _long["layout"].str.removesuffix(" (ms)")
-    _x = alt.X("fields per sale:O", title="fields per sale", axis=alt.Axis(labelAngle=0))
-    _charts = []
-    for _operation in _operations:
-        _lines = (
-            alt.Chart(_long[_long["question"] == _operation])
-            .mark_line(point=alt.OverlayMarkDef(size=90), strokeWidth=3)
-            .encode(
-                x=_x,
-                y=alt.Y("ms:Q", title="ms"),
-                color=alt.Color(
-                    "layout:N", title=None, scale=alt.Scale(domain=["row layout", "column layout"], range=[TIER["hot"], TIER["data"]])
-                ),
-                tooltip=["layout:N", "fields per sale:O", "ms:Q"],
-            )
+    _chart = (
+        _bars.mark_bar(cornerRadiusEnd=4).encode(
+            color=alt.Color("columns read:N", title=None, sort=_order, scale=alt.Scale(domain=_order, range=[TIER["muted"], TIER["data"]]))
         )
-        # over each row-layout point: how many times faster the column layout was
-        _speedup = (
-            alt.Chart(_df[_df["question"] == _operation])
-            .mark_text(align="right", dx=-8, dy=-12)
-            .encode(x=_x, y="row layout (ms):Q", text="column is faster by:N")
-        )
-        _charts.append((_lines + _speedup).properties(width="container", height=260, title=_operation))
-
-    _seven = _df[(_df["fields per sale"] == 7) & (_df["question"] == next(iter(_operations)))].iloc[0]
-    _why = mo.md(
-        """
-    No file is written, so this is not CSV against Parquet, only the access pattern each one uses.
-    Both questions read one field. In the row layout the prices sit a whole sale apart, and the CPU
-    fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
-    away. In the column layout the prices lie side by side and every byte fetched is used. Parquet
-    goes further and never reads the unused columns from disk.
-        """
-    )
+        + _bars.mark_text(align="left", dx=6).encode(text=alt.Text("ms:Q", format=",.1f"))
+    ).properties(width="container", height=200, title=f"Read time for {_n:,} sales (ms)")
+    _ms = {(_r["format"], _r["columns read"]): _r["ms"] for _r in _rows}
+    _csv_one, _pq_one = _ms[("CSV", "only total_price")], _ms[("Parquet", "only total_price")]
     mo.vstack(
         [
             _top,
-            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _results, label="Row vs column layout, the same sales"),
+            chart_or_table(tier_chart(_chart, "data"), _rows, label="Read times, best of 3"),
             mo.md(
-                f"**What to notice:** at 7 fields, our real sale, the column layout adds up the prices "
-                f"**{_seven['column is faster by']}** faster ({_seven['column layout (ms)']:.2f} against "
-                f"{_seven['row layout (ms)']:.2f} ms). Labels: how many times faster the column layout was."
+                f"**Observation:** reading only `total_price` from Parquet takes {_pq_one:,.1f} ms, "
+                f"{_csv_one / max(_pq_one, 0.1):,.0f}× faster than from CSV. For CSV, `usecols` saves memory but "
+                f"comparatively little time ({_ms[('CSV', 'all 7 columns')] / max(_csv_one, 0.1):.1f}× faster than "
+                "reading everything): the parser still has to split every line."
             ),
-            mo.md(
-                "**In short:** to use 1 of $C$ fields, the row layout reads all $C$ and the column layout 1. The gap "
-                "grows with $C$, though not exactly by $C$."
-            ),
-            mo.accordion({"Why: cache lines, and what Parquet adds": _why}),
         ],
         gap=0.6,
     )
@@ -2312,35 +1802,23 @@ def _(SALES_SEED, box, diagram, in_plain, label_w, mo, pd):
         "their date and price chunks are read.",
         tier="data",
     )
-    _fences = mo.md(
-        """
-    - The footer can prove a row group is **hopeless**, never that it is **useful**. A row group dated
-      <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened, and may hold no
-      January sale at all. Min and max are a rejection test, not a search.
-    - Row groups 0 to 6 are skipped not *probably* but **provably**: their latest date is before
-      1 January 2026, so no sale inside them can be in January.
-    - The order the sales were written in is not cosmetic. Write them in random order and every row
-      group spans the whole two years, every min-max is useless, and all eight are opened. The
-      mechanism did not fail; it was given nothing to work with. The next lab measures exactly that.
-        """
-    )
     _closed = _open.count(False)
     mo.vstack(
         [
             mo.md("### Inside a Parquet File: Row Groups, Column Chunks, a Footer"),
             in_plain(
-                "Parquet cuts the ledger into sections. A **row group** is a block of sales (here 420, about three "
-                "months). Inside it, each field's values sit together in a **column chunk**. At the end of the file, "
-                "the **footer** keeps each chunk's smallest and largest value, its **min-max statistics**. A reader "
-                "looks at the footer first and skips every row group that cannot hold a match."
+                "Parquet divides the rows into blocks. A **row group** is a block of sales (here 420, about three "
+                "months). Within it, the values of each field are stored together in a **column chunk**. At the end "
+                "of the file, the **footer** records the smallest and largest value of each chunk, its **min-max "
+                "statistics**. A reader consults the footer first and skips every row group that cannot contain a match."
             ),
             _binder,
             mo.md(
-                f"**What to notice:** for Mia's January revenue the footer rules out {_closed} of {len(_groups)} row "
-                f"groups without opening them, and in the one left only the date and price chunks are read: "
-                f"**2 of {len(_groups) * 7} chunks**."
+                f"**Observation:** for the January revenue query, the footer excludes {_closed} of {len(_groups)} row "
+                f"groups without reading them, and in the remaining one only the date and price chunks are read: "
+                f"**2 of {len(_groups) * 7} chunks**. This works because the file is sorted by date, as the next "
+                "experiment shows."
             ),
-            mo.accordion({"What the footer can and cannot prove": _fences}),
         ],
         gap=0.6,
     )
@@ -2348,7 +1826,7 @@ def _(SALES_SEED, box, diagram, in_plain, label_w, mo, pd):
 
 
 @app.cell
-def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mia_asks, mo, pd, tempfile, tier_chart):
+def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mo, pd, tempfile, tier_chart):
     _df = pd.read_parquet(SALES_SEED)
     _from, _to = "2026-01-01", "2026-02-01"
     _wanted = ["sale_date", "total_price"]
@@ -2435,115 +1913,24 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
             ).properties(width="container", height=150, title=f"{_file}: bytes the query must read")
         )
     _sorted, _mixed = _rows
-    _notes = mo.md(
-        f"""
-    - These are bytes the reader is *allowed to skip*, worked out from each file's own footer, not
-      bytes measured leaving the disk.
-    - The shuffled file is also {_shuffled_size / _ordered_size - 1:.0%} larger ({_shuffled_size:,} against
-      {_ordered_size:,} bytes) from the very same sales: a preview of chapter 4, where order is itself a
-      form of compression.
-        """
-    )
     mo.vstack(
         [
-            mo.md("### Try it: Does the Order We Write Sales In Matter?"),
-            mia_asks("What did we sell in January 2026?"),
+            mo.md("### Does the Write Order of the Sales Matter?"),
             mo.md(
-                "Our 3,360 sales written to Parquet twice, 420 to a row group: once sorted by date, once shuffled "
-                "into random order. Each file's footer decides which row groups the January query may skip."
+                "The 3,360 sales written to Parquet twice, 420 per row group: once sorted by date, once in random "
+                "order. Each file's footer determines which row groups the January query can skip."
             ),
             _strip_svg,
             chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _rows, label="Bytes the January query must read"),
             mo.md(
-                f"**What to notice:** sorted by date, reading only two columns took the query from "
-                f"**{format_bytes(_sorted[_steps[0]])}** to **{format_bytes(_sorted[_steps[1]])}**, and the footer took it to "
-                f"**{format_bytes(_sorted[_steps[2]])}**. Shuffled, the footer skips **nothing** ({_mixed['row groups opened']} "
-                f"opened). Both files answer CHF {_sorted['January revenue (CHF)']:,.2f}."
+                f"**Observation:** sorted by date, reading only two columns reduces the query from "
+                f"**{format_bytes(_sorted[_steps[0]])}** to **{format_bytes(_sorted[_steps[1]])}**, and the footer reduces it to "
+                f"**{format_bytes(_sorted[_steps[2]])}**. Shuffled, the footer excludes **nothing** ({_mixed['row groups opened']} "
+                f"opened). Both files return CHF {_sorted['January revenue (CHF)']:,.2f}, and the shuffled file is also "
+                f"{_shuffled_size / _ordered_size - 1:.0%} larger: sorted values compress better."
             ),
-            mo.accordion({"Two honesty notes": _notes}),
         ],
         gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion — Row vs Column Storage</h3>
-      <details>
-        <summary><strong>Q1:</strong> The sales reps book and correct single orders all day. Row or column layout?</summary>
-        <p><strong>Answer:</strong> Row layout: each booking reads or writes one whole sale. That is OLTP (Online
-        Transaction Processing), and it is what row databases are built for. Mia's dashboard reads column files.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> Mia's chart shows revenue per region. Which column chunks does it read?</summary>
-        <p><strong>Answer:</strong> Two of seven: <code>total_price</code> and <code>country_id</code> (the country
-        gives the region). Reading only the columns a query names is called projection pushdown.</p>
-      </details>
-      <details>
-        <summary><strong>Q3:</strong> Why does the order we write sales in matter for Parquet?</summary>
-        <p><strong>Answer:</strong> The footer can only skip a row group whose min-max range misses the filter.
-        Sorted by date, each row group spans three months; shuffled, every one spans all two years.</p>
-      </details>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(SALES_SEED, mo, pq):
-    _meta = pq.ParquetFile(SALES_SEED).metadata
-    _price = sum(
-        _meta.row_group(_g).column(_c).total_compressed_size
-        for _g in range(_meta.num_row_groups)
-        for _c in range(_meta.num_columns)
-        if _meta.row_group(_g).column(_c).path_in_schema == "total_price"
-    )
-    _file = SALES_SEED.stat().st_size
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    ### Chapter 3 Conclusion
-
-    - **Mia's answer:** "total revenue" reads the whole file when the file is a row layout (CSV, Avro): the
-      prices sit between the other six fields of every sale. In our Parquet file it reads only the price
-      column: {_price:,} of the file's {_file:,} bytes.
-    - Row layouts suit booking and looking up single sales; column layouts suit totals over many sales.
-    - Parquet's footer keeps min-max per row group: sorted by date, January 2026 opens 1 of 8 row groups;
-      shuffled, all 8.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Bridge to Next Chapter
-
-    A column puts similar values side by side: the same 3 categories, 7 products and 8 countries over and
-    over. Repetition is what compression feeds on. Next: how small can the sales history get, without
-    losing a cent?
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(chapter_intro, mo):
-    mo.vstack(
-        [
-            mo.md("## 4. Compression & Encoding (Parquet, Gzip)"),
-            chapter_intro(
-                "data",
-                "The sales history fills the disk. Can we shrink it without losing a cent?",
-                "Lossless compression shrinks a file and gives back every byte. This chapter measures how much it "
-                "saves on our sales, and what unpacking costs.",
-            ),
-        ],
-        gap=1,
     )
     return
 
@@ -2554,7 +1941,7 @@ def _(SALES_SEED, diagram, gzip, in_plain, mo, pd):
     _gz = gzip.compress(_csv, 6)
     # A sketch of the timing model, not a measurement: segment lengths only show which step grows.
     _amber = ' style="fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.5"'
-    _kinds = {"read": ' class="dg-tier"', "unpack": _amber, "compute": ' class="dg-box"'}
+    _kinds = {"read": ' class="dg-tier"', "decompress": _amber, "compute": ' class="dg-box"'}
 
     def _bar(y, name, parts, verdict=""):
         x, out = 190, [f'<text x="0" y="{y + 25}">{name}</text>']
@@ -2568,311 +1955,40 @@ def _(SALES_SEED, diagram, gzip, in_plain, mo, pd):
     _faster = '<text class="dg-ok" x="{x}" y="{y}">&#10003; faster</text>'
     _slower = '<text class="dg-hot" x="{x}" y="{y}">&#10007; slower</text>'
     _sketch = diagram(
-        '<text x="0" y="20" font-weight="700">Sent to the analyst in Berlin, over the network: moving bytes dominates</text>'
+        '<text x="0" y="20" font-weight="700">Transferred over a network: moving the bytes dominates</text>'
         + _bar(36, "plain CSV", [("read", 520), ("compute", 120)])
-        + _bar(82, "gzipped CSV", [("read", 190), ("unpack", 110), ("compute", 120)], _faster)
-        + '<text x="0" y="160" font-weight="700">Read by the dashboard, file already in memory: unpacking dominates</text>'
+        + _bar(82, "gzipped CSV", [("read", 190), ("decompress", 110), ("compute", 120)], _faster)
+        + '<text x="0" y="160" font-weight="700">Read by the dashboard from memory: decompression dominates</text>'
         + _bar(176, "plain CSV", [("read", 40), ("compute", 120)])
-        + _bar(222, "gzipped CSV", [("read", 16), ("unpack", 110), ("compute", 120)], _slower),
+        + _bar(222, "gzipped CSV", [("read", 16), ("decompress", 110), ("compute", 120)], _slower),
         width=1000,
         height=270,
-        label="A sketch: sent over the network, the gzipped file saves more read time than unpacking adds, so the total "
-        "shrinks. Already in memory, there is little read time to save, and unpacking makes it slower.",
+        label="A sketch: over a network, the gzipped file saves more read time than decompression adds, so the total "
+        "time decreases. In memory, there is little read time to save, and decompression makes it slower.",
         tier="data",
     )
     mo.vstack(
         [
-            mo.md("### What Compression Trades: Fewer Bytes, More Unpacking"),
+            mo.md("### The Compression Trade-off: Fewer Bytes, More Decompression"),
             in_plain(
-                "Compression writes the same sales in fewer bytes by spotting repetition. The catch: every reader "
-                "has to unpack the file before using it. So it pays when moving bytes is slow, as on the way to "
-                "our analyst in Berlin, and costs time when the bytes are already in memory."
+                "Compression encodes the same sales in fewer bytes by exploiting repetition. In return, every reader "
+                "must decompress the file before using it. Compression therefore pays off when moving bytes is slow, "
+                "as over a network, and costs time when the bytes are already in memory."
             ),
             _sketch,
             mo.md(
-                f"**What to notice:** our sales as CSV are {len(_csv):,} bytes, gzipped {len(_gz):,} "
-                f"({len(_gz) / len(_csv):.0%}). Unpacking costs the same in both pictures; only the read shrinks, so "
-                "only a slow read makes it worth it. *A sketch, not a measurement: bar lengths show which step grows.*"
+                f"**Observation:** the sales as CSV take {len(_csv):,} bytes, gzipped {len(_gz):,} "
+                f"({len(_gz) / len(_csv):.0%}). Decompression costs the same in both scenarios; only the read time "
+                "shrinks, so compression pays off only when reading is slow. *A sketch, not a measurement: bar "
+                "lengths indicate which step grows.*"
             ),
             mo.md(
-                "**In short:** total time ≈ read + unpack + compute. The compression ratio "
-                f"$r$ = compressed size / original size, here {len(_gz) / len(_csv):.2f}; it saves $1 - r$."
+                "**Formally:** total time ≈ read + decompress + compute. The compression ratio "
+                f"$r$ = compressed size / original size, here {len(_gz) / len(_csv):.2f}; the saving is $1 - r$."
             ),
         ],
         gap=0.6,
     )
-    return
-
-
-@app.cell
-def _(mo):
-    ch4_sales_per_month = mo.ui.radio(
-        options={"140 (today)": 140, "1,400": 1_400, "14,000": 14_000, "140,000": 140_000, "1.4 million": 1_400_000},
-        value="140 (today)",
-        label="Sales per month:",
-        inline=True,
-    )
-    ch4_years_kept = mo.ui.slider(1, 10, value=2, label="Years of sales kept (today: 2)", show_value=True, debounce=True)
-    budget_scans_day = mo.ui.slider(1, 80, value=20, label="Dashboard reads of the whole history per day", show_value=True, debounce=True)
-    return budget_scans_day, ch4_sales_per_month, ch4_years_kept
-
-
-@app.cell
-def _(SALES_SEED, TIER, alt, budget_scans_day, ch4_sales_per_month, ch4_years_kept, format_bytes, gzip, mo, pd, tier_chart):
-    _sales = pd.read_parquet(SALES_SEED)
-    _csv = _sales.to_csv(index=False).encode()
-    _per_sale = len(_csv) / len(_sales)  # bytes of CSV per sale, measured on today's file
-    _r = len(gzip.compress(_csv, 6)) / len(_csv)  # the compression ratio gzip reaches on it
-    _history = ch4_sales_per_month.value * 12 * ch4_years_kept.value * _per_sale
-    _reads = budget_scans_day.value
-    _day = pd.DataFrame({"stored": ["plain CSV", "gzipped CSV"], "bytes read per day": [_history * _reads, _history * _r * _reads]})
-    _day["label"] = [format_bytes(_b) for _b in _day["bytes read per day"]]
-    _base = alt.Chart(_day).encode(
-        y=alt.Y("stored:N", sort=None, title=None),
-        x=alt.X("bytes read per day:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _day["bytes read per day"].max() * 1.2])),
-        tooltip=["stored:N", "bytes read per day:Q"],
-    )
-    _bars = (
-        _base.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.Color("stored:N", legend=None, scale=alt.Scale(domain=["plain CSV", "gzipped CSV"], range=[TIER["muted"], TIER["data"]]))
-        )
-        + _base.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=110, title="Bytes the dashboard reads per day")
-    mo.vstack(
-        [
-            mo.md("### Try it: How Big Does the Sales History Get?"),
-            mo.md(
-                f"Today the history is {len(_sales):,} sales, {format_bytes(len(_csv))} as CSV. Pick how fast EdgeWorks "
-                f"grows and how long it keeps its sales. Assumed: every new sale takes as many bytes as today's "
-                f"({_per_sale:.0f} as CSV), gzip keeps today's ratio ({_r:.2f}), and every dashboard read scans the "
-                "whole history."
-            ),
-            ch4_sales_per_month,
-            mo.hstack([ch4_years_kept, budget_scans_day], widths="equal", gap=2),
-            mo.hstack(
-                [
-                    mo.stat(format_bytes(_history), label="History as plain CSV", bordered=True),
-                    mo.stat(format_bytes(_history * _r), label=f"Gzipped (r = {_r:.2f})", bordered=True),
-                    mo.stat(format_bytes(_history * (1 - _r) * _reads), label="Less to read per day", bordered=True),
-                ],
-                widths="equal",
-            ),
-            tier_chart(_bars, "data"),
-            mo.md(
-                f"**What to notice:** gzip keeps every sale and saves {1 - _r:.0%} of the disk and of every read: here "
-                f"**{format_bytes(_history * (1 - _r))}** on disk and **{format_bytes(_history * (1 - _r) * _reads)}** of "
-                "reading a day."
-            ),
-            mo.md("**In short:** on disk = sales × bytes per sale × $r$; read per day = on disk × reads per day."),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    ch4_k_range = (4, 90, 2)  # first, last, step: the slider below and the curve the lab draws
-    image_demo_rank = mo.ui.slider(*ch4_k_range, value=26, label="Patterns kept (k)", show_value=True, debounce=True)
-    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Picture width (px)", show_value=True, debounce=True)
-    return ch4_k_range, image_demo_rank, image_demo_width
-
-
-@app.cell
-def _(Image, ImageDraw, ch4_k_range, image_demo_width, io, np):
-    # Drawn here, so the lab needs no image file. This cell reads only the width: dragging k
-    # reuses the SVD below instead of redoing it.
-    _w = image_demo_width.value
-    _h = int(_w * 0.74)
-    _img = Image.new("RGB", (_w, _h))
-    _d = ImageDraw.Draw(_img)
-    for _y in range(_h):  # soft vertical gradient
-        _t = _y / (_h - 1)
-        _d.line([(0, _y), (_w, _y)], fill=(int(218 + 18 * _t), int(229 + 14 * _t), int(242 + 10 * _t)))
-    _step = max(6, _w // 45)  # a checker texture, so compression artefacts show
-    for _x in range(0, _w, _step):
-        for _y in range(0, _h, _step):
-            if (_x // _step + _y // _step) % 2 == 0:
-                _d.rectangle([_x, _y, min(_w - 1, _x + _step), min(_h - 1, _y + _step)], fill=(225, 232, 245))
-
-    _cx, _cy = _w // 2, int(_h * 0.56)
-    _r = int(min(_w, _h) * 0.24)
-
-    def _p(_fx, _fy):
-        """The point (fx, fy) face radii away from the centre of the face."""
-        return _cx + int(_fx * _r), _cy + int(_fy * _r)
-
-    _fur, _dark, _line = (220, 192, 158), (96, 74, 56), (88, 67, 54)
-    _ex, _ey = int(0.50 * _r), _cy - int(0.14 * _r)
-    _ew, _eh = int(0.25 * _r), int(0.18 * _r)
-    _pw, _ph, _sp = max(4, int(0.08 * _r)), max(7, int(0.20 * _r)), max(3, int(0.05 * _r))
-    for _s in (-1, 1):  # ears; every feature but the face and nose comes in a mirrored pair
-        _d.polygon([_p(_s * 0.82, -0.52), _p(_s * 0.40, -1.35), _p(_s * 0.03, -0.58)], fill=_fur, outline=_dark, width=3)
-        _d.polygon([_p(_s * 0.70, -0.56), _p(_s * 0.40, -1.16), _p(_s * 0.12, -0.62)], fill=(246, 186, 198))
-    _d.ellipse([_cx - _r, _cy - _r, _cx + _r, _cy + _r], fill=_fur, outline=_dark, width=3)
-    _d.ellipse([_p(-0.45, 0.05), _p(0.45, 0.62)], fill=(236, 214, 190))
-    for _s in (-1, 1):  # eyes, pupils, sparkles
-        _x = _cx + _s * _ex
-        _d.ellipse([(_x - _ew, _ey - _eh), (_x + _ew, _ey + _eh)], fill=(143, 198, 128), outline=(40, 40, 40), width=2)
-        _d.ellipse([(_x - _pw, _ey - _ph), (_x + _pw, _ey + _ph)], fill=(18, 22, 20))
-        _d.ellipse([(_x - _sp, _ey - _sp), (_x + _sp, _ey + _sp)], fill=(255, 255, 255))
-    _ny = _cy + int(0.13 * _r)
-    _d.polygon([(_cx, _ny), (_cx - int(0.13 * _r), _ny + int(0.15 * _r)), (_cx + int(0.13 * _r), _ny + int(0.15 * _r))], fill=(234, 150, 165), outline=(120, 74, 86))
-    _d.line([(_cx, _ny + int(0.15 * _r)), _p(0, 0.48)], fill=_line, width=2)
-    for _s in (-1, 1):  # mouth, cheeks, forehead marks, whiskers
-        _d.arc([_p(min(0, _s * 0.24), 0.38), _p(max(0, _s * 0.24), 0.62)], start=200, end=340, fill=_line, width=2)
-        _d.ellipse([_p(min(_s * 0.70, _s * 0.44), 0.16), _p(max(_s * 0.70, _s * 0.44), 0.36)], fill=(247, 178, 186))
-        _d.line([_p(0, -0.34), _p(_s * 0.11, -0.48)], fill=(187, 151, 118), width=2)
-        for _o in (-1, 0, 1):
-            _dy = _o * int(0.13 * _r)
-            _d.line([(_cx + _s * int(0.12 * _r), _cy + int(0.28 * _r) + _dy), (_cx + _s * int(0.95 * _r), _cy + int(0.13 * _r) + _dy)], fill=_line, width=2)
-
-    ch4_cat = np.asarray(_img)
-    # One SVD per colour channel, run as a batch of three. It is the slow step, so once per width.
-    ch4_cat_svd = np.linalg.svd(ch4_cat.transpose(2, 0, 1) / 255.0, full_matrices=False)
-
-    # Every k the slider offers, done once per width: what PCA has to store (the kept factors as float16,
-    # compressed) and how far the rebuilt pixels land from the original on average.
-    _u, _s, _vt = ch4_cat_svd
-    _first, _last, _step_k = ch4_k_range
-    ch4_cat_curve = []
-    for _k in range(_first, _last + 1, _step_k):
-        _kept = (_u[:, :, :_k], _s[:, :_k], _vt[:, :_k])
-        _buf = io.BytesIO()
-        np.savez_compressed(_buf, *(_m.astype(np.float16) for _m in _kept))
-        _back = np.rint(np.clip((_kept[0] * _kept[1][:, None]) @ _kept[2], 0, 1) * 255)
-        ch4_cat_curve.append(
-            {
-                "k": _k,
-                "PCA bytes": _buf.getbuffer().nbytes,
-                "average pixel off by": round(float(np.abs(_back - ch4_cat.transpose(2, 0, 1)).mean()), 2),
-            }
-        )
-    return ch4_cat, ch4_cat_curve, ch4_cat_svd
-
-
-@app.cell
-def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagram, gzip, image_demo_rank, image_demo_width, in_plain, label_w, mo, np, pd, tier_chart):
-    _k = image_demo_rank.value
-    _u, _s, _vt = ch4_cat_svd
-    _rebuilt = np.rint(np.clip((_u[:, :, :_k] * _s[:, None, :_k]) @ _vt[:, :_k], 0, 1) * 255).astype(np.uint8).transpose(1, 2, 0)
-    _pca_bytes = next(_row["PCA bytes"] for _row in ch4_cat_curve if _row["k"] == _k)
-    _gz = gzip.compress(ch4_cat.tobytes(), 6)
-    _gz_back = np.frombuffer(gzip.decompress(_gz), np.uint8).reshape(ch4_cat.shape)
-
-    _rows = [
-        {
-            "method": _method,
-            "bytes": _size,
-            "ratio (compressed/raw)": round(_size / ch4_cat.nbytes, 4),
-            "identical to the original?": "yes" if np.array_equal(_back, ch4_cat) else "no",
-            "worst pixel off by (of 255)": int(np.abs(_back.astype(int) - ch4_cat).max()),
-        }
-        for _method, _size, _back in (
-            ("gzip (lossless method)", len(_gz), _gz_back),
-            (f"PCA k={_k} (lossy method)", _pca_bytes, _rebuilt),
-        )
-    ]
-
-    _curve = pd.DataFrame(ch4_cat_curve)
-    _x = alt.X("k:Q", title="patterns kept (k)")
-    _here = _curve[_curve["k"] == _k]
-
-    def _panel(field, title, dy, *extra):
-        """One curve over k, with today's k as a dot labelled dy px above (-) or below (+) it."""
-        line = alt.Chart(_curve).mark_line(strokeWidth=3).encode(x=_x, y=alt.Y(f"{field}:Q", title=None), tooltip=["k:Q", f"{field}:Q"])
-        dot = alt.Chart(_here).mark_circle(size=220, opacity=1).encode(x=_x, y=f"{field}:Q")
-        label = alt.Chart(_here).mark_text(align="left", dx=12, dy=dy).encode(x=_x, y=f"{field}:Q", text=alt.value(f"k = {_k}"))
-        return alt.layer(line, dot, label, *extra).properties(width="container", height=220, title=title)
-
-    _gzip_line = alt.Chart(pd.DataFrame({"bytes": [len(_gz)], "text": [f"gzip, lossless: {len(_gz):,} bytes"]}))
-    _gzip_rule = _gzip_line.mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(y="bytes:Q") + _gzip_line.mark_text(
-        align="right", x="width", dy=-8
-    ).encode(y="bytes:Q", text="text:N")
-    _charts = mo.hstack(
-        [
-            tier_chart(_panel("PCA bytes", "Bytes PCA has to store", 16, _gzip_rule), "data"),
-            tier_chart(_panel("average pixel off by", "Average pixel off by (of 255)", -14), "data"),
-        ],
-        widths="equal",
-        gap=2,
-    )
-
-    _flow, _at = "", 0
-    for _i, _step in enumerate(["picture: 3 grids of numbers (R, G, B)", f"keep the strongest k = {_k} patterns", "rebuilt picture"]):
-        _flow += box(_at, 8, _step, cls="dg-tier" if _i == 1 else "dg-box")
-        _at += label_w(_step)
-        if _i < 2:  # an arrow to the next box
-            _flow += f'<path class="dg-edge" d="M{_at + 6:.0f} 30 H {_at + 50:.0f}"/>'
-            _at += 56
-    _pipeline = diagram(
-        _flow,
-        width=940,
-        height=60,
-        label=f"The picture as three grids of colour values, of which only the strongest {_k} patterns are kept, then rebuilt.",
-        tier="data",
-    )
-    _pca_wins = _pca_bytes < len(_gz)
-    # Shown on the next slide: what this k costs, against every other k.
-    ch4_pca_result = mo.vstack(
-        [
-            mo.md(f"### What k = {_k} Costs: Bytes Against Pixel Error"),
-            mo.md(
-                """
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Lossless: a folded letter</div>
-        <p>Unfold it: every word is back. gzip, PNG, Parquet. The only kind for money.</p></div>
-      <div class="tile"><div class="tile-key">&asymp;</div><div class="tile-title">Lossy: a summary</div>
-        <p>Smaller, still useful, the original gone. PCA, JPEG, MP3. Never for a price.</p></div>
-    </div>
-                """
-            ),
-            image_demo_rank,
-            chart_or_table(_charts, _rows, label=f"Same {ch4_cat.nbytes:,}-byte picture, two kinds of compression"),
-            mo.md(
-                f"**What to notice:** at k = {_k} the {'PCA' if _pca_wins else 'gzip'} file is smaller"
-                + (
-                    ", but only gzip gives back the exact picture."
-                    if _pca_wins
-                    else ": a smooth drawing repeats itself, and lossless compression removes repetition."
-                )
-                + " Fewer patterns, fewer bytes, more error."
-            ),
-        ],
-        gap=0.6,
-    )
-    mo.vstack(
-        [
-            mo.md("### Try it: Shrink a Picture by Keeping Its Strongest Patterns"),
-            in_plain(
-                "The one example today that is not about sales, because lossy compression is easiest to see. A "
-                "picture is a grid of numbers. **PCA** keeps only its k strongest patterns and throws the rest away: "
-                "fewer patterns, fewer bytes, a blurrier cat, and no way back to the original."
-            ),
-            mo.hstack([image_demo_rank, image_demo_width], widths="equal", gap=2),
-            _pipeline,
-            mo.hstack(
-                [
-                    mo.image(ch4_cat, width=420, caption="Original"),
-                    mo.image(_rebuilt, width=420, caption=f"Rebuilt from k = {_k} patterns"),
-                ],
-                justify="center",
-                gap=3,
-            ),
-            mo.md(
-                "Rebuilt from the top `k` singular vectors per colour channel: rank-k SVD, the maths behind "
-                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis). *PCA itself is covered in "
-                "Machine Learning 2; here it only illustrates compression.*"
-            ),
-        ],
-        gap=0.6,
-    )
-    return (ch4_pca_result,)
-
-
-@app.cell
-def _(ch4_pca_result):
-    ch4_pca_result
     return
 
 
@@ -2895,14 +2011,14 @@ def _(SALES_SEED, TIER, alt, chart_or_table, in_plain, io, mo, pd, tier_chart):
             {
                 "how the prices are stored": _label,
                 "bytes": len(_blob),
-                "total revenue it reports": _total,
-                "off by": round(_total - _truth, 2),
+                "reported total revenue": _total,
+                "deviation": round(_total - _truth, 2),
             }
         )
     _exact, _exact_gz, *_, _hundred = _rows
 
     _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"total off by CHF {_off:+,.2f}" if _off else "exact total" for _off in _df["off by"]]
+    _df["verdict"] = [f"total deviates by CHF {_off:+,.2f}" if _off else "exact total" for _off in _df["deviation"]]
     _base = alt.Chart(_df).encode(
         y=alt.Y("how the prices are stored:N", sort=None, title=None, axis=alt.Axis(labelLimit=280)),
         x=alt.X("bytes:Q", title="file size (bytes)", scale=alt.Scale(domain=[0, _df["bytes"].max() * 1.6])),
@@ -2910,39 +2026,95 @@ def _(SALES_SEED, TIER, alt, chart_or_table, in_plain, io, mo, pd, tier_chart):
     )
     _chart = (
         _base.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum['off by'] != 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+            color=alt.condition("datum['deviation'] != 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
         )
         + _base.mark_text(align="left", dx=6).encode(text="verdict:N")
-    ).properties(width="container", height=48 * len(_df), title="Smaller files, wrong totals")
+    ).properties(width="container", height=48 * len(_df), title="File size and deviation of the total")
 
-    _more = mo.md(
-        f"""
-    **The lossy files really are smaller.** Rounding to the nearest 100 francs cuts another
-    {1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} off the gzipped file, a bigger win than gzip itself managed on
-    the exact prices ({1 - _exact_gz['bytes'] / _exact['bytes']:.0%}). Every lossy file loads cleanly, the column is
-    still a decimal, and every tool downstream is perfectly happy. Nobody minds a cat whose pixels are a few
-    shades off; every accountant minds a total that is off by hundreds of francs, and by then the exact
-    prices are gone.
-        """
-    )
     mo.vstack(
         [
-            mo.md("### Rounded Prices: Smaller File, Wrong Revenue"),
+            mo.md("### Lossless and Lossy Compression: Rounded Prices"),
+            mo.md(
+                """
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Lossless</div>
+        <p>Decompression restores every bit: gzip, zstd, PNG, Parquet's encodings. Required for prices, identifiers and dates.</p></div>
+      <div class="tile"><div class="tile-key">&asymp;</div><div class="tile-title">Lossy</div>
+        <p>Smaller, but only an approximation, and the original cannot be recovered: JPEG, MP3, rounding.</p></div>
+    </div>
+                """
+            ),
             in_plain(
-                "Rounding is the cat trick for numbers: fewer different digits, so compression finds more "
-                "repetition and the file shrinks. Here are EdgeWorks' 3,360 real prices, stored exactly and rounded."
+                "Rounding is a lossy transformation of numbers: fewer distinct values give compression more "
+                "repetition, so the file shrinks. Below, the 3,360 EdgeWorks prices are stored exactly and rounded."
             ),
             chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Same {len(_src):,} prices, stored five ways"),
             mo.md(
-                f"**What to notice:** the true revenue is CHF {_truth:,.2f}. Rounded to 100 francs, the file is "
-                f"{1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} smaller than the exact gzipped one, and the total is "
-                f"off by CHF {_hundred['off by']:+,.2f}."
+                f"**Observation:** the true revenue is CHF {_truth:,.2f}. Rounded to 100 francs, the file is "
+                f"{1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} smaller than the exact gzipped one, and the total "
+                f"deviates by CHF {_hundred['deviation']:+,.2f}."
             ),
             mo.md(
-                "**Same trick, different meaning.** Is an approximation of *this* value still the truth you need? "
-                "For a photo, usually. For money, an identifier or a date, never."
+                "**The same technique has different consequences.** Whether an approximation is acceptable depends "
+                "on the data: for a photo it usually is; for monetary amounts, identifiers or dates it is not."
             ).callout(kind="danger"),
-            mo.accordion({"How much smaller, and why nobody notices": _more}),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(box, diagram, in_plain, math, mo, shop_sales):
+    _first = shop_sales["product"].head(8).tolist()  # the first eight real sales
+    _codes = {_v: _i for _i, _v in enumerate(dict.fromkeys(_first))}
+    _bits = max(1, math.ceil(math.log2(len(_codes))))
+    _parts = [
+        '<text x="0" y="20" font-weight="700">product, as written</text>',
+        '<text x="300" y="20" font-weight="700">code</text>',
+        '<text x="460" y="20" font-weight="700">dictionary, written once</text>',
+    ]
+    for _i, _name in enumerate(_first):
+        _y = 34 + _i * 36
+        _parts.append(box(0, _y, _name, w=200, h=30))
+        _parts.append(f'<text class="dg-muted" x="212" y="{_y + 20}">{len(_name)} bytes</text>')
+        _parts.append(box(300, _y, str(_codes[_name]), w=44, h=30, cls="dg-tier"))
+    for _name, _c in _codes.items():
+        _parts.append(box(460, 34 + _c * 36, f"{_c} = {_name}", w=250, h=30, cls="dg-tier"))
+    _parts.append(
+        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 30}">{sum(map(len, _first))} bytes of names become</text>'
+        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 54}">{sum(map(len, _codes))} bytes of dictionary + 8 codes of {_bits} bits</text>'
+    )
+    _drawing = diagram(
+        "".join(_parts),
+        width=760,
+        height=34 + len(_first) * 36,
+        label=f"The product names of the first eight sales become a dictionary of {len(_codes)} names and the codes "
+        + ", ".join(str(_codes[_n]) for _n in _first)
+        + ".",
+        tier="data",
+    )
+    # The same on the whole product column.
+    _names = shop_sales["product"]
+    _raw = sum(len(_v.encode()) for _v in _names)
+    _dictionary = sum(len(_v.encode()) for _v in _names.unique())
+    _code_bits = math.ceil(math.log2(_names.nunique()))
+    _total = _dictionary + len(_names) * _code_bits / 8
+    mo.vstack(
+        [
+            mo.md("### Dictionary Encoding: Each Product Name Stored Once"),
+            in_plain(
+                "A column with few distinct values is stored as a short list of these values, the **dictionary**, "
+                "plus one small integer per sale, its **code**, which references an entry in the list. Parquet applies "
+                "this encoding by default."
+            ),
+            _drawing,
+            mo.md(
+                f"**Observation:** on all {len(_names):,} sales, {_names.nunique()} products with "
+                f"{_names.value_counts().iloc[0]:,} sales each, {_raw:,} bytes of names become {_dictionary} bytes of "
+                f"dictionary plus {len(_names):,} codes of {_code_bits} bits: {_total:,.0f} bytes, "
+                f"**{_total / _raw:.1%}** of the names stored in full."
+            ),
         ],
         gap=0.6,
     )
@@ -2955,7 +2127,7 @@ def _(mo):
     ch4_columns = mo.ui.radio(
         options=["the whole sale (7 fields)", "prices only", "category only"],
         value="the whole sale (7 fields)",
-        label="What we store:",
+        label="Stored columns:",
         inline=True,
     )
     return ch4_columns, compress_rows
@@ -3002,42 +2174,31 @@ def _(TIER, alt, ch4_columns, chart_or_table, compress_rows, csv, gzip, io, json
     _chart = (
         _base.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.smallest", alt.value(TIER["data"]), alt.value(TIER["muted"])))
         + _base.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=26 * len(_df), title=f"The first {len(_sales):,} sales, twelve ways")
+    ).properties(width="container", height=26 * len(_df), title=f"The first {len(_sales):,} sales in twelve encodings")
 
     _distinct = _sales[_fields[0]].nunique()  # used for the one-column choices
     _reason = {
-        "the whole sale (7 fields)": "Parquet keeps each field apart, so the fields with few values (product, country, "
-        "rating) are encoded on their own, while gzip sees all seven mixed together.",
-        "prices only": f"{_distinct:,} different prices in {len(_sales):,} sales: little repetition. Parquet stores each "
-        "as an 8-byte number; gzipped text pays only for the digits written.",
-        "category only": f"{_distinct} different values, over and over: every compressed format shrinks it to a sliver "
-        "of the CSV. What is left is mostly fixed overhead, such as Parquet's footer.",
+        "the whole sale (7 fields)": "Parquet stores each field separately, so the fields with few distinct values (product, "
+        "country, rating) are encoded individually, while gzip processes all seven interleaved.",
+        "prices only": f"{_distinct:,} distinct prices in {len(_sales):,} sales: little repetition. Parquet stores each "
+        "as an 8-byte number; gzipped text stores only the digits written.",
+        "category only": f"{_distinct} distinct values, repeated: every compressed format reduces it to a small fraction "
+        "of the CSV. The remainder is mostly fixed overhead, such as Parquet's footer.",
     }[ch4_columns.value]
-    _why = mo.md(
-        """
-    - **Prices only:** nearly every price is different. Parquet stores each one as an 8-byte number,
-      while gzipped text pays only for the six to nine digits written, so text plus gzip comes out smallest.
-    - **Category only:** three values over and over. Every compressed format turns tens of kilobytes into
-      a few hundred bytes; the gaps left are fixed costs, such as Parquet's footer.
-    - **The whole sale:** Parquet stores each field apart, so product, country and rating, each with a
-      handful of values, are encoded on their own; gzip sees all seven fields interleaved. From about
-      1,000 sales up that puts Parquet ahead; with 500 its fixed footer still costs too much.
-        """
-    )
     mo.vstack(
         [
-            mo.md("### Try it: Which Format Is Smallest for Our Sales?"),
+            mo.md("### Which Format Is Smallest for the Sales Data?"),
             mo.md(
-                "**Predict first:** JSON, CSV, gzip or Parquet? Does the answer change when we store only the prices, "
-                "or only the category?"
+                "**Question:** JSON, CSV, gzip or Parquet? Does the answer change when only the prices, or only the "
+                "category, are stored?"
             ),
             mo.hstack([ch4_columns, compress_rows], justify="start", align="center", gap=3),
             chart_or_table(tier_chart(_chart, "data"), _rows, label="Sizes (baseline: JSON)"),
             mo.md(
-                f"**What to notice:** smallest here is **{_best}**, at {_smallest / _sizes['JSON']:.1%} of the JSON and "
-                f"{_smallest / _sizes['CSV']:.0%} of the CSV. {_reason}"
+                f"**Observation:** the smallest variant here is **{_best}**, at {_smallest / _sizes['JSON']:.1%} of the "
+                f"JSON and {_smallest / _sizes['CSV']:.0%} of the CSV. {_reason}"
             ),
-            mo.accordion({"Why the winner changes with the columns": _why}),
+
         ],
         gap=0.6,
     )
@@ -3051,15 +2212,14 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, io, mia_asks, mo, pd, run_ctime, tier_chart):
+def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, io, mo, pd, run_ctime, tier_chart):
     _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
     _top = mo.vstack(
         [
-            mo.md("### Try it: Is the Gzipped Sales File Faster to Query?"),
-            mia_asks("If the gzipped file is a third of the size, is my total revenue three times faster?"),
+            mo.md("### Is the Gzipped Sales File Faster to Query?"),
             mo.md(
-                f"The sales as CSV ({format_bytes(len(_raw))}), already in memory: unpack it if gzipped, parse it, add up "
-                "the prices. Four files: plain, and gzip at level 1 (fastest), 6 (the gzip tool's default) and 9 "
+                f"The sales as CSV ({format_bytes(len(_raw))}), already in memory: decompress if gzipped, parse, sum the "
+                "prices. Four variants: uncompressed, and gzip at level 1 (fastest), 6 (default of the gzip tool) and 9 "
                 "(smallest, Python's default). Best of 5 bursts."
             ),
             run_ctime,
@@ -3072,8 +2232,7 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, i
             [
                 _top,
                 mo.md(
-                    "**Predict first:** the gzipped file is far smaller. Is the total on it faster or slower? "
-                    "Then click **Run compression timing**."
+                    "**Question:** the gzipped file is much smaller. Is the total computed faster or slower on it?"
                 ).callout(kind="neutral"),
             ],
             gap=0.6,
@@ -3105,11 +2264,11 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, i
     _plain_row, _l1, _l6, _l9 = _rows
     if min(_row["read + parse + sum (ms)"] for _row in (_l1, _l6, _l9)) > _plain_row["read + parse + sum (ms)"]:
         _verdict = (
-            f"**No, not here.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size and still takes "
-            "*longer* to answer the same question."
+            f"**no speed-up in this setting.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size and still "
+            "takes *longer* to answer the same query."
         )
     else:
-        _verdict = "**Here it is a wash:** unpacking costs about as much as the smaller file saves."
+        _verdict = "**no measurable difference in this setting:** decompression costs about as much as the smaller file saves."
 
     _df = pd.DataFrame(_rows)
     _df["slower"] = _df["read + parse + sum (ms)"] > _plain_row["read + parse + sum (ms)"]
@@ -3133,262 +2292,19 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, i
         _write.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _write.mark_text(align="left", dx=6).encode(text=alt.Text("compress (ms):Q", format=".1f"))
     ).properties(width="container", height=150, title="Compress once (ms)")
 
-    _note = mo.md(
-        f"""
-    Here the file already sits in memory, so there is no I/O to save: the extra bytes cost nothing to
-    read, while unpacking them costs CPU on every query. Send the same file to the analyst in Berlin and
-    the trade flips, which is why compression is normal for transfer and a judgement call on a local disk.
-    Levels 6 and 9 land {abs(_l6['bytes'] - _l9['bytes']):,} bytes apart, and level 9 spent
-    {_l9['compress (ms)'] / _l6['compress (ms)']:.1f}x the CPU to find them.
-        """
-    )
     mo.vstack(
         [
             _top,
-            chart_or_table(mo.hstack([tier_chart(_answer_chart, "data"), tier_chart(_write_chart, "data")], widths=[3, 2], gap=2), _rows, label="Same question, four files"),
+            chart_or_table(mo.hstack([tier_chart(_answer_chart, "data"), tier_chart(_write_chart, "data")], widths=[3, 2], gap=2), _rows, label="Same query, four variants"),
             mo.md(
-                f"**What to notice:** {_verdict} Unpacking costs about the same at every level: **the level is a "
-                "decision about writing, not reading.**"
+                f"**Observation:** {_verdict} Decompression costs about the same at every level: **the compression level "
+                "affects the cost of writing, not of reading.** In memory there is no I/O to save; over a network, "
+                "the trade-off reverses."
             ).callout(kind="warn"),
-            mo.accordion({"Why: CPU for I/O, and the price of level 9": _note}),
         ],
         gap=0.6,
     )
     return
-
-
-@app.cell
-def _(box, diagram, in_plain, math, mo, shop_sales):
-    _first = shop_sales["product"].head(8).tolist()  # the first eight real sales
-    _codes = {_v: _i for _i, _v in enumerate(dict.fromkeys(_first))}
-    _bits = max(1, math.ceil(math.log2(len(_codes))))
-    _parts = [
-        '<text x="0" y="20" font-weight="700">product, as written</text>',
-        '<text x="300" y="20" font-weight="700">code</text>',
-        '<text x="460" y="20" font-weight="700">dictionary, written once</text>',
-    ]
-    for _i, _name in enumerate(_first):
-        _y = 34 + _i * 36
-        _parts.append(box(0, _y, _name, w=200, h=30))
-        _parts.append(f'<text class="dg-muted" x="212" y="{_y + 20}">{len(_name)} bytes</text>')
-        _parts.append(box(300, _y, str(_codes[_name]), w=44, h=30, cls="dg-tier"))
-    for _name, _c in _codes.items():
-        _parts.append(box(460, 34 + _c * 36, f"{_c} = {_name}", w=250, h=30, cls="dg-tier"))
-    _parts.append(
-        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 30}">{sum(map(len, _first))} bytes of names become</text>'
-        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 54}">{sum(map(len, _codes))} bytes of dictionary + 8 codes of {_bits} bits</text>'
-    )
-    _drawing = diagram(
-        "".join(_parts),
-        width=760,
-        height=34 + len(_first) * 36,
-        label=f"The product names of the first eight sales become a dictionary of {len(_codes)} names and the codes "
-        + ", ".join(str(_codes[_n]) for _n in _first)
-        + ".",
-        tier="data",
-    )
-    # The same on the whole product column.
-    _names = shop_sales["product"]
-    _raw = sum(len(_v.encode()) for _v in _names)
-    _dictionary = sum(len(_v.encode()) for _v in _names.unique())
-    _code_bits = math.ceil(math.log2(_names.nunique()))
-    _total = _dictionary + len(_names) * _code_bits / 8
-    mo.vstack(
-        [
-            mo.md("### Dictionary Encoding: Each Product Name Written Once"),
-            in_plain(
-                "A column with few different values is stored as a short list of those values, the **dictionary**, "
-                "plus one small number per sale, its **code**, that points into the list. Parquet does this by default."
-            ),
-            _drawing,
-            mo.md(
-                f"**What to notice:** on all {len(_names):,} sales, {_names.nunique()} products with "
-                f"{_names.value_counts().iloc[0]:,} sales each, {_raw:,} bytes of names become {_dictionary} bytes of "
-                f"dictionary plus {len(_names):,} codes of {_code_bits} bits: {_total:,.0f} bytes, "
-                f"**{_total / _raw:.1%}** of the names written in full."
-            ),
-            mo.md("**In short:** size ≈ dictionary + sales × ⌈log₂(different values)⌉ bits."),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo, shop_sales):
-    ch4_dict_column = mo.ui.radio(
-        options={f"{_c} ({shop_sales[_c].nunique():,} different)": _c for _c in ("country", "product", "sale_date", "total_price")},
-        value=f"country ({shop_sales['country'].nunique():,} different)",
-        label="Column:",
-        inline=True,
-    )
-    return (ch4_dict_column,)
-
-
-@app.cell
-def _(TIER, alt, ch4_dict_column, chart_or_table, format_bytes, math, mo, pd, shop_sales, tier_chart):
-    _column = shop_sales[ch4_dict_column.value]
-    # Each value as the CSV writes it, in bytes.
-    _text = _column.dt.strftime("%Y-%m-%d") if ch4_dict_column.value == "sale_date" else _column.astype(str)
-    _rows_n, _unique = len(_text), _text.nunique()
-    _code_bits = max(1, math.ceil(math.log2(_unique)))
-    _raw_bytes = sum(len(_v.encode()) for _v in _text)
-    _dictionary_bytes = sum(len(_v.encode()) for _v in _text.unique())
-    _index_bytes = _rows_n * _code_bits / 8
-    _ratio = (_dictionary_bytes + _index_bytes) / _raw_bytes
-
-    _rows = [
-        {"metric": "Values in full (no dictionary)", "formula": "sum of value lengths", "value": _raw_bytes},
-        {"metric": "Dictionary", "formula": "sum of the different values' lengths", "value": _dictionary_bytes},
-        {"metric": "Code size per sale (bits)", "formula": "ceil(log2(different values))", "value": _code_bits},
-        {"metric": "Codes", "formula": "sales x code bits / 8", "value": round(_index_bytes, 2)},
-        {"metric": "Encoded / in full", "formula": "(dictionary + codes) / in full", "value": round(_ratio, 4)},
-    ]
-    _parts = pd.DataFrame(
-        {
-            "stored": ["every value in full", "dictionary + codes", "dictionary + codes"],
-            "part": ["values in full", "dictionary", "codes"],
-            "bytes": [_raw_bytes, _dictionary_bytes, _index_bytes],
-            "order": [0, 0, 1],
-        }
-    )
-    _totals = pd.DataFrame(
-        {
-            "stored": ["every value in full", "dictionary + codes"],
-            "bytes": [_raw_bytes, _dictionary_bytes + _index_bytes],
-            "label": [format_bytes(_raw_bytes), f"{format_bytes(_dictionary_bytes + _index_bytes)}, {_ratio:.0%} of in full"],
-        }
-    )
-    _y = alt.Y("stored:N", sort=None, title=None)
-    _x = alt.X("bytes:Q", title="bytes", stack="zero", scale=alt.Scale(domain=[0, _totals["bytes"].max() * 1.45]))
-    _chart = (
-        alt.Chart(_parts)
-        .mark_bar(cornerRadiusEnd=4)
-        .encode(
-            y=_y,
-            x=_x,
-            order="order:Q",
-            color=alt.Color(
-                "part:N",
-                title=None,
-                scale=alt.Scale(domain=["values in full", "dictionary", "codes"], range=[TIER["muted"], TIER["data"], "#8fb4ea"]),
-            ),
-            tooltip=["stored:N", "part:N", "bytes:Q"],
-        )
-        + alt.Chart(_totals).mark_text(align="left", dx=6).encode(y=_y, x="bytes:Q", text="label:N")
-    ).properties(width="container", height=130)
-    _verdict = (
-        "Nearly every value is different, so the dictionary is the whole column again, and the codes come on top: "
-        "**bigger than writing the values in full.**"
-        if _ratio > 1
-        else f"Few different values, short codes: **{1 - _ratio:.0%} saved.**"
-    )
-    mo.vstack(
-        [
-            mo.md("### Try it: Which of Our Columns Does a Dictionary Help?"),
-            mo.md(
-                "The same count on four real columns of our 3,360 sales, each value in bytes as the CSV writes it. "
-                "A column with 8 different values needs 3-bit codes; one with 3,358 needs 12."
-            ),
-            ch4_dict_column,
-            chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Dictionary encoding of {ch4_dict_column.value}"),
-            mo.md(
-                f"**What to notice:** {ch4_dict_column.value} has {_unique:,} different values in {_rows_n:,} sales, so each "
-                f"code needs **{_code_bits} bits**. {_verdict}"
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion — Compression</h3>
-      <details>
-        <summary><strong>Q1:</strong> Every night we send the sales history to the analyst in Berlin. Compress it?</summary>
-        <p><strong>Answer:</strong> Yes: over a network, moving bytes dominates, and gzip sends a third of them.
-        Time it on the real link.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> May we store prices rounded to the franc to save space?</summary>
-        <p><strong>Answer:</strong> Never: the total revenue drifts and the exact prices are gone. Rounding is for
-        measurements, to the instrument's own precision, noted in the schema. Prices, ids, dates: never.</p>
-      </details>
-      <details>
-        <summary><strong>Q3:</strong> Why did the shuffled Parquet file in chapter 3 come out larger?</summary>
-        <p><strong>Answer:</strong> Sorting puts equal values next to each other; dictionary and run-length encoding
-        (a value stored once, with its repeat count) feed on that.</p>
-      </details>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(SALES_SEED, gzip, io, mo, pd):
-    _sales = pd.read_parquet(SALES_SEED)
-    _csv = _sales.to_csv(index=False).encode()
-    _gz = gzip.compress(_csv, 6)
-    _back = pd.read_csv(io.BytesIO(gzip.decompress(_gz)))["total_price"].sum()
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    ### Chapter 4 Conclusion
-
-    - **Mia's answer:** yes. gzip shrinks the sales CSV to {len(_gz) / len(_csv):.0%} ({len(_gz):,} of
-      {len(_csv):,} bytes), and the total after unpacking is still CHF {_back:,.2f}, to the cent.
-    - Lossless gives back every byte; lossy (rounding, PCA) only an approximation: never for prices, ids or dates.
-    - Compression feeds on repetition: the category column shrinks to a sliver, the prices only about halve.
-    - Smaller is not automatically faster: in memory, unpacking costs CPU and saves no I/O; on the way to
-      Berlin, it pays.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Bridge to Next Chapter
-
-    Smaller files help; the reader must also skip work:
-    $\\text{query time} \\approx \\text{I/O time} + \\text{compute time}$.
-    Next, DuckDB answers Mia's revenue per region straight from these files, reading only the columns and
-    row groups the query needs.
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(chapter_intro, mo):
-    def ch5_card(x, y, title, sub, cls="dg-box", w=235, h=72):
-        """SVG for a two-line box at (x, y): a bold title over a muted line. Used by the diagrams of this chapter."""
-        return (
-            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
-            f'<text x="{x + w / 2:.0f}" y="{y + 29}" text-anchor="middle" font-weight="700">{title}</text>'
-            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 53}" text-anchor="middle">{sub}</text>'
-        )
-
-    mo.vstack(
-        [
-            mo.md("## 5. DuckDB Example (SQL on Files)"),
-            chapter_intro(
-                "data",
-                "Can I get revenue per region straight from the files, with no database server?",
-                "Yes: DuckDB runs SQL on the files chapters 1-4 built. This chapter shows how, and why it reads so little of them.",
-            ),
-            mo.Html(
-                '<div class="disclaimer-red">Databases get their own module later: '
-                "<strong>Database Management for Data Scientists (DBM)</strong>. Here: intuition only.</div>"
-            ),
-        ],
-        gap=1,
-    )
-    return (ch5_card,)
 
 
 @app.cell
@@ -3421,11 +2337,11 @@ def _(SEED_DIR, alt, best_seconds, chart_or_table, duckdb, in_plain, mo, tier_ch
     )
     mo.vstack(
         [
-            mo.md("### Mia's answer: revenue per region, straight from the files"),
+            mo.md("### Revenue per region, computed directly from the files"),
             in_plain(
-                "**DuckDB** is a database that runs inside our Python program: `import duckdb`, and there is no "
-                "server to install, start or look after. It reads Parquet and CSV files by their file names and "
-                "answers **SQL**, the question language of databases."
+                "**DuckDB** is an embedded database that runs inside the Python process: after `import duckdb`, there "
+                "is no server to install, start or administer. It reads Parquet and CSV files by file name and "
+                "executes **SQL**, the standard query language of relational databases."
             ),
             mo.hstack(
                 [
@@ -3440,9 +2356,9 @@ def _(SEED_DIR, alt, best_seconds, chart_or_table, duckdb, in_plain, mo, tier_ch
                 gap=2,
             ),
             mo.md(
-                f"**What to notice:** three files joined, four totals back in {_ms:.1f} ms, and nothing was loaded or "
-                "imported first. DuckDB is an *analytical* database: built for sums and averages over many rows, "
-                "not for booking one sale at a time (chapter 1's job)."
+                f"**Observation:** three files joined, four totals returned in {_ms:.1f} ms, without any prior loading "
+                "or import. DuckDB is an *analytical* (OLAP) database: designed for aggregates over many rows, not for "
+                "recording single sales one at a time (the transactional workload at the end of this part)."
             ).callout(kind="info"),
         ],
         gap=0.8,
@@ -3452,44 +2368,45 @@ def _(SEED_DIR, alt, best_seconds, chart_or_table, duckdb, in_plain, mo, tier_ch
 
 @app.cell
 def _(mo):
-    # Mia's questions, each as (what it selects, its filter, its grouping, what to notice).
+    # The queries, each as (what it selects, its filter, its grouping, the observation).
     ch5_question = mo.ui.dropdown(
         options={
             "Total revenue, all time": (
                 "sum(total_price)",
                 None,
                 None,
-                "one column of seven, every row: the row layout of chapter 3 would read all seven.",
+                "one column of seven, every row: a row layout would read all seven.",
             ),
             "Revenue in January 2026": (
                 "sum(total_price)",
                 "sale_date BETWEEN '2026-01-01' AND '2026-01-31'",
                 None,
-                "the date is checked on all 3,360 rows, the price fetched for only the 140 January sales. They sit "
-                "together near the end, because the file is stored month by month.",
+                "the date is checked on all 3,360 rows, the price fetched only for the 140 January sales. They are "
+                "contiguous near the end, because the file is stored month by month.",
             ),
             "Revenue per country": (
                 "country_id, sum(total_price)",
                 None,
                 "country_id",
-                "no filter, so every row counts, but only two of the seven columns are read.",
+                "no filter, so every row is included, but only two of the seven columns are read.",
             ),
             "Average rating of the Gateway Node Pro (product 2)": (
                 "avg(customer_rating)",
                 "product_id = 2",
                 None,
-                "its 480 sales are spread through the file: thin stripes, not one band. Still only two columns, "
-                "and the rating only where the product matches.",
+                "its 480 sales are spread across the file: thin stripes, not one contiguous band. Still only two "
+                "columns are read, and the rating only where the product matches.",
             ),
             "Every field of every sale": (
                 "*",
                 None,
                 None,
-                "nothing to skip: <code>SELECT *</code> reads every cell. Name the columns you need.",
+                "nothing can be skipped: <code>SELECT *</code> reads every cell. Queries should name only the columns "
+                "they need.",
             ),
         },
         value="Revenue in January 2026",
-        label="Mia's question",
+        label="Query",
     )
     return (ch5_question,)
 
@@ -3556,12 +2473,12 @@ def _(SALES_SEED, ch5_question, diagram, duckdb, in_plain, mo, np, pd):
         _value = f"CHF {_answer[0][0]:,.2f}" if _select.startswith("sum") else f"{_answer[0][0]:,.2f}"
     mo.vstack(
         [
-            mo.md("### Try it: which parts of the file does Mia's question read?"),
+            mo.md("### Which parts of the file does a query read?"),
             in_plain(
-                "**Pushdown**: DuckDB pushes the question down into the reading of the file, and reads only what it "
-                "needs. *Projection pushdown* reads only the columns the query names. *Predicate pushdown* runs the "
-                "filter (the `WHERE` condition) while reading: the filter column is checked on every row, the other "
-                "columns are fetched only for the rows that pass."
+                "**Pushdown**: DuckDB moves parts of the query into the scan of the file and reads only what is "
+                "needed. *Projection pushdown* reads only the columns the query references. *Predicate pushdown* "
+                "evaluates the filter (the `WHERE` condition) during the scan: the filter column is checked on every "
+                "row, the other columns are fetched only for qualifying rows."
             ),
             mo.hstack(
                 [
@@ -3572,8 +2489,8 @@ def _(SALES_SEED, ch5_question, diagram, duckdb, in_plain, mo, np, pd):
                             mo.hstack(
                                 [
                                     mo.stat(f"{_read:,}", label="cells read", caption=f"of {_n * len(_columns):,} in the file", bordered=True),
-                                    mo.stat(f"{_n * len(_columns) / _read:,.1f}x", label="less work", bordered=True),
-                                    mo.stat(_value, label="Mia's answer", bordered=True),
+                                    mo.stat(f"{_n * len(_columns) / _read:,.1f}x", label="reduction", bordered=True),
+                                    mo.stat(_value, label="result", bordered=True),
                                 ],
                                 widths="equal",
                             ),
@@ -3585,23 +2502,7 @@ def _(SALES_SEED, ch5_question, diagram, duckdb, in_plain, mo, np, pd):
                 widths=[2, 3],
                 gap=2,
             ),
-            mo.md(f"**What to notice:** {_note}").callout(kind="info"),
-            mo.md(
-                "In one line: cells read = all rows of the filter column + the passing rows of the other columns the query names."
-            ),
-            mo.accordion(
-                {
-                    "Where this picture is too simple": mo.md(
-                        """
-    It counts cells, not time. Real files are read in blocks of rows (row groups, chapter 3), and
-    DuckDB keeps each block's smallest and largest value: a block whose dates all fall before
-    January is skipped without reading even its dates. Our 3,360 sales fit in a single block, so
-    here that trick has nothing to skip; with millions of sales stored in date order, it skips
-    most of them.
-                        """
-                    )
-                }
-            ),
+            mo.md(f"**Observation:** {_note}").callout(kind="info"),
         ],
         gap=0.6,
     )
@@ -3611,9 +2512,9 @@ def _(SALES_SEED, ch5_question, diagram, duckdb, in_plain, mo, np, pd):
 @app.cell
 def _(mo):
     ch5_copies = mo.ui.slider(
-        1, 30, value=1, label="Copies of the 3,360 sales (more copies stand in for a bigger EdgeWorks)", show_value=True, debounce=True
+        1, 30, value=1, label="Copies of the 3,360 sales (simulates a larger data volume)", show_value=True, debounce=True
     )
-    ch5_run_sources = mo.ui.run_button(label="Run Mia's query on all three", kind="success")
+    ch5_run_sources = mo.ui.run_button(label="Run the query on all three sources", kind="success")
     return ch5_copies, ch5_run_sources
 
 
@@ -3633,17 +2534,16 @@ def _(
     mo,
     pd,
     shop_sales,
-    static_table,
     tempfile,
     tier_chart,
 ):
     _top = mo.vstack(
         [
-            mo.md("### Try it: one query, three kinds of file"),
+            mo.md("### One query, three storage formats"),
             in_plain(
-                "We save the same sales three ways: a **CSV** file (plain text), a **Parquet** file (typed columns, "
-                "chapters 3 and 4) and a **DuckDB table** (loaded once into DuckDB's own file). Then we run Mia's "
-                "revenue per region on each and time it. Only the `FROM` changes: `FROM 'sales.csv'`, "
+                "The same sales are stored three ways: a **CSV** file (plain text), a **Parquet** file (typed columns) "
+                "and a **DuckDB table** (loaded once into DuckDB's own file format). The revenue per "
+                "region query runs on each and is timed. Only the `FROM` clause changes: `FROM 'sales.csv'`, "
                 "`FROM 'sales.parquet'`, `FROM sales`."
             ),
             mo.hstack([ch5_copies, ch5_run_sources], justify="start", align="center", gap=2),
@@ -3656,8 +2556,7 @@ def _(
             [
                 _top,
                 mo.md(
-                    "**Predict first:** which file answers fastest, and which file is the smallest? "
-                    "Then click **Run Mia's query on all three**."
+                    "**Question:** which source answers fastest, and which file is the smallest?"
                 ).callout(kind="neutral"),
             ],
             gap=0.6,
@@ -3681,8 +2580,7 @@ def _(
             _query_csv = _best(_sql.format("read_csv(?)"), [str(_csv)])
             _query_parquet = _best(_sql.format("read_parquet(?)"), [str(_parquet)])
             _query_table = _best(_sql.format("sales"))
-            _result = _con.execute(_sql.format("sales")).df()
-            _block = _con.execute("SELECT block_size FROM pragma_database_size()").fetchone()[0]
+
         _csv_size, _parquet_size, _db_size = (_p.stat().st_size for _p in (_csv, _parquet, _db))
 
     _sources = [
@@ -3732,9 +2630,7 @@ def _(
         _sized.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _sized.mark_text(align="left", dx=6).encode(text="label:N")
     ).properties(width="container", height=230, title="File size")
 
-    _size_note = (
-        "Push the copies up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
-    )
+
     mo.vstack(
         [
             _top,
@@ -3744,258 +2640,10 @@ def _(
                 label=f"Revenue per region on {len(_sales):,} sales, three sources (best of 3 runs)",
             ),
             mo.md(
-                f"**What to notice:** the CSV is {_query_csv / _query_parquet:,.0f}x slower than Parquet. It is text, turned "
-                "back into numbers on every query; Parquet and the table store typed columns. Loading the CSV into a "
-                f"table once cost {_load_csv / _query_csv:.1f} CSV queries' worth."
+                f"**Observation:** the CSV is {_query_csv / _query_parquet:,.0f}x slower than Parquet. It is text that is "
+                "parsed into numbers on every query; Parquet and the table store typed columns. Loading the CSV into a "
+                f"table once costs as much as {_load_csv / _query_csv:.1f} CSV queries."
             ).callout(kind="info"),
-            mo.accordion(
-                {
-                    "Why the CSV is slow, and why the DuckDB file can be the biggest": mo.md(
-                        f"""
-    The query names two of the eight columns. Parquet and the table read just those two
-    (projection pushdown); a CSV has no columns to skip, so every line is read and split to find
-    `region` and `total_price`, on every query.
-
-    DuckDB grows `sales.duckdb` in {_block // 1024} KiB blocks, so a small table still fills whole
-    blocks. {_size_note} Copies repeat the same values, which Parquet stores once in its
-    dictionary (chapter 4), so the Parquet file grows unusually slowly here.
-                        """
-                    ),
-                    "The query and its answer": mo.vstack(
-                        [
-                            mo.md(f"```sql\n{_sql.format('sales')}\n```"),
-                            static_table(
-                                [{"region": _r, "revenue (CHF)": f"{_v:,.2f}"} for _r, _v in zip(_result["region"], _result["revenue"], strict=True)],
-                                label=f"Revenue per region, {ch5_copies.value} cop{'y' if ch5_copies.value == 1 else 'ies'} of the sales",
-                            ),
-                        ]
-                    ),
-                }
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(ch5_card, diagram, in_plain, mo, shop_sales, static_table):
-    _feb = shop_sales[shop_sales["sale_date"] >= "2026-02-01"].sort_values(["sale_date", "sale_id"])
-    _n = len(shop_sales)
-    _lanes = diagram(
-        '<text x="0" y="24" font-weight="700">without an index: <tspan class="dg-muted" font-weight="400">read the whole book</tspan></text>'
-        + ch5_card(0, 40, "the sales table", f"{_n:,} rows, in booking order", w=290)
-        + ch5_card(350, 40, "check every date", f"{_n:,} rows read", cls="dg-box dg-hot", w=290)
-        + ch5_card(700, 40, f"{len(_feb):,} sales match", f"CHF {_feb['total_price'].sum():,.0f}", w=290)
-        + '<text x="0" y="174" font-weight="700">with an index on sale_date: <tspan class="dg-muted" font-weight="400">look it up at the back</tspan></text>'
-        + ch5_card(0, 190, "index on sale_date", f"{_n:,} dates, sorted, each with its row", cls="dg-tier", w=290)
-        + ch5_card(350, 190, "jump to 2026-02-01", "one look-up in the sorted list", w=290)
-        + ch5_card(700, 190, f"fetch the {len(_feb):,} rows", f"{len(_feb):,} rows read", cls="dg-box dg-ok", w=290)
-        + '<path class="dg-edge" d="M290 76 H 344"/><path class="dg-edge" d="M640 76 H 694"/>'
-        + '<path class="dg-edge" d="M290 226 H 344"/><path class="dg-edge" d="M640 226 H 694"/>',
-        width=990,
-        height=270,
-        label=f"Revenue since 1 February 2026 two ways. Without an index, all {_n:,} rows are read to find {len(_feb)}. "
-        f"With an index on sale_date, one look-up in the sorted dates finds them, and only those {len(_feb)} rows are read.",
-        tier="data",
-    )
-    mo.vstack(
-        [
-            mo.md("### An index: look it up instead of reading every row"),
-            in_plain(
-                "A book's index lists every topic from A to Z with its page numbers: to find *Kenya* you look it up "
-                "and turn to those pages, instead of reading the whole book. A database **index** is the same: a "
-                "sorted copy of one column, say `sale_date`, each value with the row it sits on."
-            ),
-            mo.md(f"Mia asks for **revenue since 1 February 2026**: {len(_feb)} of the {_n:,} sales."),
-            mo.hstack(
-                [
-                    _lanes,
-                    static_table(
-                        [{"sale_date": str(_d.date()), "row (sale_id)": f"{_i:,}"} for _d, _i in zip(_feb["sale_date"].head(6), _feb["sale_id"].head(6), strict=True)],
-                        label=f"The index from 2026-02-01 on: the first 6 of {len(_feb)}",
-                    ),
-                ],
-                widths=[3, 1],
-                gap=2,
-                align="center",
-            ),
-            mo.md(
-                "**What to notice:** the index is sorted by date, but its rows point all over the table. Two catches, "
-                "which the next lab measures: every new sale must also be filed in the index, and when Mia wants most "
-                "of the rows, jumping between index and table is slower than reading straight through."
-            ).callout(kind="info"),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    ch5_since = mo.ui.dropdown(
-        options={
-            "1 February 2026 (the last month)": "2026-02-01",
-            "1 January 2026": "2026-01-01",
-            "1 March 2025 (the last 12 months)": "2025-03-01",
-            "the first sale (all time)": "2024-03-01",
-        },
-        value="1 February 2026 (the last month)",
-        label="Mia asks for revenue since",
-    )
-    ch5_run_index = mo.ui.run_button(label="Run the index test", kind="success")
-    return ch5_run_index, ch5_since
-
-
-@app.cell
-def _(
-    TIER,
-    alt,
-    best_seconds,
-    ch5_run_index,
-    ch5_since,
-    chart_or_table,
-    mo,
-    pd,
-    shop_sales,
-    sqlite3,
-    tier_chart,
-):
-    _copies = 30
-    _query = "SELECT count(*), round(sum(total_price), 2) FROM sales WHERE sale_date >= ?"
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: does an index make Mia's question faster?"),
-            mo.md(
-                f"The sales copied {_copies} times ({_copies * len(shop_sales):,} rows, to stand in for a bigger EdgeWorks) "
-                "in **SQLite**, the small database that comes with Python. (DuckDB skips blocks by their min/max "
-                "instead, and rarely needs an index like this.) Mia's question runs with no index, then with an "
-                "index on `sale_date`, then with one on `(sale_date, total_price)`:"
-            ),
-            mo.md(f"`{_query}`"),
-            mo.hstack([ch5_since, ch5_run_index], justify="start", align="center", gap=2),
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not ch5_run_index.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** no index, `(sale_date)` or `(sale_date, total_price)`: which is fastest? And does "
-                    "the answer change for *all time*? Then click **Run the index test**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-
-    _columns = ["sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"]
-    _rows_in = list(
-        shop_sales[_columns].assign(sale_date=shop_sales["sale_date"].dt.strftime("%Y-%m-%d")).itertuples(index=False, name=None)
-    )
-    _con = sqlite3.connect(":memory:")  # in memory, so the timings measure SQLite and not the disk
-    _con.execute(
-        "CREATE TABLE sales (sale_id INTEGER, sale_date TEXT, product_id INTEGER, country_id INTEGER, "
-        "units_sold INTEGER, total_price REAL, customer_rating INTEGER)"
-    )
-    _con.executemany("INSERT INTO sales VALUES (?, ?, ?, ?, ?, ?, ?)", _rows_in * _copies)
-    _params = [ch5_since.value]
-    _count, _total = _con.execute(_query, _params).fetchone()
-    _share = _count / (len(_rows_in) * _copies)
-    _states = {}
-    for _state, _ddl in (
-        ("no index", None),
-        ("index on (sale_date)", "CREATE INDEX by_date ON sales(sale_date)"),
-        ("index on (sale_date, total_price)", "CREATE INDEX by_date_price ON sales(sale_date, total_price)"),
-    ):
-        _build = best_seconds(_con.execute, _ddl, repeat=1) if _ddl else 0.0
-        _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}", _params).fetchone()[-1]
-        _states[_state] = (_build, best_seconds(lambda: _con.execute(_query, _params).fetchall(), repeat=5), _plan)
-    _con.close()
-
-    _scan = _states["no index"][1]
-    _narrow = _scan / _states["index on (sale_date)"][1]
-    _rows = [
-        {
-            "state": _state,
-            "build (ms)": round(_build * 1000, 1),
-            "query (ms)": round(_query_s * 1000, 3),
-            "speed-up vs scan": f"{_scan / _query_s:.1f}x",
-            "SQLite plan": _plan,
-        }
-        for _state, (_build, _query_s, _plan) in _states.items()
-    ]
-    _df = pd.DataFrame(_rows)
-    _df["speed-up"] = _scan / (_df["query (ms)"] / 1000)
-    _df["label"] = [
-        f"{_ms:.2f} ms (the scan)" if _state == "no index" else f"{_ms:.2f} ms · {_up:.1f}x"
-        for _state, _ms, _up in zip(_df["state"], _df["query (ms)"], _df["speed-up"], strict=True)
-    ]
-    _df["kind"] = ["scan" if _state == "no index" else ("slower" if _up < 1 else "faster") for _state, _up in zip(_df["state"], _df["speed-up"], strict=True)]
-    _y = alt.Y("state:N", sort=None, title=None, axis=alt.Axis(labelLimit=400))
-    _timed = alt.Chart(_df).encode(y=_y, x=alt.X("query (ms):Q", title=None, scale=alt.Scale(domain=[0, _df["query (ms)"].max() * 1.45])))
-    _query_chart = (
-        _timed.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.Color(
-                "kind:N", legend=None, scale=alt.Scale(domain=["scan", "faster", "slower"], range=[TIER["muted"], TIER["data"], TIER["hot"]])
-            )
-        )
-        + _timed.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=170, title="Query time (ms), best of 5")
-    _built = alt.Chart(_df).encode(
-        y=alt.Y("state:N", sort=None, title=None, axis=None),
-        x=alt.X("build (ms):Q", title=None, scale=alt.Scale(domain=[0, max(_df["build (ms)"].max(), 1) * 1.5])),
-    )
-    _build_chart = (
-        _built.mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
-        + _built.mark_text(align="left", dx=6).encode(text=alt.Text("build (ms):Q", format=".1f"))
-    ).properties(width="container", height=170, title="Build, once (ms)")
-
-    if round(_narrow, 1) < 1:
-        _planner = f"Here <code>(sale_date)</code> ran at {_narrow:.1f}x, slower than the scan, and SQLite still chose it."
-    elif _share < 0.5:
-        _planner = "Pick <em>all time</em> and run again: <code>(sale_date)</code> drops below 1.0x."
-    else:
-        _planner = f"Here <code>(sale_date)</code> just held on ({_narrow:.1f}x); timings wobble, so run again."
-    _wide_build = _states["index on (sale_date, total_price)"][0] * 1000
-    _tiles = mo.md(
-        f"""
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">+1</div><div class="tile-title">It is not free</div>
-        <p>Built here in {_wide_build:.0f} ms, then paid again on <strong>every new, changed or deleted sale</strong>.
-        Six indexes: every booking does seven pieces of work.</p></div>
-      <div class="tile"><div class="tile-key">COVERING</div><div class="tile-title">Width matters</div>
-        <p><code>(sale_date)</code> finds the rows, then fetches each <code>total_price</code> from the table.
-        <code>(sale_date, total_price)</code> holds both: its plan says COVERING INDEX, the table is never touched.</p></div>
-      <div class="tile"><div class="tile-key">?</div><div class="tile-title">The planner guesses</div>
-        <p>SQLite assumes few rows match and takes the index even when reading straight through is faster.</p>
-        <p>{_planner}</p></div>
-    </div>
-        """
-    )
-    mo.vstack(
-        [
-            _top,
-            chart_or_table(
-                mo.hstack([tier_chart(_query_chart, "data"), tier_chart(_build_chart, "data")], widths=[5, 2], gap=2),
-                _rows,
-                label=f"{_count:,} of {len(_rows_in) * _copies:,} rows match ({_share:.0%}), CHF {_total:,.2f}: all three give this answer",
-            ),
-            _tiles,
-            mo.md(
-                f"**What to notice:** {_count:,} rows match, {_share:.0%} of the table. An index pays when it holds "
-                "what the query asks for, and the query asks for **few** rows."
-            ).callout(kind="info"),
-            mo.accordion(
-                {
-                    "The plan SQLite chose for each state": mo.md(
-                        "\n".join(f"- **{_state}:** `{_plan}`" for _state, (_b, _q, _plan) in _states.items())
-                        + "\n\nSQLite cannot know how many sales fall after a date: even `ANALYZE` stores only averages."
-                    )
-                }
-            ),
         ],
         gap=0.6,
     )
@@ -4006,7 +2654,7 @@ def _(
 def _(
     Path,
     SALES_SEED,
-    ch5_card,
+    card_box,
     diagram,
     duckdb,
     html,
@@ -4028,7 +2676,7 @@ def _(
         _export.to_csv(_csv, index=False)
         _con = duckdb.connect()
 
-        # Lane 1: let DuckDB guess the types, then do what a student would do next.
+        # Lane 1: let DuckDB infer the types, then do what a student would do next.
         _inferred = dict(_row[:2] for _row in _con.execute("DESCRIBE FROM read_csv(?)", [_csv]).fetchall())["total_price"]
         _rows, _parsed, _revenue = _con.execute(
             "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
@@ -4036,7 +2684,7 @@ def _(
             [_csv],
         ).fetchone()
 
-        # Lane 2: declare the form first, with its rules, then try to load into it.
+        # Lane 2: declare the schema first, with its rules, then try to load into it.
         _con.execute(
             """
             CREATE TABLE sales_clean (
@@ -4050,14 +2698,14 @@ def _(
         )
         try:
             _con.execute("INSERT INTO sales_clean FROM read_csv(?)", [_csv])
-            _told, _refused = "loaded without complaint", ("loaded", "no complaint")
+            _told, _refused = "loaded without error", ("loaded", "no error")
         except duckdb.Error as _exc:
             _lines = str(_exc).splitlines()
             _told = f"{type(_exc).__name__}: {_lines[0]}. {_lines[2]}"
             _line = re.search(r"Line: (\d+)", _told)
             _value = re.search(r'string "([^"]*)"', _told)
             _refused = (
-                "INSERT refused",
+                "INSERT rejected",
                 f'line {_line[1]}: "{_value[1]}"' if _line and _value else type(_exc).__name__,
             )
         _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
@@ -4068,66 +2716,58 @@ def _(
         '<rect class="dg-box" x="0" y="72" width="190" height="156" rx="12"/>'
         '<text x="95" y="122" text-anchor="middle" font-weight="700">sales_export.csv</text>'
         f'<text class="dg-muted" x="95" y="152" text-anchor="middle">{_rows:,} rows</text>'
-        f'<text class="dg-hot" x="95" y="180" text-anchor="middle">{len(_bad_rows)} bad prices</text>'
+        f'<text class="dg-hot" x="95" y="180" text-anchor="middle">{len(_bad_rows)} invalid prices</text>'
         '<path class="dg-edge" d="M190 120 C 215 120, 215 76, 234 76"/>'
         '<path class="dg-edge" d="M190 180 C 215 180, 215 226, 234 226"/>'
-        '<text x="240" y="24" font-weight="700">schema-on-read: <tspan class="dg-muted" font-weight="400">guess the type, find out later (or never)</tspan></text>'
-        + ch5_card(240, 40, "DuckDB guesses", f"total_price: {html.escape(_inferred)}")
-        + ch5_card(505, 40, "TRY_CAST to DOUBLE", f"{_parsed:,} of {_rows:,} rows survive")
-        + ch5_card(770, 40, f"revenue {_revenue:,.0f}", f"{_low:.1%} too low · no warning", cls="dg-box dg-hot")
-        + '<text x="240" y="174" font-weight="700">schema-on-write: <tspan class="dg-muted" font-weight="400">declare the form, reject at the door</tspan></text>'
-        + ch5_card(240, 190, "declared first", "DOUBLE NOT NULL CHECK (&gt; 0)")
-        + ch5_card(505, 190, _refused[0], html.escape(_refused[1]), cls="dg-box dg-ok")
-        + ch5_card(770, 190, f"{_loaded:,} rows loaded", "a problem you know about", cls="dg-box dg-ok")
+        '<text x="240" y="24" font-weight="700">schema-on-read: <tspan class="dg-muted" font-weight="400">infer the type; errors surface late, if at all</tspan></text>'
+        + card_box(240, 40, "DuckDB infers", f"total_price: {html.escape(_inferred)}")
+        + card_box(505, 40, "TRY_CAST to DOUBLE", f"{_parsed:,} of {_rows:,} rows remain")
+        + card_box(770, 40, f"revenue {_revenue:,.0f}", f"{_low:.1%} too low · no warning", cls="dg-box dg-hot")
+        + '<text x="240" y="174" font-weight="700">schema-on-write: <tspan class="dg-muted" font-weight="400">declare the schema, reject at load time</tspan></text>'
+        + card_box(240, 190, "declared first", "DOUBLE NOT NULL CHECK (&gt; 0)")
+        + card_box(505, 190, _refused[0], html.escape(_refused[1]), cls="dg-box dg-ok")
+        + card_box(770, 190, f"{_loaded:,} rows loaded", "the error is reported", cls="dg-box dg-ok")
         + '<path class="dg-edge" d="M475 76 H 499"/><path class="dg-edge" d="M740 76 H 764"/>'
         + '<path class="dg-edge" d="M475 226 H 499"/><path class="dg-edge" d="M740 226 H 764"/>',
         width=1010,
         height=270,
-        label=f"One messy CSV, two lanes. Schema-on-read guesses {_inferred}, keeps {_parsed} of {_rows} rows and reports "
-        f"a revenue {_low:.1%} too low without a warning. Schema-on-write refuses the load and names the bad line.",
+        label=f"One faulty CSV, two approaches. Schema-on-read infers {_inferred}, keeps {_parsed} of {_rows} rows and reports "
+        f"a revenue {_low:.1%} too low without a warning. Schema-on-write rejects the load and names the faulty line.",
         tier="data",
     )
-    _read, _write = "schema-on-read (guess the types)", "schema-on-write (declare, then load)"
+    _read, _write = "schema-on-read (infer the types)", "schema-on-write (declare, then load)"
     _table = static_table(
         {
-            "": ["type of total_price", "rows in the file", "rows that reached the answer", "what you are told", "revenue reported"],
-            _read: [_inferred, f"{_rows:,}", f"{_parsed:,}", "nothing at all", f"{_revenue:,.2f} (true total: {_true:,.2f})"],
-            _write: ["DOUBLE NOT NULL CHECK (> 0)", f"{_rows:,}", f"{_loaded:,}", _told, "none, the load stopped"],
+            "": ["type of total_price", "rows in the file", "rows included in the result", "reported error", "revenue reported"],
+            _read: [_inferred, f"{_rows:,}", f"{_parsed:,}", "none", f"{_revenue:,.2f} (true total: {_true:,.2f})"],
+            _write: ["DOUBLE NOT NULL CHECK (> 0)", f"{_rows:,}", f"{_loaded:,}", _told, "none: the load was aborted"],
         },
-        label="One messy export, two lanes",
+        label="One faulty export, two approaches",
         wrapped_columns=[_read, _write],
         column_widths={_read: 400, _write: 440},
     )
     mo.vstack(
         [
-            mo.md("### Schema-on-read or schema-on-write: when are bad prices caught?"),
+            mo.md("### Schema-on-read or schema-on-write: when are invalid prices detected?"),
             in_plain(
-                "A **schema** is the blank form a table fills in: each column's name and type (`total_price` is a "
-                "number). A CSV file has none. **Schema-on-read** guesses the types while reading; **schema-on-write** "
-                "declares the form first and loads only what fits. What differs is when a bad value is caught, and "
-                "who is told."
+                "A **schema** defines each column's name and type (`total_price` is a number). A CSV file has none. "
+                "**Schema-on-read** infers the types while reading; **schema-on-write** declares the schema first and "
+                "loads only conforming rows. The two approaches differ in when an invalid value is detected, and who "
+                "is notified."
             ),
             mo.md(
-                f"The file: {_rows:,} real sales, with {len(_bad_rows)} prices broken on purpose, the way real exports "
-                "break (`n/a`, empty, `1 234,50`, `EUR 900`)."
+                f"The file: {_rows:,} sales, {len(_bad_rows)} of them with deliberately corrupted prices, as they occur "
+                "in practice (`n/a`, empty, `1 234,50`, `EUR 900`)."
             ),
             mo.ui.tabs({"Diagram": _lanes, "Table": _table}),
             mo.md(
-                f"**What to notice:** the same file, the same {len(_bad_rows)} bad values. Read gave a wrong number that "
-                "looks ordinary. Write gave no number: a problem you know about, not an answer you trust by mistake."
+                f"**Observation:** the same file, the same {len(_bad_rows)} invalid values. Schema-on-read produced an "
+                "incorrect result that appears plausible. Schema-on-write produced no result but an explicit error, "
+                "which is preferable to a result that is trusted by mistake."
             ).callout(kind="warn"),
-            mo.accordion(
-                {
-                    "Where the rows went, and which lane to use when": mo.md(
-                        f"""
-    `TRY_CAST` turns anything it cannot convert into `NULL`, and `SUM` skips nulls: {_rows - _parsed}
-    of {_rows} rows silently left the total. Nothing raised, nothing warned.
-
-    Neither lane is correct in the abstract. Schema-on-read is right for exploring a file you have
-    just been handed; schema-on-write is right for anything a decision rests on.
-                        """
-                    )
-                }
+            mo.md(
+                f"`TRY_CAST` turned the {_rows - _parsed} unparseable prices into `NULL`, which `SUM` ignores. "
+                "Schema-on-read suits exploration; schema-on-write suits data on which decisions are based."
             ),
         ],
         gap=0.6,
@@ -4136,14 +2776,14 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, static_table, tempfile):
+def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, static_table, tempfile):
     _all = pd.read_parquet(SALES_SEED)
     with tempfile.TemporaryDirectory() as _td:
         _dir = Path(_td).as_posix()
         _files = {}
         for _year, _part in _all.groupby(_all["sale_date"].dt.year):
             _files[_year] = f"{_dir}/sales_{_year}.parquet"
-            # customer_rating joined the form in 2025, so the 2024 file never had it
+            # customer_rating joined the schema in 2025, so the 2024 file never had it
             (_part.drop(columns="customer_rating") if _year < 2025 else _part).to_parquet(_files[_year], index=False)
         _sizes = _all.groupby(_all["sale_date"].dt.year).size()
         _con = duckdb.connect()
@@ -4154,10 +2794,10 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
                 _df = _con.execute(sql, params).df()
             except duckdb.Error as _exc:
                 _text = f"{type(_exc).__name__}: {str(_exc).splitlines()[0].replace(_dir + '/', '')}"
-                return "dg-box", f"refused: {type(_exc).__name__}", _text
+                return "dg-box", f"rejected: {type(_exc).__name__}", _text
             if "customer_rating" not in _df:
                 _text = f"{len(_df):,} rows, {_df.shape[1]} columns, no customer_rating, no error"
-                return "dg-box dg-hot", f"{len(_df):,} rows, customer_rating gone", _text
+                return "dg-box dg-hot", f"{len(_df):,} rows, customer_rating missing", _text
             _rated = _df["customer_rating"]
             _text = f"{len(_df):,} rows, rating on {_rated.count():,}, average {_rated.mean():.3f}"
             return "dg-box dg-ok", f"{len(_df):,} rows, {_rated.count():,} rated, average {_rated.mean():.2f}", _text
@@ -4166,9 +2806,9 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
         _readings = [
             (
                 "read_parquet('sales_*.parquet')",
-                "the glob reads A to Z: 2024 first",
+                "the glob reads in name order: 2024 first",
                 _read("FROM read_parquet(?)", [_glob]),
-                "the oldest file sets the shape: the new column is dropped",
+                "the first file sets the schema: the new column is dropped",
             ),
             (
                 "the same files, newest first",
@@ -4185,7 +2825,7 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
         ]
 
     _files_row = "".join(
-        ch5_card(
+        card_box(
             _i * 345,
             0,
             f"sales_{_year}.parquet",
@@ -4199,7 +2839,7 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
         f'<text x="0" y="{_y + 30}" style="font-family: var(--monospace-font, monospace); font-size: 15px">{html.escape(_how)}</text>'
         f'<text class="dg-muted" x="0" y="{_y + 54}">{_hint}</text>'
         f'<path class="dg-edge" d="M440 {_y + 36} H 494"/>'
-        + ch5_card(500, _y, html.escape(_outcome), _why, cls=_cls, w=510)
+        + card_box(500, _y, html.escape(_outcome), _why, cls=_cls, w=510)
         for _y, (_how, _hint, (_cls, _outcome, _text), _why) in zip((120, 210, 300), _readings, strict=True)
     )
     _picture = diagram(
@@ -4207,31 +2847,385 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
         width=1010,
         height=380,
         label="Three yearly files, only the newer two with customer_rating, read three ways: the glob silently drops "
-        "the column, newest first is refused, union_by_name keeps every row and fills the gap with NULL.",
+        "the column, newest first is rejected, union_by_name keeps every row and fills the gap with NULL.",
         tier="data",
     )
     _table = static_table(
         [
-            {"how you read the folder": _how, "what happens": _text, "why": _why}
+            {"how the folder is read": _how, "what happens": _text, "why": _why}
             for _how, _hint, (_cls, _outcome, _text), _why in _readings
         ],
-        label="One folder, two file shapes, three readings",
-        wrapped_columns=["how you read the folder", "what happens", "why"],
-        column_widths={"how you read the folder": 250, "what happens": 480, "why": 330},
+        label="One folder, two schemas, three ways of reading it",
+        wrapped_columns=["how the folder is read", "what happens", "why"],
+        column_widths={"how the folder is read": 250, "what happens": 480, "why": 330},
     )
     mo.vstack(
         [
-            mo.md("### Add one column, then read last year's files"),
+            mo.md("### Schema drift across files: a column added in 2025"),
             in_plain(
-                "EdgeWorks keeps one sales file per year. Say the order form gained a box in 2025: the customer's "
-                "rating. Then `sales_2024.parquet` has no `customer_rating` column, and the 2025 and 2026 files do. "
-                "(We drop the column from the real 2024 sales to make it so.) Here is the folder, read three ways:"
+                "EdgeWorks keeps one sales file per year. Suppose the schema gained a field in 2025: the customer "
+                "rating. Then `sales_2024.parquet` has no `customer_rating` column, while the 2025 and 2026 files do. "
+                "(For this demonstration, the column is removed from the 2024 sales.) The folder, read in three ways:"
             ),
             mo.ui.tabs({"Diagram": _picture, "Table": _table}),
             mo.md(
-                "**What to notice:** only the third reading is right. The first is the dangerous one: nothing failed, "
-                "and `customer_rating` quietly vanished. When a folder's files grew columns, say so when you read it."
+                "**Observation:** only the third reading is correct. The first is the most problematic: nothing fails, "
+                "and `customer_rating` silently disappears. When files in a folder differ in their columns, this must "
+                "be specified explicitly when reading."
             ).callout(kind="warn"),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo, shop_sales):
+    # The example day: EdgeWorks' busiest day of January 2026, its last two orders recorded at the same moment.
+    _per_day = shop_sales[shop_sales["sale_date"].dt.to_period("M") == "2026-01"].groupby("sale_date").size()
+    _day, ch1_day_orders = _per_day.idxmax(), int(_per_day.max())
+    _before = ch1_day_orders - 2
+    mo.vstack(
+        [
+            mo.md("### The lost update: two concurrent read-modify-write cycles"),
+            in_plain(
+                "The dashboard shows the **number of orders recorded today**, a counter stored in one file. Each new "
+                "order updates it in three steps: **read** the value, **add** one, **write** it back. If two clients "
+                "both read before either writes, both write the same value, and one order is missing from the count. "
+                "This anomaly is called a **lost update**."
+            ),
+            mo.md(
+                f"""
+    <div class="section-card flow-card">
+      <div class="lost-update-wrap">
+        <div class="lost-update-grid">
+          <div class="lu-header">Step</div>
+          <div class="lu-header">Client A records order {_before + 1}</div>
+          <div class="lu-header">Client B records order {_before + 2}</div>
+          <div class="lu-header">Orders today (the file)</div>
+
+          <div class="lu-step">1</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-state">{_before}</div>
+
+          <div class="lu-step">2</div>
+          <div class="lu-event lu-write">writes {_before} + 1 = {_before + 1}</div>
+          <div class="lu-event">adds 1 to the {_before} it read</div>
+          <div class="lu-state">{_before + 1}</div>
+
+          <div class="lu-step">3</div>
+          <div class="lu-event lu-idle">done</div>
+          <div class="lu-event lu-stale">writes {_before} + 1 = {_before + 1}</div>
+          <div class="lu-state lu-problem">{_before + 1} (A's order overwritten)</div>
+        </div>
+      </div>
+      <div class="flow-note"><strong>{_day.day} {_day:%B %Y}, the busiest day of that month: {ch1_day_orders} orders
+      recorded, {ch1_day_orders - 1} counted.</strong> Both orders are stored; only the counter is wrong.</div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**Observation:** no error is raised. Each client behaves correctly in isolation; the anomaly results "
+                "from the interleaving. B's write is **stale**: it is based on a value that changed after B read it."
+            ),
+        ],
+        gap=0.8,
+    )
+    return (ch1_day_orders,)
+
+
+@app.cell
+def _(mo):
+    ch1_sim_orders = mo.ui.slider(1, 6, value=2, label="Orders per client", show_value=True, debounce=True)
+    ch1_sim_timing = mo.ui.slider(1, 999, value=7, label="Interleaving (random seed)", show_value=True, debounce=True)
+    return ch1_sim_orders, ch1_sim_timing
+
+
+@app.cell
+def _(
+    TIER,
+    alt,
+    ch1_day_orders,
+    ch1_sim_orders,
+    ch1_sim_timing,
+    chart_or_table,
+    mo,
+    pd,
+    random,
+    tier_chart,
+):
+    _start = ch1_day_orders - 2  # where the example above left the count
+    _rng = random.Random(ch1_sim_timing.value)
+    _ops = {_rep: ["read", "write"] * ch1_sim_orders.value for _rep in "AB"}
+    _read, _count, _log = {}, _start, []
+    while _ops["A"] or _ops["B"]:
+        _rep = _rng.choice([_r for _r in "AB" if _ops[_r]])
+        _action = _ops[_rep].pop(0)
+        _before = _count
+        if _action == "read":
+            _read[_rep] = _count
+        else:
+            _count = _read[_rep] + 1
+        _log.append(
+            {
+                "step": len(_log) + 1,
+                "client": f"client {_rep}",
+                "action": _action,
+                "count before": _before,
+                "value read by the client": _read[_rep],
+                "count after": _count,
+                "note": "stale write" if _action == "write" and _read[_rep] != _before else "",
+            }
+        )
+
+    _booked = _start + 2 * ch1_sim_orders.value
+    _df = pd.DataFrame(_log)
+    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
+    # A read shows the number it got, a write the number it left; short labels once the steps get narrow.
+    _short = len(_df) > 12
+    _df["label"] = [
+        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
+        for _a, _v in zip(_df["action"], _df["count after"], strict=True)
+    ]
+    _df["orders recorded"] = _start + (_df["action"] == "write").cumsum()
+    _df["orders counted"] = _df["count after"]
+    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
+    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("client:N", title=None, axis=alt.Axis(minExtent=60)))
+    _lanes = (
+        _lane.mark_rect(cornerRadius=8).encode(
+            color=alt.Color(
+                "kind:N",
+                title=None,
+                scale=alt.Scale(domain=["read", "write", "stale write"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
+            )
+        )
+        # fixed text colours: the fills above are the same in both themes
+        + _lane.mark_text().encode(
+            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
+        )
+    ).properties(width="container", height=110)
+    _series = ["orders counted", "orders recorded"]
+    _counter = (
+        alt.Chart(_df)
+        .transform_fold(_series, as_=["series", "value"])
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=_x,
+            y=alt.Y("value:Q", title="orders today", scale=alt.Scale(zero=False), axis=alt.Axis(minExtent=60)),
+            color=alt.Color("series:N", title=None, scale=alt.Scale(domain=_series, range=[TIER["data"], TIER["muted"]])),
+            strokeDash=alt.StrokeDash("series:N", title=None, scale=alt.Scale(domain=_series, range=[[1, 0], [6, 4]])),
+        )
+        .properties(width="container", height=170)
+    )
+    _stale = int((_df["note"] == "stale write").sum())
+
+    mo.vstack(
+        [
+            mo.md("### Two concurrent clients, step by step"),
+            mo.md(
+                f"Both clients start from a count of {_start} and record their orders. Each order takes two steps: "
+                "**read** the count, then **write** it plus one. The random seed determines how the steps of the two "
+                "clients interleave; neither client observes the other."
+            ),
+            mo.hstack([ch1_sim_orders, ch1_sim_timing], widths="equal", gap=2),
+            mo.hstack(
+                [
+                    mo.stat(_booked, label="orders recorded", bordered=True),
+                    mo.stat(_count, label="orders counted", bordered=True),
+                    mo.stat(_booked - _count, label="lost updates", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(
+                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
+                _log,
+                label="Every step, in order",
+            ),
+            mo.md(
+                f"**Observation:** {_stale} stale write{'s' if _stale != 1 else ''} (red). A write is stale when the "
+                "other client wrote between its read and its write; it overwrites every order written in that interval. "
+                "The count is correct only for interleavings without a stale write."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### What a database promises: ACID"),
+            in_plain(
+                "A database groups changes into a **transaction**: a sequence of operations executed as one unit and "
+                "then either **committed** (all changes kept) or **rolled back** (all changes undone). ACID denotes "
+                "four guarantees a database provides for every transaction. A plain file provides none of them."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity: all or nothing</div>
+        <p>Moving a sale from Europe to Africa changes both region totals, or neither.</p>
+        <p class="tile-bad">File: a crash between the two writes removes the sale from total revenue.</p></div>
+      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency: constraints always hold</div>
+        <p>A constraint such as "units sold is at least 1" is checked on every write.</p>
+        <p class="tile-bad">File: no checks; a sale with 0 units is stored.</p></div>
+      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation: as if executed serially</div>
+        <p>Two concurrent orders are both counted, as if one had been recorded after the other.</p>
+        <p class="tile-bad">File: one write overwrites the other; the count is too low.</p></div>
+      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability: committed changes persist</div>
+        <p>A confirmed order survives a power failure one second later.</p>
+        <p class="tile-bad">File: only after flush and fsync, which force the bytes onto the disk.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**Outlook:** the simulation before this slide violated **I**, with files instead of a database. The "
+                "next experiment tests **A**: a crash in the middle of a change."
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    ch1_crash = mo.ui.switch(value=True, label="Crash between the two writes")
+    return (ch1_crash,)
+
+
+@app.cell
+def _(Path, ch1_crash, chart_or_table, diagram, json, mo, shop_sales, sqlite3, tempfile):
+    # The move: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
+    _sale = shop_sales.loc[shop_sales.loc[shop_sales["country"] == "Germany", "total_price"].idxmax()]
+    # Money in whole cents: an integer never picks up float rounding, so "the total held" is exact.
+    _move = int(round(float(_sale["total_price"]) * 100))
+    _initial = {_r: int(round(_v * 100)) for _r, _v in shop_sales.groupby("region")["total_price"].sum().items()}
+    _expected = sum(_initial.values())
+    _timeline = []
+
+    def _add_timeline(system, step, totals, note):
+        _timeline.append(
+            {
+                "system": system,
+                "step": step,
+                "Europe (CHF)": totals["Europe"] / 100,
+                "Africa (CHF)": totals["Africa"] / 100,
+                "total revenue (CHF)": sum(totals.values()) / 100,
+                "note": note,
+            }
+        )
+
+    with tempfile.TemporaryDirectory() as _tmp:
+        # File: the region totals in one JSON file; the two saves are separate and nothing ties them together.
+        _file_path = Path(_tmp) / "region_totals.json"
+        _totals = dict(_initial)
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "start", _totals, "region totals before the move")
+        _totals["Europe"] -= _move
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "subtract from Europe", _totals, "first write")
+        if ch1_crash.value:
+            _add_timeline("file (JSON)", "crash", _totals, "crash before the second write")
+        else:
+            _totals["Africa"] += _move
+            _file_path.write_text(json.dumps(_totals))
+            _add_timeline("file (JSON)", "add to Africa", _totals, "second write")
+        _file_total = sum(json.loads(_file_path.read_text()).values())
+
+        # SQLite: both writes inside one transaction.
+        _con = sqlite3.connect(Path(_tmp) / "region_totals.db", isolation_level=None)
+        _con.execute("CREATE TABLE region_totals (region TEXT PRIMARY KEY, cents INTEGER)")
+        _con.executemany("INSERT INTO region_totals VALUES (?, ?)", _initial.items())
+
+        def _db_totals():
+            return dict(_con.execute("SELECT region, cents FROM region_totals").fetchall())
+
+        _add_timeline("SQLite", "start", _db_totals(), "region totals before the move")
+        _con.execute("BEGIN")
+        _con.execute("UPDATE region_totals SET cents = cents - ? WHERE region = 'Europe'", (_move,))
+        _add_timeline("SQLite", "subtract from Europe", _db_totals(), "inside the transaction, not committed")
+        try:
+            if ch1_crash.value:
+                raise RuntimeError("simulated crash between the two writes")
+            _con.execute("UPDATE region_totals SET cents = cents + ? WHERE region = 'Africa'", (_move,))
+            _con.execute("COMMIT")
+            _add_timeline("SQLite", "commit", _db_totals(), "both writes kept")
+        except RuntimeError:
+            _con.execute("ROLLBACK")
+            _add_timeline("SQLite", "roll back", _db_totals(), "first write undone")
+        _db_total = sum(_db_totals().values())
+        _con.close()
+
+    # One lane per system, one box per step: the two region totals after it, and total revenue at the end.
+    _style = {"crash": "dg-box dg-hot", "add to Africa": "dg-box dg-ok", "commit": "dg-box dg-ok", "roll back": "dg-box dg-ok"}
+
+    def _lane(y, system, label, total):
+        steps = [_row for _row in _timeline if _row["system"] == system]
+        parts = [f'<text x="0" y="{y + 50}" font-weight="700">{label}</text>']
+        for _i, _row in enumerate(steps):
+            x = 110 + _i * 270
+            parts.append(
+                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
+                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_row["Europe (CHF)"]:,.0f}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_row["Africa (CHF)"]:,.0f}</text>'
+            )
+            if _i:
+                parts.append(f'<path class="dg-edge" d="M{x - 36} {y + 48} H {x - 6}"/>')
+        _ok = total == _expected
+        parts.append(
+            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="930" y="{y + 44}" font-size="22">'
+            f"{'&#10003;' if _ok else '&#10007;'} {total / 100:,.0f}</text>"
+        )
+        if not _ok:
+            parts.append(f'<text class="dg-hot" x="930" y="{y + 72}">{(_expected - total) / 100:,.2f} missing</text>')
+        return "".join(parts)
+
+    _picture = diagram(
+        '<text x="930" y="18" font-weight="700">total revenue (CHF)</text>'
+        + _lane(36, "file (JSON)", "file", _file_total)
+        + '<rect x="370" y="176" width="520" height="120" rx="16" fill="none" stroke="currentColor"'
+        ' stroke-dasharray="8 6" opacity="0.45"/>'
+        + '<text class="dg-muted" x="630" y="322" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
+        + _lane(188, "SQLite", "SQLite", _db_total),
+        width=1160,
+        height=334,
+        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa: the file ends with total revenue CHF {_file_total / 100:,.2f}, "
+        f"SQLite with CHF {_db_total / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
+    )
+
+    _file_ok = _file_total == _expected
+    _file_callout = mo.md(
+        "**File:** the two writes are independent. "
+        + (
+            "Both were applied, because no crash occurred."
+            if _file_ok
+            else f"The crash occurred between them: CHF {_move / 100:,.2f} was subtracted from Europe but never added to Africa."
+        )
+    ).callout(kind="success" if _file_ok else "danger")
+    _db_callout = mo.md(
+        "**SQLite:** both writes belong to one transaction. "
+        + ("The crash triggered a rollback of the first write, so total revenue is preserved." if ch1_crash.value else "They were committed together.")
+    ).callout(kind="success" if _db_total == _expected else "danger")
+
+    mo.vstack(
+        [
+            mo.md("### Atomicity: reassigning a sale to another region, with a crash"),
+            mo.md(
+                f"Sale #{_sale['sale_id']} ({_sale['product']}, CHF {_sale['total_price']:,.2f}) was recorded under "
+                "Germany but belongs to Kenya. Reassigning it requires two writes to the region totals (in CHF) that "
+                "the dashboard reads: **subtract it from Europe**, then **add it to Africa**. The reassignment must "
+                "leave total revenue unchanged."
+            ),
+            ch1_crash,
+            chart_or_table(_picture, _timeline, label="Every step, in order"),
+            mo.hstack([_file_callout, _db_callout], widths="equal"),
+            mo.md("**Observation:** with the crash enabled, only the transaction preserves total revenue at "
+                  f"CHF {_expected / 100:,.2f}."),
         ],
         gap=0.6,
     )
@@ -4242,18 +3236,28 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, stati
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — DuckDB & Schema</h3>
+      <h3>Discussion: Storage</h3>
       <details>
-        <summary><strong>Q1:</strong> When is loading the sales into a DuckDB table better than reading the files each time?</summary>
-        <p><strong>Answer:</strong> When the same queries or joins run again and again: the file is parsed once at load instead of on every query, as the three-files lab showed (materialisation = storing structured intermediate data for reuse).</p>
+        <summary><strong>Q1:</strong> The order-entry system creates and corrects single orders throughout the day. Row or column layout?</summary>
+        <p><strong>Answer:</strong> Row layout: each operation reads or writes one complete sale. This is OLTP (online
+        transaction processing). The dashboard, in contrast, aggregates many sales (OLAP) and reads columnar files.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> What risk comes with schema-on-read?</summary>
-        <p><strong>Answer:</strong> Bad values slip through silently: they turn into <code>NULL</code>s and totals come out wrong without any error.</p>
+        <summary><strong>Q2:</strong> May prices be stored rounded to the franc to save space?</summary>
+        <p><strong>Answer:</strong> No: total revenue deviates, and the exact prices are lost. Rounding is acceptable
+        for measurements, to the precision of the instrument and documented in the schema; not for prices, identifiers
+        or dates.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> How could we notice that partner files change over time?</summary>
-        <p><strong>Answer:</strong> Track inferred types, null rates and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
+        <summary><strong>Q3:</strong> When is loading the sales into a DuckDB table better than reading the files each time?</summary>
+        <p><strong>Answer:</strong> When the same queries or joins run repeatedly: the file is parsed once at load time
+        instead of on every query (materialisation: storing structured intermediate data for reuse).</p>
+      </details>
+      <details>
+        <summary><strong>Q4:</strong> Without a database, how could the reassignment of a sale between regions be made atomic?</summary>
+        <p><strong>Answer:</strong> Write the new totals to a temporary file, then rename it over the old one: a rename is
+        atomic, so a reader sees either the old or the new totals, never an intermediate state. Alternatively, write a
+        log entry first (a write-ahead log), and replay or undo it on restart.</p>
       </details>
     </div>
     """)
@@ -4266,23 +3270,25 @@ def _(mo):
         [
             mo.md(
                 """
-    ### Chapter 5 Conclusion
+    ### Part 2 Summary
 
-    - DuckDB runs SQL on files, inside Python: Mia's revenue per region came straight from three Parquet files.
-    - Pushdown reads only the columns a query names, and only the rows its filter keeps.
-    - Typed columns (Parquet, a table) beat CSV, which is parsed again on every query.
-    - An index pays when it covers the query and few rows match; every write pays for it.
-    - Schema-on-read fails silently later; schema-on-write rejects at the door.
-    - A folder whose files grew columns: `union_by_name = true`, or the first file sets the shape.
+    - Row layouts suit single records (OLTP), column layouts suit aggregates (OLAP). Parquet reads only the
+      requested columns and skips row groups using their min-max statistics.
+    - Compression trades CPU time for fewer bytes and pays off for slow transfers. Lossless compression keeps
+      every value; rounding loses information. Columns with few distinct values compress best.
+    - DuckDB runs SQL directly on Parquet and CSV files. Schema-on-write rejects invalid data when it is loaded;
+      schema-on-read fails silently.
+    - Concurrent read-modify-write cycles on a file lose updates; database transactions make changes atomic
+      and isolated.
                 """
             ).callout(kind="success"),
             mo.md(
                 """
-    ### Bridge to Next Chapter
+    ### Next: Part 3
 
-    So far everything ran on our own laptop. Next, the dashboard and the partners' scripts ask for
-    the sales over the network: a **request** goes out, a **response** comes back, and the wait is
-    the network's time plus the server's.
+    So far, everything ran locally. Next, the dashboard and the partners' scripts request the sales over the
+    network: a **request** is sent, a **response** is returned, and the latency is the sum of network time and
+    server time.
                 """
             ).callout(kind="neutral"),
         ],
@@ -4295,12 +3301,22 @@ def _(mo):
 def _(chapter_intro, mo):
     mo.vstack(
         [
-            mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)"),
+            mo.md("## Part 3 · APIs: Requesting and Serving Data"),
             chapter_intro(
                 "logic",
-                "The dashboard and the partners' scripts both need the sales. How do they ask for them?",
-                "Up to the logic tier. Both ask our sales API in the same way: a request goes out, an answer comes "
-                "back. This chapter shows what the two look like.",
+                "How do the dashboard and the partners' scripts obtain the sales data?",
+                "The structure of HTTP requests and responses, retrieving data with Python, and building an API with "
+                "FastAPI and Pydantic.",
+                topics=(
+                    "Requests and responses",
+                    "URLs",
+                    "Verbs and status codes",
+                    "From JSON to a DataFrame",
+                    "APIs as data sources",
+                    "FastAPI",
+                    "Validation with Pydantic",
+                    "Live: the sales API",
+                ),
             ),
         ],
         gap=1,
@@ -4319,15 +3335,15 @@ def _(box, diagram, html, in_plain, mo, shop_sales):
     ]
     _labels = [
         # (x, y, text): the names of the parts, above the request and below the response
-        (245, 62, "verb: what to do"),
-        (378, 62, "path: which sale"),
+        (245, 62, "verb: the operation"),
+        (378, 62, "path: the resource"),
         (308, 158, "endpoint = verb + path"),
-        (262, 344, "status code: how it went"),
-        (596, 344, "the sale, written as JSON"),
+        (262, 344, "status code: the outcome"),
+        (596, 344, "the sale, serialized as JSON"),
     ]
     _message = diagram(
         '<rect class="dg-box" x="0" y="40" width="170" height="276" rx="12"/>'
-        '<text x="85" y="172" text-anchor="middle" font-weight="700">Mia\'s dashboard</text>'
+        '<text x="85" y="172" text-anchor="middle" font-weight="700">dashboard</text>'
         '<text class="dg-muted" x="85" y="198" text-anchor="middle">the client</text>'
         '<rect class="dg-tier" x="930" y="40" width="170" height="276" rx="12"/>'
         '<text x="1015" y="172" text-anchor="middle" font-weight="700">sales API</text>'
@@ -4338,7 +3354,7 @@ def _(box, diagram, html, in_plain, mo, shop_sales):
         '<rect x="196" y="176" width="672" height="144" style="fill: var(--surface)"/>'
         + box(200, 78, "GET", w=90, cls="dg-tier")
         + box(310, 78, "/sales/1", w=136, cls="dg-tier")
-        + '<text class="dg-muted" x="466" y="105">no body: a GET only asks</text>'
+        + '<text class="dg-muted" x="466" y="105">no body: a GET only reads</text>'
         + '<path d="M202 128 V 136 H 444 V 128" fill="none" stroke="currentColor" opacity="0.45"/>'
         + box(200, 226, "200 OK", w=124, cls="dg-box dg-ok")
         + '<rect class="dg-box" x="336" y="180" width="520" height="136" rx="12"/>'
@@ -4350,39 +3366,29 @@ def _(box, diagram, html, in_plain, mo, shop_sales):
         + "".join(f'<text class="dg-muted" x="{_x}" y="{_y}" text-anchor="middle">{_t}</text>' for _x, _y, _t in _labels),
         width=1100,
         height=356,
-        label="Mia's dashboard sends the request GET /sales/1 to the sales API: the verb GET and the path /sales/1, "
-        f"no body. The API answers 200 OK and sale 1 as JSON: {_sale['product']}, {_sale['country']}, "
+        label="The dashboard sends the request GET /sales/1 to the sales API: the verb GET and the path /sales/1, "
+        f"no body. The API returns 200 OK and sale 1 as JSON: {_sale['product']}, {_sale['country']}, "
         f"{_sale['units_sold']} units, CHF {_sale['total_price']:,.2f}.",
         tier="logic",
     )
     mo.vstack(
         [
-            mo.md("### The dashboard asks the sales API for sale 1"),
+            mo.md("### The dashboard requests sale 1 from the sales API"),
             in_plain(
-                "An **API** (application programming interface) is a program's front desk for other programs. Mia's "
-                "dashboard never opens the sales files: it sends a **request** to our sales API over **HTTP**, the "
-                "message format of the web, and gets a **response** back."
+                "An **API** (application programming interface) is the interface through which a program offers its "
+                "functionality to other programs. The dashboard never opens the sales files: it sends a **request** "
+                "to the sales API over **HTTP**, the application protocol of the web, and receives a **response**."
             ),
             _message,
             mo.md(
-                "**What to notice:** the dashboard knows only the address `/sales/1`. Where the sale is kept, and in "
-                "what format, is the API's business: the files could become a database tomorrow and the dashboard "
-                "would not notice."
+                "**Observation:** the dashboard knows only the address `/sales/1`. Where and in which format the sale "
+                "is stored is encapsulated by the API: the files could be replaced by a database without any change to "
+                "the dashboard."
             ).callout(kind="info"),
-            mo.accordion(
-                {
-                    "Resource, path, endpoint, payload: the four words": mo.md(
-                        """
-    - A **resource** is one thing the server knows about: a sale, a product, a country.
-    - A **path** is the address of a resource, like `/sales/1`.
-    - An **endpoint** is one path combined with one verb, like `GET /sales/1`.
-    - A **payload** is the data sent along with a request, written as JSON: the new sale a sales
-      rep's app sends with `POST /sales`. In a JSON API the payload is the resource's
-      *representation*: the same thing, written down to travel.
-    - **HTTPS** is HTTP with encryption (TLS), the secure default. Same API idea either way.
-                        """
-                    )
-                }
+            mo.md(
+                "**Terms:** a *resource* is an entity the server manages (a sale); its *path* is its address "
+                "(`/sales/1`); an *endpoint* combines a verb with a path (`GET /sales/1`); a *payload* is the data sent "
+                "with a request. HTTPS is HTTP with encryption."
             ),
         ],
         gap=0.8,
@@ -4391,104 +3397,107 @@ def _(box, diagram, html, in_plain, mo, shop_sales):
 
 
 @app.cell
+def _(box, diagram, html, in_plain, json, label_w, mo, shop_sales):
+    _parts = [
+        ("http://", "protocol"),
+        ("127.0.0.1", "host: this computer"),
+        (":8000", "port"),
+        ("/sales", "path: the resource"),
+        ("?region=Europe&min_rating=4", "query parameters: filters"),
+    ]
+    _svg, _x = [], 0.0
+    for _i, (_text, _label) in enumerate(_parts):
+        _w = label_w(_text)
+        _svg.append(box(_x, 0, html.escape(_text), w=_w, cls="dg-tier" if _i >= 3 else "dg-box"))
+        _svg.append(f'<text class="dg-muted" x="{_x + _w / 2:.0f}" y="{72 + 24 * (_i % 2)}" text-anchor="middle">{_label}</text>')
+        _x += _w + 6
+    _url = diagram(
+        "".join(_svg),
+        width=int(_x),
+        height=106,
+        label="The URL http://127.0.0.1:8000/sales?region=Europe&min_rating=4 split into protocol, host, port, path "
+        "and query parameters.",
+        tier="logic",
+    )
+    # The first sale the API would return for this request: Europe, rating 4 or more, newest first.
+    _hit = (
+        shop_sales[(shop_sales["region"] == "Europe") & (shop_sales["customer_rating"] >= 4)]
+        .sort_values(["sale_date", "sale_id"], ascending=False)
+        .iloc[0]
+    )
+    _record = {
+        "sale_id": int(_hit["sale_id"]),
+        "sale_date": f"{_hit['sale_date']:%Y-%m-%d}",
+        "product_name": _hit["product"],
+        "region_name": _hit["region"],
+        "total_price": float(_hit["total_price"]),
+    }
+    _request = "GET /sales?region=Europe&min_rating=4 HTTP/1.1\nHost: 127.0.0.1:8000\nAccept: application/json"
+    _fields = ",\n   ".join(f"{json.dumps(_k)}: {json.dumps(_v)}" for _k, _v in _record.items())
+    _response = f"HTTP/1.1 200 OK\ncontent-type: application/json\n\n[\n  {{{_fields},\n   ...}},\n  ...\n]"
+    mo.vstack(
+        [
+            mo.md("### Anatomy of a URL, a request and a response"),
+            in_plain(
+                "A **URL** addresses a resource on a server: protocol, host, port, path and optional query parameters. "
+                "A **request** combines a verb with a URL, headers and, for POST and PUT, a body. The **response** "
+                "returns a status code, headers and a body, usually JSON."
+            ),
+            _url,
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("**The request**, as sent over the network"), mo.md(f"```http\n{_request}\n```")]),
+                    mo.vstack([mo.md("**The response**"), mo.md(f"```http\n{_response}\n```")]),
+                ],
+                widths="equal",
+                gap=2,
+            ),
+            mo.md(
+                "**Observation:** the filters travel as query parameters in the URL, and the server applies them before "
+                "it answers. A header such as `Accept: application/json` states which format the client expects."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
 def _(in_plain, mo):
     mo.vstack(
         [
-            mo.md("### Four verbs: what the dashboard and the sales reps can ask for"),
+            mo.md("### Four verbs: the operations available to clients"),
             in_plain(
-                "The **verb** says what to do with the thing the path names. HTTP has four everyday ones, and our "
-                "API answers all four on `/sales`. A verb is **idempotent** when sending the same request twice "
-                "leaves the sales just as sending it once: it matters when a request times out and the app sends "
-                "it again."
+                "The **verb** (formally, the HTTP request *method*) specifies the operation on the resource the path "
+                "identifies. HTTP defines four common ones, and the API supports all four on `/sales`. A verb is "
+                "**idempotent** if sending the same request twice leaves the data in the same state as sending it "
+                "once. **REST** is the convention behind this design: resources addressed by paths, changed with "
+                "these standard verbs."
             ),
             mo.md(
                 """
     <div class="tiles tier-logic">
       <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch: <code>GET /sales/1</code></div>
         <p>The dashboard shows sale 1.</p>
-        <p>Sent twice: the same sale, nothing changes.</p></div>
+        <p>Sent twice: the same sale, no change.</p></div>
       <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create: <code>POST /sales</code></div>
-        <p>A sales rep books a new order; the API gives it the next id, 3,361.</p>
-        <p class="tile-bad">Sent twice: two orders booked.</p></div>
+        <p>A client creates a new order; the API assigns the next id, 3,361.</p>
+        <p class="tile-bad">Sent twice: two orders created.</p></div>
       <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">change: <code>PUT /sales/1</code></div>
-        <p>A correction: the customer's rating was 5, not 3. Ours takes only the changed fields
-        (the standard calls that PATCH).</p>
+        <p>A correction: the customer's rating was 5, not 3. This API accepts only the changed fields
+        (the HTTP standard calls that PATCH).</p>
         <p>Sent twice: still 5.</p></div>
       <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove: <code>DELETE /sales/1</code></div>
         <p>The order was cancelled.</p>
-        <p>Sent twice: gone either way.</p></div>
+        <p>Sent twice: deleted either way.</p></div>
     </div>
                 """
             ),
             mo.md(
-                "**What to notice:** only POST is unsafe to resend. A sales rep's app whose POST timed out cannot "
-                "tell whether the order was booked; booking it again counts it twice."
+                "**Observation:** only POST is not safe to resend. A client whose POST timed out cannot tell whether "
+                "the order was created; resending it may create the order twice. Deleting a sale twice returns 204, "
+                "then 404, and is still idempotent: the end state is the same."
             ).callout(kind="info"),
-            mo.accordion(
-                {
-                    "Idempotent does not mean nothing happens": mo.md(
-                        """
-    The second request really is sent and really is processed. Idempotent means the **end state**
-    is the same, not that the work is skipped, and not even that the answer is the same: DELETE a
-    sale twice and you get **204**, then **404**. Still idempotent, because after one press or ten
-    the sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
-                        """
-                    ),
-                }
-            ),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(in_plain, mo):
-    mo.vstack(
-        [
-            mo.md("### REST: four habits that make an API predictable"),
-            in_plain(
-                "**REST** (representational state transfer) is a style for web APIs, not a library: a few habits "
-                "that make every endpoint behave the way a caller expects. Our sales API keeps these four."
-            ),
-            mo.md(
-                """
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
-        <p>Every request says everything it needs: <code>GET /sales/1</code> means the same whoever sends it,
-        whenever. The API remembers the sales, not the caller.</p></div>
-      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
-        <p>The same four verbs on every resource: <code>/sales</code>, <code>/products</code>,
-        <code>/countries</code>. Learn one, and you can read them all.</p></div>
-      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
-        <p>The product list hardly changes. An answer may say "valid for an hour", and the dashboard
-        reuses it instead of asking again.</p></div>
-      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
-        <p>The dashboard talks to the API, never to the files: the tier map from the start of the
-        lecture, over the network.</p></div>
-    </div>
-                """
-            ),
-            mo.md(
-                "**What to notice:** because the API remembers nothing about the caller, EdgeWorks can run a second "
-                "copy of it when the dashboard gets busy: any copy can answer any request."
-            ).callout(kind="info"),
-            mo.accordion(
-                {
-                    "Why these four habits let REST scale": mo.md(
-                        """
-    - **Stateless**: the server keeps no memory of *you* between requests: not where you are in a
-      conversation, what you asked last, or which page you were on. Every request carries
-      everything needed to answer it. It does remember your **data**, which is what the whole data
-      tier was for. Session state no, resource state yes: that is what lets a second copy of the
-      server answer your next request without anyone noticing.
-    - **Uniform interface**: once you can read one endpoint, you can read them all.
-    - **Cacheable**: a reused answer is one the server did not have to recompute.
-    - **Layered**: the tier idea from the start of this notebook, applied to the network.
-                        """
-                    ),
-                }
-            ),
         ],
         gap=0.8,
     )
@@ -4498,92 +3507,37 @@ def _(in_plain, mo):
 @app.cell
 def _(in_plain, mo, static_table):
     _codes = [
-        ("200 OK", "here it is", "GET /sales/1"),
-        ("201 Created", "booked: the new sale is in the answer", "POST /sales with a valid sale"),
-        ("204 No Content", "done, nothing to send back", "DELETE /sales/1"),
-        ("400 Bad Request", "well formed, but impossible", "a sale of product 99, which does not exist"),
-        ("404 Not Found", "nothing lives at that address", "GET /sales/999999"),
-        ("422 Unprocessable Content", "your sale broke a written rule", "a sale with rating 9"),
-        ("500 Internal Server Error", "our code crashed: not your fault", "a bug on our side"),
+        ("200 OK", "success; the resource is in the response", "GET /sales/1"),
+        ("201 Created", "created; the new sale is in the response", "POST /sales with a valid sale"),
+        ("204 No Content", "success; no response body", "DELETE /sales/1"),
+        ("400 Bad Request", "well-formed, but violates a business rule", "a sale of product 99, which does not exist"),
+        ("404 Not Found", "no resource at this path", "GET /sales/999999"),
+        ("422 Unprocessable Content", "the payload violates a declared rule", "a sale with rating 9"),
+        ("500 Internal Server Error", "failure on the server side, not caused by the client", "a bug in the API"),
     ]
     mo.vstack(
         [
-            mo.md("### Status codes: what the answer tells the caller"),
+            mo.md("### Status codes: the outcome of a request"),
             in_plain(
-                "Every response starts with a three-digit **status code**, which the caller's code reads before "
-                "anything else. The first digit says who has to act."
+                "Every response begins with a three-digit **status code**, which the client evaluates first. The first "
+                "digit indicates which side has to act."
             ),
             mo.md(
                 """
     <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
-        <p>It worked. Nobody has to do anything.</p></div>
-      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
-        <p>The caller must change something: sending the same request again gets the same answer.</p></div>
-      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">Our side broke</div>
-        <p>A retry may work: blindly only for the idempotent verbs.</p></div>
+      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Success</div>
+        <p>The request succeeded; no action is required.</p></div>
+      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Client error</div>
+        <p>The client must change the request: resending it unchanged yields the same response.</p></div>
+      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">Server error</div>
+        <p>A retry may succeed, but automatic retries are safe only for idempotent verbs.</p></div>
     </div>
                 """
             ),
             static_table(
-                [{"status code": _c, "tells the caller": _t, "our sales API sends it for": _w} for _c, _t, _w in _codes],
-                label="The codes our sales API sends",
+                [{"status code": _c, "meaning": _t, "sent by the sales API for": _w} for _c, _t, _w in _codes],
+                label="Status codes used by the sales API",
             ),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(diagram, in_plain, mo):
-    def _stage(x, title, sub, cls):
-        return (
-            f'<rect class="{cls}" x="{x}" y="10" width="210" height="80" rx="12"/>'
-            f'<text x="{x + 105}" y="44" text-anchor="middle" font-weight="700">{title}</text>'
-            f'<text class="dg-muted" x="{x + 105}" y="70" text-anchor="middle">{sub}</text>'
-        )
-
-    def _exit(x, code, meaning, example):
-        return (
-            f'<rect class="dg-box dg-hot" x="{x}" y="190" width="220" height="100" rx="12"/>'
-            f'<text x="{x + 110}" y="220" text-anchor="middle" font-weight="700">{code}</text>'
-            f'<text class="dg-muted" x="{x + 110}" y="245" text-anchor="middle">{meaning}</text>'
-            f'<text class="dg-muted" x="{x + 110}" y="270" text-anchor="middle">{example}</text>'
-        )
-
-    _gates = diagram(
-        _stage(0, "request", "a sale someone sends", "dg-box")
-        + _stage(260, "the door", "the sale's written rules", "dg-tier")
-        + _stage(520, "endpoint code", "checks the sales files", "dg-tier")
-        + _stage(780, "201 Created", "the sale is booked", "dg-box dg-ok")
-        + '<path class="dg-edge" d="M210 50 H 254"/><path class="dg-edge" d="M470 50 H 514"/>'
-        + '<path class="dg-edge" d="M730 50 H 774"/>'
-        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · 0 units")
-        + _exit(505, "404 Not Found", "nothing lives there", "GET /sales/999999")
-        + _exit(755, "400 Bad Request", "asks the impossible", "product 99 does not exist")
-        + '<path class="dg-edge dg-hot" d="M365 90 V 184"/>'
-        + '<path class="dg-edge dg-hot" d="M615 90 V 184"/>'
-        + '<path class="dg-edge dg-hot" d="M700 90 C 700 140, 865 130, 865 184"/>',
-        width=1000,
-        height=300,
-        label="Where each status code comes from. A sale first meets the door, its written rules: breaking one "
-        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the sales files: no such "
-        "sale answers 404, a product that does not exist answers 400. A valid sale answers 201 Created.",
-        tier="logic",
-    )
-    mo.vstack(
-        [
-            mo.md("### 422, 404 or 400: where our API turns a request away"),
-            in_plain(
-                "A request meets two checks. First the door: the written rules for a sale, called its **model** "
-                "(chapter 7 builds it). Then the endpoint's own code, the part that reads and writes the sales files."
-            ),
-            _gates,
-            mo.md(
-                "**What to notice:** 422 means our code never ran: the door turned the sale away. 400 means it passed "
-                "the door, and our code found it impossible. The lab on the next slide sends both."
-            ).callout(kind="info"),
         ],
         gap=0.8,
     )
@@ -4598,13 +3552,13 @@ def _(mo):
     ch6_preset = mo.ui.dropdown(
         options={
             "Show sale 1": ("GET", "/sales/1", None),
-            "Book a valid sale": ("POST", "/sales", _sale),
+            "Create a valid sale": ("POST", "/sales", _sale),
             "Show a sale that does not exist": ("GET", "/sales/999999", None),
-            "Book a sale of product 99, which does not exist": ("POST", "/sales", _sale | {"product_id": 99}),
-            "Book a sale with rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
-            "Book a sale that sends its own total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
-            "Add a country named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
-            "Correct sale 1: the rating was 5": ("PUT", "/sales/1", {"customer_rating": 5}),
+            "Create a sale of product 99, which does not exist": ("POST", "/sales", _sale | {"product_id": 99}),
+            "Create a sale with rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
+            "Create a sale that includes its own total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
+            "Create a country whose name is three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
+            "Update sale 1: set the rating to 5": ("PUT", "/sales/1", {"customer_rating": 5}),
             "Delete sale 1 (a cancelled order)": ("DELETE", "/sales/1", None),
         },
         value="Show sale 1",
@@ -4648,19 +3602,6 @@ def _(
             mo.hstack([ch6_method, ch6_path], justify="start", gap=2),
             ch6_body,
             ch6_send,
-            mo.accordion(
-                {
-                    "What uvicorn is, and why no --reload": mo.md(
-                        """
-    **uvicorn** is the program that listens on the port and hands each request to the FastAPI
-    code; `sw03_demo_api` is the file and `app` the variable inside it. `--reload` also restarts
-    the server whenever marimo saves a notebook in this folder, and every restart resets `data/`:
-    the API restores it from `data/seed/` each time it starts, so nothing you change or delete
-    here is permanent.
-                        """
-                    )
-                }
-            ),
         ],
         gap=0.6,
     )
@@ -4669,11 +3610,12 @@ def _(
         """The whole lab slide: heading, the controls on the left, `result` on the right."""
         return mo.vstack(
             [
-                mo.md("### Try it: ask our sales API"),
+                mo.md("### Requests to the sales API"),
                 mo.md(
-                    "Pick a request, or edit it, and send it. Then send the POST, the PUT and the DELETE twice each: "
-                    "which leave the sales where the first press left them? Start the API in a terminal first: "
-                    "`uvicorn sw03_demo_api:app`, without `--reload` today."
+                    "Each preset defines a request, which can be edited before it is sent. Sending POST, PUT and DELETE "
+                    "twice each shows which of them leave the data in the state of the first request. Prerequisite: "
+                    "the API runs in a terminal (`uvicorn sw03_demo_api:app`, without `--reload`); every restart "
+                    "resets `data/` from `data/seed/`."
                 ),
                 mo.hstack([_controls, result], widths=[2, 3], gap=2, align="start"),
             ],
@@ -4682,7 +3624,7 @@ def _(
 
     mo.stop(
         not ch6_send.value,
-        _show(mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral")),
+        _show(mo.md("**Question:** which status code will the API return?").callout(kind="neutral")),
     )
 
     _url = api_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
@@ -4695,7 +3637,7 @@ def _(
     except requests.RequestException:
         mo.stop(
             True,
-            _show(mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger")),
+            _show(mo.md(f"No response from `{_url}`. The API must be running: `uvicorn sw03_demo_api:app`").callout(kind="danger")),
         )
 
     # JSON as a code block, not mo.json: its tree view squeezes a name of three spaces to one
@@ -4706,11 +3648,11 @@ def _(
     elif _answer:
         _shown = mo.plain_text(str(_answer))  # not JSON, e.g. a 500 "Internal Server Error"
     else:
-        _shown = mo.md("*No body: 204 means done, nothing to send back.*")
+        _shown = mo.md("*No body: 204 means success without a response body.*")
     _kind, _colour, _meaning = {
-        2: ("success", "var(--teal)", "done"),
-        4: ("warn", "var(--amber)", "fix your request: resending it gets the same answer"),
-    }.get(_status // 100, ("danger", "var(--red)", "the server broke: a retry may work"))
+        2: ("success", "var(--teal)", "success"),
+        4: ("warn", "var(--amber)", "client error: resending it unchanged yields the same response"),
+    }.get(_status // 100, ("danger", "var(--red)", "server error: a retry may succeed"))
     _badge = mo.Html(
         '<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px">'
         f'<span style="color: {_colour}; font-size: 3rem; font-weight: 700; line-height: 1">{_status}</span>'
@@ -4724,67 +3666,212 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion — APIs</h3>
-      <details>
-        <summary><strong>Q1:</strong> A sales rep's app timed out on <code>POST /sales</code>. When is it safe to send it again?</summary>
-        <p><strong>Answer:</strong> Only when the server can recognise the repeat: the client sends a unique key
-        (an idempotency key, or an id it chose) and the server refuses to create a second record with that key.
-        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the lab above and chapter 8 show it).</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> How can our API change without breaking the partners' scripts?</summary>
-        <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
-      </details>
-    </div>
-    """)
-    return
+    p3_consume_run = mo.ui.run_button(label="Send the request", kind="success")
+    return (p3_consume_run,)
 
 
 @app.cell
-def _(mo):
+def _(alt, api_base_url, in_plain, mo, p3_consume_run, pd, requests, static_table, tier_chart):
+    # Run from this text, so the slide shows exactly the code that runs.
+    _code = (
+        'response = requests.get(f"{base_url}/sales", params={"start_date": "2026-01-01"}, timeout=5)\n'
+        "response.raise_for_status()                # stops on 4xx and 5xx\n"
+        "sales = pd.DataFrame(response.json())      # a list of JSON objects becomes a table\n"
+        'revenue = sales.groupby("region_name")["total_price"].sum()'
+    )
+    _top = mo.vstack(
+        [
+            mo.md("### Retrieving data from an API with Python"),
+            in_plain(
+                "In data collection, an API is often the source of the data. The `requests` library sends the request; "
+                "the JSON response converts directly into a pandas DataFrame."
+            ),
+            mo.md(f"```python\n{_code}\n```"),
+            p3_consume_run,
+        ],
+        gap=0.6,
+    )
+    mo.stop(
+        not p3_consume_run.value,
+        mo.vstack(
+            [_top, mo.md("**Question:** how many rows and columns will the DataFrame have?").callout(kind="neutral")],
+            gap=0.6,
+        ),
+    )
+    _names = {"requests": requests, "pd": pd, "base_url": api_base_url.value.rstrip("/")}
+    try:
+        exec(_code, _names)
+    except requests.RequestException as _exc:
+        mo.stop(
+            True,
+            mo.vstack(
+                [
+                    _top,
+                    mo.md(
+                        f"No usable response from the API (`{type(_exc).__name__}`). The API must be running: "
+                        "`uvicorn sw03_demo_api:app`"
+                    ).callout(kind="danger"),
+                ],
+                gap=0.6,
+            ),
+        )
+    _response, _sales = _names["response"], _names["sales"]
+    _revenue = _names["revenue"].reset_index().rename(columns={"region_name": "region", "total_price": "revenue (CHF)"})
+    _chart = (
+        alt.Chart(_revenue)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(x=alt.X("revenue (CHF):Q", title=None), y=alt.Y("region:N", sort="-x", title=None))
+        .properties(width="container", height=170, title="revenue: total_price per region since 1 January 2026")
+    )
     mo.vstack(
         [
+            _top,
+            mo.hstack(
+                [
+                    mo.vstack(
+                        [
+                            mo.md(f"`{_response.status_code} {_response.reason}` · `GET {_response.url}`").callout(kind="success"),
+                            static_table(
+                                _sales[["sale_id", "sale_date", "product_name", "region_name", "total_price"]].head(4),
+                                label=f"sales: {len(_sales):,} rows × {_sales.shape[1]} columns (first 4 rows, 5 columns)",
+                            ),
+                        ],
+                        gap=0.4,
+                    ),
+                    tier_chart(_chart, "logic"),
+                ],
+                widths="equal",
+                gap=2,
+            ),
             mo.md(
-                """
-    ### Chapter 6 Conclusion
-
-    - The dashboard and the partners ask the same way: a verb and a path go out, a status code and JSON come back.
-    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx our side broke.
-    - 422: broke a written rule at the door. 404: nothing lives there. 400: asks the impossible.
-    - GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.
-    - Stateless: the API forgets the caller, never the sales.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Bridge to Next Chapter
-
-    Every 422 above was a sale turned away at the door, before any of our code ran. Chapter 7
-    builds that door with Pydantic, and shows its limit: a valid sale always passes the checks,
-    but passing the checks does not make a sale valid.
-                """
-            ).callout(kind="neutral"),
+                f"**Observation:** the response contains {len(_sales):,} sales as JSON objects with {_sales.shape[1]} fields "
+                "each, and `pd.DataFrame` turns them into a table in one step. The server evaluated the query parameter "
+                "`start_date`, so only the requested rows were transferred."
+            ),
         ],
-        gap=0.8,
+        gap=0.6,
     )
     return
 
 
 @app.cell
-def _(chapter_intro, mo):
+def _(in_plain, mo):
     mo.vstack(
         [
-            mo.md("## 7. Pydantic Models"),
-            chapter_intro(
-                "logic",
-                "Someone sent a sale with rating 9 and 0 units. How do we stop it at the door?",
-                "Chapter 6 wrote the contract; now we enforce it. We write a sale's rules down once, as a Pydantic "
-                "model, and every request is checked against them before our code runs.",
+            mo.md("### APIs as data sources in practice"),
+            in_plain(
+                "Public and commercial APIs add rules around every request. A client that collects data has to handle "
+                "them explicitly."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-logic" style="grid-template-columns: repeat(3, 1fr)">
+      <div class="tile"><div class="tile-key">KEY</div><div class="tile-title">Authentication</div>
+        <p>Most APIs require a key or a token, sent in a header. Keys belong in environment variables, not in notebooks.</p></div>
+      <div class="tile"><div class="tile-key">429</div><div class="tile-title">Rate limits</div>
+        <p>Servers limit the requests per minute; above the limit they answer 429 Too Many Requests.</p></div>
+      <div class="tile"><div class="tile-key">1/n</div><div class="tile-title">Pagination</div>
+        <p>Large results arrive in pages (<code>?page=2</code>, <code>?offset=100</code>); the client requests pages until none are left.</p></div>
+      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Timeouts and retries</div>
+        <p>Always set a timeout. Retry after 429 and 5xx with increasing pauses; never retry a POST blindly.</p></div>
+      <div class="tile"><div class="tile-key">{ }</div><div class="tile-title">Nested JSON</div>
+        <p>Responses are often nested; <code>pd.json_normalize</code> flattens nested objects into columns.</p></div>
+      <div class="tile"><div class="tile-key">&sect;</div><div class="tile-title">Terms of use</div>
+        <p>Licences and usage limits apply to collected data, as to any other data source.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                '<p class="vis-caption">Public examples: <a href="https://opendata.swiss">opendata.swiss</a> · '
+                '<a href="https://open-meteo.com">Open-Meteo</a> (weather) · '
+                '<a href="https://www.wikidata.org/wiki/Wikidata:Data_access">Wikidata</a> · '
+                '<a href="https://docs.github.com/en/rest">GitHub REST API</a></p>'
             ),
         ],
-        gap=1,
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(SEED_DIR, duckdb):
+    import inspect as _inspect
+
+    from fastapi import FastAPI, HTTPException
+
+    # The minimal API of Part 3, run from this text: the slide shows this code, only the data folder is made absolute.
+    p3_api_code = _inspect.cleandoc(
+        '''
+        duckdb.execute("SET file_search_path = 'data/seed'")  # where the Parquet files are
+        SQL = """
+            SELECT r.name AS region, round(sum(s.total_price), 2) AS revenue
+            FROM 'sales.parquet' s
+            JOIN 'countries.parquet' c USING (country_id)
+            JOIN 'sales_regions.parquet' r USING (region_id)
+            GROUP BY region ORDER BY revenue DESC
+        """
+
+        app = FastAPI(title="Revenue API")
+
+
+        @app.get("/revenue")
+        def revenue_per_region() -> list[dict]:
+            """Total revenue per region."""
+            return [{"region": r, "revenue": v} for r, v in duckdb.sql(SQL).fetchall()]
+
+
+        @app.get("/revenue/{region}")
+        def revenue_of_region(region: str) -> dict:
+            """Total revenue of one region, or 404."""
+            for row in revenue_per_region():
+                if row["region"] == region:
+                    return row
+            raise HTTPException(status_code=404, detail=f"no region named {region}")
+        '''
+    )
+    _names = {"FastAPI": FastAPI, "HTTPException": HTTPException, "duckdb": duckdb}
+    exec(p3_api_code.replace("'data/seed'", f"'{SEED_DIR.as_posix()}'"), _names)
+    p3_api = _names["app"]
+    return p3_api, p3_api_code
+
+
+@app.cell
+def _(in_plain, json, mo, p3_api, p3_api_code):
+    from fastapi.testclient import TestClient as _TestClient
+
+    _client = _TestClient(p3_api)  # real HTTP requests to the app, inside this process, without a server
+    _calls = []
+    for _path in ("/revenue", "/revenue/Europe", "/revenue/Mars"):
+        _answer = _client.get(_path)
+        _body = _answer.json()
+        _text = "[\n" + ",\n".join(f" {json.dumps(_item)}" for _item in _body) + "\n]" if isinstance(_body, list) else json.dumps(_body)
+        _calls.append(
+            mo.md(f"`GET {_path}` → **{_answer.status_code}**\n\n```json\n{_text}\n```").callout(
+                kind="success" if _answer.status_code == 200 else "warn"
+            )
+        )
+    _paths = " and ".join(f"`{_p}`" for _p in p3_api.openapi()["paths"])
+    mo.vstack(
+        [
+            mo.md("### Building an API with FastAPI"),
+            in_plain(
+                "**FastAPI** turns Python functions into API endpoints. The decorator `@app.get(\"/revenue\")` assigns a "
+                "function to a verb and a path; FastAPI converts the return value to JSON and generates the "
+                "documentation from the code."
+            ),
+            mo.hstack(
+                [mo.md(f"```python\n{p3_api_code}\n```"), mo.vstack(_calls, gap=0.4)],
+                widths=[3, 2],
+                gap=2,
+                align="start",
+            ),
+            mo.md(
+                f"**Observation:** two endpoints in about 20 lines. FastAPI returned JSON, answered an unknown region with "
+                f"404, and generated the OpenAPI description of {_paths}, the basis of `/docs`, without additional code. "
+                "Exercise 7 builds a similar app."
+            ),
+        ],
+        gap=0.6,
     )
     return
 
@@ -4804,7 +3891,7 @@ def _(pydantic):
             customer_rating: int = Field(ge=1, le=5)   # 1 to 5
             sale_date: date
 
-        class StrictSaleIn(SaleIn):                    # plus the rules we forgot
+        class StrictSaleIn(SaleIn):                    # plus the missing rules
             model_config = ConfigDict(strict=True)     # "42" is not 42
             product_id: int = Field(ge=1)
             units_sold: int = Field(ge=1, le=100_000)
@@ -4837,11 +3924,11 @@ def _(ch7_models, diagram, html, in_plain, json, mo, pydantic):
         '<path d="M680 0 V 200" fill="none" stroke="currentColor" stroke-dasharray="6 6" opacity="0.45"/>'
         '<text class="dg-muted" x="668" y="20" text-anchor="end">untrusted</text>'
         '<text class="dg-muted" x="692" y="20">trusted</text>'
-        + _card(0, 50, "the sale someone sent", f"{_sent['units_sold']} units · rating {_sent['customer_rating']}", "dg-box dg-hot", w=250)
-        + _card(330, 50, "SaleIn, a Pydantic model", "the door: types and rules", "dg-tier")
-        + _card(720, 50, "a checked sale", "our code trusts it, re-checks nothing", "dg-box dg-ok")
+        + _card(0, 50, "the submitted sale", f"{_sent['units_sold']} units · rating {_sent['customer_rating']}", "dg-box dg-hot", w=250)
+        + _card(330, 50, "SaleIn, a Pydantic model", "validation: types and rules", "dg-tier")
+        + _card(720, 50, "a validated sale", "the endpoint code relies on it", "dg-box dg-ok")
         + f'<rect class="dg-box dg-hot" x="190" y="232" width="560" height="{50 + 26 * len(_errors)}" rx="12"/>'
-        + f'<text x="470" y="264" text-anchor="middle" font-weight="700">422: turned away, {len(_errors)} errors in one answer</text>'
+        + f'<text x="470" y="264" text-anchor="middle" font-weight="700">422: rejected, {len(_errors)} errors in one response</text>'
         + "".join(
             f'<text class="dg-muted" x="470" y="{294 + 26 * _i}" text-anchor="middle">{html.escape(_line)}</text>'
             for _i, _line in enumerate(_errors)
@@ -4850,24 +3937,24 @@ def _(ch7_models, diagram, html, in_plain, json, mo, pydantic):
         + '<path class="dg-edge dg-hot" d="M470 180 V 226"/>',
         width=1000,
         height=300 + 26 * len(_errors),
-        label=f"Mia's sale, {_sent['units_sold']} units and rating {_sent['customer_rating']}, meets the SaleIn model, "
-        f"the door. A sale that passes becomes a checked Python object on the trusted side; this one is turned away "
-        f"as a 422 that lists every broken rule: {'; '.join(_errors)}.",
+        label=f"The submitted sale, {_sent['units_sold']} units and rating {_sent['customer_rating']}, is validated by the "
+        f"SaleIn model. A sale that passes becomes a validated Python object on the trusted side; this one is rejected "
+        f"with a 422 that lists every violated rule: {'; '.join(_errors)}.",
         tier="logic",
     )
     mo.vstack(
         [
-            mo.md("### Pydantic: check every sale once, at the door"),
+            mo.md("### Pydantic: validating every sale at the API boundary"),
             in_plain(
-                "**Pydantic** is a Python library that checks data against a **model**: a class that lists each "
-                "field of a sale, its type and its rules. What passes becomes a Python object our code can trust; "
-                "what breaks a rule is turned away with a list of everything that is wrong."
+                "**Pydantic** is a Python library that validates data against a **model**: a class that declares each "
+                "field of a sale, its type and its constraints. Valid input becomes a typed Python object the "
+                "application can rely on; invalid input is rejected with a list of all violations."
             ),
             _door,
             mo.md(
-                "**What to notice:** both broken rules come back in one answer, and our endpoint's code never ran: "
-                "this list is the 422 our API sent in chapter 6. A **type hint** (`units_sold: int`) is only a note "
-                "to plain Python; Pydantic enforces it."
+                "**Observation:** both violations are reported in one response, and the endpoint code never ran: this "
+                "list is what the API returns with status 422. A **type hint** (`units_sold: int`) is only an "
+                "annotation in plain Python; Pydantic enforces it."
             ).callout(kind="info"),
         ],
         gap=0.8,
@@ -4881,11 +3968,11 @@ def _(mo):
     ch7_preset = mo.ui.dropdown(
         options={
             "A valid sale → should pass": _sale,
-            "A sale with no date → should fail": {_k: _v for _k, _v in _sale.items() if _k != "sale_date"},
-            "Mia's sale: 0 units, rating 9 → should fail": _sale | {"units_sold": 0, "customer_rating": 9},
+            "A sale without a date → should fail": {_k: _v for _k, _v in _sale.items() if _k != "sale_date"},
+            "0 units, rating 9 → should fail": _sale | {"units_sold": 0, "customer_rating": 9},
             'Wrong types: units "many", date "yesterday" → should fail': _sale | {"units_sold": "many", "sale_date": "yesterday"},
-            # Every field is the declared type and inside its declared range. Every field is also nonsense.
-            "Nonsense with the right types → ???": {
+            # Every field is the declared type and inside its declared range. Every field is also implausible.
+            "Implausible values with valid types → ?": {
                 "product_id": -7,
                 "country_id": 999,
                 "units_sold": 5_000_000,
@@ -4893,17 +3980,17 @@ def _(mo):
                 "sale_date": "1900-01-01",
             },
             # Two numbers arrive as text, and nothing is rejected either.
-            'Numbers sent as text: "42" units → ???': _sale | {"units_sold": "42", "customer_rating": "4"},
+            'Numbers sent as strings: "42" units → ?': _sale | {"units_sold": "42", "customer_rating": "4"},
         },
         value="A valid sale → should pass",
-        label="The sale sent",
+        label="Submitted sale",
     )
     return (ch7_preset,)
 
 
 @app.cell
 def _(ch7_preset, json, mo):
-    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="as JSON (edit it)", full_width=True)
+    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="as JSON (editable)", full_width=True)
     return (ch7_json,)
 
 
@@ -4958,11 +4045,12 @@ def _(ch7_code, ch7_json, ch7_models, ch7_preset, html, json, mo, pydantic):
     _verdicts = [_column(_name, _model) for _name, _model in ch7_models.items()]
     mo.vstack(
         [
-            mo.md("### Try it: which sales get through the door?"),
+            mo.md("### Which sales pass validation?"),
             mo.md(
-                "Two models for the same sale. `SaleIn` writes the types and two ranges; `StrictSaleIn` adds the "
-                "rules we forgot, and refuses text where a number belongs. Pick a sale or edit its JSON, and guess "
-                "both verdicts first: **the last two sales are the point.**"
+                "Two models validate the same sale: `SaleIn` declares the types and two ranges; `StrictSaleIn` adds "
+                "the missing rules and rejects strings where a number is expected. **The last two presets are the "
+                "instructive cases:** validation checks structure, not truth, and `SaleIn` converts `\"42\"` to 42 "
+                "unless strict mode forbids it."
             ),
             mo.hstack(
                 [mo.md(f"```python\n{ch7_code}\n```"), mo.vstack([ch7_preset, ch7_json], gap=0.4)],
@@ -4984,308 +4072,6 @@ def _(ch7_code, ch7_json, ch7_models, ch7_preset, html, json, mo, pydantic):
 
 
 @app.cell
-def _(mo):
-    mo.vstack(
-        [
-            mo.md("### The door checks only the rules we wrote"),
-            mo.md(
-                """
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">&ne;</div><div class="tile-title">Shape, not truth</div>
-        <p>Product &minus;7, 5,000,000 units, a sale in 1900: the right types and no rule against them, so
-        <code>SaleIn</code> accepts it. Country 999 passes both models: whether it exists, only the data can
-        tell (chapter 6's 400).</p></div>
-      <div class="tile"><div class="tile-key">"&nbsp;&nbsp;&nbsp;"</div><div class="tile-title">Strip, then count</div>
-        <p>A name of three spaces passes <code>min_length=1</code>; <code>str_strip_whitespace</code> trims
-        first. Our API's <code>Input</code> base does both, plus <code>extra="forbid"</code>: chapter 6's
-        country of three spaces got a 422.</p></div>
-      <div class="tile"><div class="tile-key">"42"</div><div class="tile-title">Lax or strict</div>
-        <p>Lax, the default, turns <code>"42"</code> into 42; <code>strict=True</code> refuses it.
-        Our API stays lax: forms and CSV files send every number as text.</p></div>
-    </div>
-                """
-            ),
-            mo.md("**What to notice:** validation is only as good as the rules you wrote.").callout(kind="info"),
-            mo.accordion(
-                {
-                    "Ready-made rules": mo.md(
-                        "Pydantic ships types for common rules, so you need not write them yourself: `PositiveInt` "
-                        "(at least 1), `PastDate` (no sales from the future), and `EmailStr` for e-mail addresses, "
-                        'after `pip install "pydantic[email]"` (a `pattern` such as `.+@.+` is only a cheap check).'
-                    )
-                }
-            ),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion — Validation</h3>
-      <details>
-        <summary><strong>Q1:</strong> Where should a sale be validated: in the dashboard, in the API, or both?</summary>
-        <p><strong>Answer:</strong> Both. The client gives fast feedback; the server must enforce the rules (server-side validation),
-        because anyone can skip your client and call the API directly, as chapter 6 just did.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> Should <code>"42"</code> count as 42 units sold?</summary>
-        <p><strong>Answer:</strong> It depends on who sends it. Lax mode (the default) is kind to forms and CSV files, where
-        everything arrives as text; strict mode catches a partner's script that sends the wrong type by mistake. Choose deliberately.</p>
-      </details>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Chapter 7 Conclusion
-
-    - A Pydantic model writes a sale's rules once; every request is checked at the door, before our code runs.
-    - A rejection lists every broken rule at once: FastAPI's 422.
-    - A model checks shape, not truth: nonsense with the right types gets in, unless a rule says no.
-    - Lax by default: `"42"` becomes 42 and three spaces pass as a name, unless a rule says no.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Bridge to Next Chapter
-
-    FastAPI reads these same models to check every request, to write down the API's contract and
-    to draw the documentation partners read. In one line: Python types and models &rarr; an
-    OpenAPI schema &rarr; interactive docs.
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=0.8,
-    )
-    return
-
-
-@app.cell
-def _(chapter_intro, mo):
-    mo.vstack(
-        [
-            mo.md("## 8. FastAPI Demo + Automatic Docs"),
-            chapter_intro(
-                "logic",
-                "How do partners learn what our API accepts, without emailing us?",
-                "They open `/docs`, a manual FastAPI writes from the same code that checks every request, so "
-                "it cannot go out of date. Then we run the API live and see what a server adds.",
-            ),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(box, diagram, in_plain, mo):
-    def _page(y, title, note):
-        """One thing FastAPI writes from the type hints, with its edge from the FastAPI box."""
-        return (
-            f'<rect class="dg-box" x="600" y="{y}" width="396" height="58" rx="12"/>'
-            f'<text x="620" y="{y + 24}" font-weight="700">{title}</text>'
-            f'<text class="dg-muted" x="620" y="{y + 46}">{note}</text>'
-            f'<path class="dg-edge" d="M500 150 C 550 150, 550 {y + 29}, 594 {y + 29}"/>'
-        )
-
-    _manual = diagram(
-        '<rect class="dg-tier" x="0" y="60" width="340" height="180" rx="16"/>'
-        '<text x="20" y="94" font-weight="700">the rule, written once</text>'
-        '<text x="20" y="134" font-family="monospace" font-size="15">Rating = Annotated[int,</text>'
-        '<text x="44" y="158" font-family="monospace" font-size="15">Field(ge=1, le=5)]</text>'
-        '<text class="dg-muted" x="20" y="196">used by SaleCreate, SaleUpdate</text>'
-        '<text class="dg-muted" x="20" y="220">and the rating filters</text>'
-        '<path class="dg-edge" d="M340 150 H 374"/>'
-        + box(380, 122, "FastAPI", w=120, h=56, cls="dg-tier")
-        + '<text class="dg-muted" x="440" y="204" text-anchor="middle">reads the hints</text>'
-        + _page(0, "422 for a rating of 9", "the rule, enforced before our code runs")
-        + _page(76, "/openapi.json", "the manual, for partners' programs")
-        + _page(152, "/redoc", "the manual, to read like a reference")
-        + _page(228, "/docs (Swagger UI)", "the manual, with Try it out buttons")
-        + '<rect class="dg-box dg-hot" x="0" y="300" width="340" height="64" rx="12"/>'
-        '<text x="20" y="326">docstring: "recomputes total_price"</text>'
-        '<text class="dg-muted" x="20" y="350">a behaviour, not a type</text>'
-        '<path class="dg-edge dg-hot" d="M340 332 H 800 V 292"/>'
-        '<text class="dg-hot" x="570" y="322" text-anchor="middle">typed by hand: nothing checks it</text>',
-        width=1000,
-        height=370,
-        label="One line, Rating = Annotated[int, Field(ge=1, le=5)], goes into FastAPI, which writes four things from it: "
-        "the 422 for a rating of 9, /openapi.json, /redoc and /docs. A hand-written docstring about recomputing "
-        "total_price reaches /docs too, but nothing checks it.",
-        tier="logic",
-    )
-    _more = mo.md(
-        """
-    - **OpenAPI** (`/openapi.json`) is a standard file format that lists every path an API has, what
-      each one accepts and what it answers, for programs to read. A partner's script can be generated from it.
-    - **Swagger UI** (`/docs`) reads that file and turns it into a page of buttons: open it and press *Try it out*.
-    - **ReDoc** (`/redoc`) reads the same file and lays it out as a reference manual.
-    - The rating rule is written once in `sw03_demo_api.py` and used for new sales, for edits and for
-      the `min_rating`/`max_rating` filters. The schema can say `units_sold` must be at least 1; it
-      cannot say that changing it recomputes `total_price`.
-    - The server is the one you started for chapter 6 with `uvicorn sw03_demo_api:app`. While you
-      *edit* the API, `--reload` restarts it on every save; during the lecture, leave it out.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md("### Where the Partners' Manual Comes From"),
-            in_plain(
-                "A **type hint** is a label on a field in our code: `customer_rating: Rating`, where `Rating` means "
-                "a whole number from 1 to 5. FastAPI reads these labels twice: to turn away a sale with rating 9 "
-                "(status **422**: the request has the wrong shape), and to write the manual partners open at "
-                "`/docs`. One rule, two uses, so the manual cannot disagree with the check."
-            ),
-            _manual,
-            mo.md(
-                "**What to notice:** change the 5 to a 10 and all four boxes on the right change together, because "
-                "there is only one 5. The red box is different: a docstring is typed by hand, and nothing checks it."
-            ),
-            mo.accordion({"The three manual pages, and the server behind them": _more}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(diagram, html, in_plain, mo):
-    _cw = 9.6  # px per character of 16 px monospace; textLength pins every piece of code to it
-
-    def _code(y, parts):
-        """One line of code from (text, label) pieces: a labelled piece gets a bracket and its label below it."""
-        svg, col = [], 0
-        for text, label in parts:
-            x, w = col * _cw, len(text) * _cw
-            svg.append(
-                f'<text x="{x:.0f}" y="{y}" font-family="monospace" font-size="16" textLength="{w:.0f}"'
-                f' lengthAdjust="spacingAndGlyphs" style="white-space: pre">{html.escape(text)}</text>'
-            )
-            if label:
-                svg.append(
-                    f'<path style="fill: none; stroke: var(--tier); stroke-width: 2.5"'
-                    f' d="M{x + 2:.0f} {y + 9} v 8 H {x + w - 2:.0f} v -8"/>'
-                    f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 40}" text-anchor="middle">{label}</text>'
-                )
-            col += len(text)
-        return "".join(svg)
-
-    _sentence = diagram(
-        _code(
-            24,
-            [
-                ("@app.post", "verb"),
-                ("(", None),
-                ('"/sales"', "path"),
-                (", ", None),
-                ("response_model=Sale", "the answer's shape"),
-                (", ", None),
-                ("status_code=201", "code on success"),
-                (", ", None),
-                ('tags=["Sales"]', "group in /docs"),
-                (", ", None),
-                ("responses=BAD_REQUEST", "the errors it adds"),
-                (")", None),
-            ],
-        )
-        + _code(
-            114,
-            [
-                ("def create_sale(", None),
-                ("payload: SaleCreate", "the model the client fills: checked first, 422 if not"),
-                (") -> dict[str, Any]:", None),
-            ],
-        )
-        + _code(
-            204,
-            [
-                ("    ", None),
-                ('"""Record a sale. The server computes total_price as units_sold x the product\'s price."""',
-                 "its description in /docs, written by hand"),
-            ],
-        ),
-        width=940,
-        height=260,
-        label="The decorator of POST /sales read as a sentence: verb, path, the shape of the answer, the status code "
-        "on success, its group in /docs and the errors it adds. The payload's type is the model checked first; "
-        "the docstring becomes the description in /docs.",
-        tier="logic",
-    )
-    _source = mo.md("""
-    ```python
-    # file: sw03_demo_api.py (abridged)
-    # Every rule is written once, here, and reused wherever the field appears.
-    Rating = Annotated[int, Field(ge=1, le=5)]
-
-
-    class Input(BaseModel):
-        "\""What a client may send: stray whitespace is trimmed, unknown fields are refused (422)."\""
-
-        model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-
-    class SaleCreate(Input):
-        "\""A new sale. There is no total_price: the server computes it from units_sold and the product's price."\""
-
-        sale_date: SaleDate
-        product_id: Ref
-        country_id: Ref
-        units_sold: Units
-        customer_rating: Rating
-
-
-    @app.post("/sales", response_model=Sale, status_code=201, tags=["Sales"], responses=BAD_REQUEST)
-    def create_sale(payload: SaleCreate) -> dict[str, Any]:
-        "\""Record a sale. The server computes total_price as units_sold x the product's price."\""
-        ...
-
-
-    @app.put("/sales/{sale_id}", response_model=Sale, tags=["Sales"], responses=NOT_FOUND | BAD_REQUEST)
-    def update_sale(sale_id: SaleId, payload: SaleUpdate) -> dict[str, Any]:
-        "\""Update a sale. Fields you leave out keep their current value (the HTTP standard would call this PATCH).
-
-        total_price is recomputed only when units_sold or product_id actually change, so editing just
-        the rating keeps the stored total.
-        "\""
-        ...
-    ```
-
-    The second docstring is the hand-written recompute rule from the previous slide. Sales are the
-    resource this chapter follows, so every verb is written out; the four lookup tables (regions,
-    countries, categories, products) share one generic set of five endpoints, registered by
-    `add_lookup_endpoints`. Nothing else had to be written to get documentation.
-    """)
-    mo.vstack(
-        [
-            mo.md("### Read a Decorator as a Sentence"),
-            in_plain(
-                "A **decorator** is the `@` line above a function. It tells FastAPI which request runs the "
-                "function: here a `POST` to `/sales`, where every new order from a sales rep arrives. Read it "
-                "left to right like a sentence. Every piece of it also appears in `/docs`."
-            ),
-            _sentence,
-            mo.md(
-                "**What to notice:** `SaleCreate` has no `total_price`, so a rep cannot type in their own price: "
-                "the server computes units × list price. Only the docstring on the last line is written by hand."
-            ),
-            mo.accordion({"The abridged source: the model and two endpoints": _source}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
 def _(api_base_url, call_api, mo, requests):
     from http.client import responses as ch8_phrases  # 201 -> "Created", for the answers below
 
@@ -5299,20 +4085,18 @@ def _(api_base_url, call_api, mo, requests):
         try:
             status, answer = call_api(method, base + path, body)
         except requests.RequestException:
-            ch8_stop(top, f"Could not reach `{base}`. Start the API first: `uvicorn sw03_demo_api:app`.")
+            ch8_stop(top, f"Could not reach `{base}`. The API must be running: `uvicorn sw03_demo_api:app`.")
         if answer and isinstance(answer, str):  # HTML or plain text, e.g. the Streamlit dashboard's port
-            ch8_stop(top, f"`{base}{path}` answered `{status}`, but not with JSON. Is that the sales API?")
+            ch8_stop(top, f"`{base}{path}` returned `{status}`, but not JSON. The base URL may not point to the sales API.")
         return status, answer
 
-    # The order the chapter 8 labs send: a rep in Germany (country 3) books 10 Edge Sensor X1 (product 1).
-    sale_slip = {"sale_date": "2026-03-01", "product_id": 1, "country_id": 3, "units_sold": 10, "customer_rating": 5}
-    return ch8_api, ch8_phrases, ch8_stop, sale_slip
+    return ch8_api, ch8_phrases, ch8_stop
 
 
 @app.cell
 def _(SEED_DIR, mo, pd):
     # Every chapter 8 control. Shown by the slides below, so this cell has no output (no slide of its own).
-    fastapi_check = mo.ui.run_button(label="Is it running?", kind="success")
+    fastapi_check = mo.ui.run_button(label="Check API status", kind="success")
     # EdgeWorks launches a new sensor live. The API numbers it one past the last product in the seed files.
     _next_id = int(pd.read_parquet(SEED_DIR / "products.parquet")["product_id"].max()) + 1
     fastapi_payload = mo.ui.text_area(
@@ -5326,10 +4110,6 @@ def _(SEED_DIR, mo, pd):
     fastapi_get = mo.ui.run_button(label="2) GET /products/{id}")
     # The latest answer to each button, so the slide shows both even though each click reruns it.
     ch8_answers, ch8_set_answers = mo.state({})
-    run_gates = mo.ui.run_button(label="Send seven slips through both gates", kind="success")
-    run_twice = mo.ui.run_button(label="Press every verb twice", kind="success")
-    run_follow = mo.ui.run_button(label="Follow the order into the file", kind="success")
-    run_two_analysts = mo.ui.run_button(label="Run the two-analyst test", kind="success")
     return (
         ch8_answers,
         ch8_set_answers,
@@ -5338,10 +4118,6 @@ def _(SEED_DIR, mo, pd):
         fastapi_item_id,
         fastapi_payload,
         fastapi_post,
-        run_follow,
-        run_gates,
-        run_twice,
-        run_two_analysts,
     )
 
 
@@ -5350,11 +4126,11 @@ def _(api_base_url, box, ch8_api, ch8_stop, diagram, fastapi_check, in_plain, mo
     _base = api_base_url.value.rstrip("/")
     _top = mo.vstack(
         [
-            mo.md("### Live: Is Our API Running?"),
+            mo.md("### Live: Is the API Running?"),
             in_plain(
-                "The API is a program of its own; the **base URL** is its address. We ask it for "
-                "`/openapi.json`, the manual written for programs. If it answers, the API is up, and the "
-                "answer lists every path it serves and every verb each path accepts."
+                "The API runs as a separate process; the **base URL** is its address. The notebook requests "
+                "`/openapi.json`, the machine-readable specification. A response confirms that the API is running, "
+                "and it lists every path the API serves and every verb each path accepts."
             ),
             mo.hstack([api_base_url, fastapi_check], widths=[5, 1], align="end"),
         ],
@@ -5366,7 +4142,7 @@ def _(api_base_url, box, ch8_api, ch8_stop, diagram, fastapi_check, in_plain, mo
             [
                 _top,
                 mo.md(
-                    "Start the API in a terminal (`uvicorn sw03_demo_api:app`), then click **Is it running?**"
+                    "Prerequisite: the API runs in a terminal (`uvicorn sw03_demo_api:app`)."
                 ).callout(kind="neutral"),
             ],
             gap=0.6,
@@ -5374,7 +4150,7 @@ def _(api_base_url, box, ch8_api, ch8_stop, diagram, fastapi_check, in_plain, mo
     )
     _status, _schema = ch8_api(_top, "GET", "/openapi.json")
     if _status != 200:
-        ch8_stop(_top, f"`{_base}/openapi.json` answered `{_status}`. Is that the sales API?")
+        ch8_stop(_top, f"`{_base}/openapi.json` returned `{_status}`. The base URL may not point to the sales API.")
     # The API describes itself: one row per path this chapter uses, one box per verb it accepts.
     _paths = {_p: _ops for _p, _ops in _schema["paths"].items() if _p.startswith(("/products", "/sales"))}
     _verbs = ("get", "post", "put", "delete")
@@ -5399,7 +4175,7 @@ def _(api_base_url, box, ch8_api, ch8_stop, diagram, fastapi_check, in_plain, mo
         "".join(_parts),
         width=720,
         height=40 + 52 * len(_paths),
-        label="The paths this chapter uses and the verbs each accepts, read from /openapi.json: "
+        label="The paths this part uses and the verbs each accepts, read from /openapi.json: "
         + "; ".join(f"{_p}: {', '.join(_o).upper()}" for _p, _o in _paths.items()),
         tier="logic",
     )
@@ -5410,16 +4186,16 @@ def _(api_base_url, box, ch8_api, ch8_stop, diagram, fastapi_check, in_plain, mo
                 [
                     mo.stat(f"{_status} OK", label="GET /openapi.json", caption=f"{_schema['info']['title']} "
                             f"{_schema['info']['version']} is running", bordered=True),
-                    mo.stat(len(_schema["paths"]), label="paths in the manual", bordered=True),
-                    mo.md(f"**[Open {_base}/docs]({_base}/docs)**, the page partners read"),
+                    mo.stat(len(_schema["paths"]), label="paths in the specification", bordered=True),
+                    mo.md(f"Documentation for partners: **[{_base}/docs]({_base}/docs)**"),
                 ],
                 widths=[2, 1, 2],
                 align="center",
             ),
             _matrix,
             mo.md(
-                "**What to notice:** nobody typed this table. The API read it from its own code, and a partner "
-                "sees the same paths and verbs at `/docs`."
+                "**Observation:** this table was not written by hand. The API derived it from its own code, and "
+                "partners see the same paths and verbs at `/docs`."
             ),
         ],
         gap=0.6,
@@ -5444,11 +4220,11 @@ def _(
 ):
     _top = mo.vstack(
         [
-            mo.md("### Live: EdgeWorks Launches a New Sensor"),
+            mo.md("### Live: Creating a New Product"),
             in_plain(
-                "**POST** sends the new product; the API checks it, gives it the next free id and answers "
-                "**201 Created**. **GET** with that id reads it back. Then press POST again: the name is taken "
-                "now, so the answer is **400 Bad Request**, a fact about our data that no type hint can see."
+                "**POST** sends the new product; the API validates it, assigns the next free id and returns "
+                "**201 Created**. **GET** with that id reads it back. A second POST fails because the name is now "
+                "taken: **400 Bad Request**, a property of the stored data that no type hint can express."
             ),
             fastapi_payload,
             mo.hstack([fastapi_post, fastapi_item_id, fastapi_get], justify="start", align="end", gap=2),
@@ -5481,533 +4257,17 @@ def _(
             _top,
             mo.hstack(
                 [
-                    _answer("post", "**Predict first:** which fields will the answer have that we did not send? Then click **1) POST /products**."),
-                    _answer("get", "Then click **2) GET /products/{id}** to read it back."),
+                    _answer("post", "**Question:** which fields will the response contain that were not sent?"),
+                    _answer("get", "`GET /products/{id}` reads the created product back."),
                 ],
                 widths="equal",
                 align="start",
                 gap=1,
             ),
             mo.md(
-                "**What to notice:** we sent four fields and got six back. The server chose the `product_id` and "
-                "looked up `category_name`; neither came from us."
+                "**Observation:** four fields were sent and six returned. The server assigned the `product_id` and "
+                "looked up `category_name`; neither was part of the request."
             ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(
-    box,
-    ch8_api,
-    ch8_stop,
-    diagram,
-    in_plain,
-    mo,
-    pydantic,
-    run_gates,
-    sale_slip,
-    static_table,
-):
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: Seven Order Slips, Two Checks"),
-            in_plain(
-                "A rep's order reaches the API as a slip of JSON. We send seven slips, one good and six broken, "
-                "through two checks. **Gate 1** is our model `SaleCreate`, run here on the laptop. **Gate 2** is "
-                "the running API, which can also look things up in EdgeWorks' data."
-            ),
-            run_gates,
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not run_gates.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** which slips does the laptop catch, and which only the server? "
-                    "Then click **Send seven slips through both gates**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-    from sw03_demo_api import SaleCreate as _SaleCreate  # gate 1: the server's own model, no network
-
-    _ok = sale_slip
-    _slips = {
-        "a good order": _ok,
-        "rating of 9": {**_ok, "customer_rating": 9},
-        "zero units sold": {**_ok, "units_sold": 0},
-        "date as 01/03/2026": {**_ok, "sale_date": "01/03/2026"},
-        "no country at all": {_k: _v for _k, _v in _ok.items() if _k != "country_id"},
-        "its own total_price of 0.01": {**_ok, "total_price": 0.01},
-        "product 9999": {**_ok, "product_id": 9999},
-    }
-    _rows, _cells, _good = [], [], None
-    for _name, _slip in _slips.items():
-        try:
-            _SaleCreate.model_validate(_slip)
-            _gate1, _short1 = "passes", "&#10003; passes"
-        except pydantic.ValidationError as _exc:
-            _err = _exc.errors()[0]
-            _gate1, _short1 = f"rejected: {_err['loc'][0]} — {_err['msg']}", f"&#10007; {_err['loc'][0]}"
-        _status, _answer = ch8_api(_top, "POST", "/sales", _slip)
-        if not (isinstance(_answer, dict) and ("detail" in _answer or "sale_id" in _answer)):
-            ch8_stop(_top, f"`POST /sales` answered `{_status}`: `{_answer}`. Is that the sales API?")
-        if _status == 201:
-            _good = _answer
-            ch8_api(_top, "DELETE", f"/sales/{_good['sale_id']}")  # leave the file as we found it
-            _gate2, _short2 = f"201 created — {len(_good)} fields back, total_price {_good['total_price']}", "&#10003; 201 created"
-        else:
-            _detail = _answer["detail"]
-            _why = _detail if isinstance(_detail, str) else _detail[0]["msg"]
-            _gate2 = f"{_status} — {_why}"
-            _short2 = f"&#10007; {_status} " + (_why if isinstance(_detail, str) else _detail[0]["loc"][-1])
-        _rows.append({"the slip": _name, "gate 1: your laptop": _gate1, "gate 2: the server": _gate2})
-        _cells.append((_name, _gate1 == "passes", _short1, _status, _short2))
-    if _good is None:
-        ch8_stop(_top, "Even the good order was refused. Restart the API to reseed its data.")
-
-    # One row per slip, one box per gate: teal got through, red was turned away.
-    _svg = [
-        '<text x="430" y="16" text-anchor="middle" font-weight="700">gate 1: your laptop</text>'
-        '<text x="805" y="16" text-anchor="middle" font-weight="700">gate 2: the server</text>'
-    ]
-    for _i, (_name, _pass1, _short1, _status, _short2) in enumerate(_cells):
-        _y = 32 + _i * 44
-        _svg.append(
-            f'<text x="250" y="{_y + 18}" text-anchor="end" dominant-baseline="central">{_name}</text>'
-            + box(270, _y, _short1, w=320, h=36, cls="dg-box dg-ok" if _pass1 else "dg-box dg-hot")
-            + box(610, _y, _short2, w=386, h=36, cls="dg-box dg-ok" if _status == 201 else "dg-box dg-hot")
-        )
-    _matrix = diagram(
-        "".join(_svg),
-        width=1000,
-        height=32 + 44 * len(_cells),
-        label="Seven slips, each checked by the model on the laptop and by the running server. "
-        + "; ".join(f"{_r['the slip']}: {_r['gate 1: your laptop']}, then {_r['gate 2: the server']}" for _r in _rows),
-    )
-    _table = static_table(
-        _rows,
-        label="The same seven slips, checked twice",
-        wrapped_columns=["gate 1: your laptop", "gate 2: the server"],  # the messages are the point
-        column_widths={"gate 1: your laptop": 410, "gate 2: the server": 410},
-    )
-
-    def _count(status):
-        n = sum(1 for _c in _cells if _c[3] == status)
-        return f"{n} slip{'' if n == 1 else 's'}"
-
-    _unit = _good["total_price"] / _good["units_sold"]
-    _tiles = mo.md(
-        f"""
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">422</div><div class="tile-title">{_count(422)}: the wrong shape</div>
-        <p>Same message at both gates: both run the same model. A typo never reaches Mia's revenue.</p></div>
-      <div class="tile"><div class="tile-key">400</div><div class="tile-title">{_count(400)}: a fact</div>
-        <p>The id is well formed. Only the server can look in EdgeWorks' product list and find no product 9999.</p></div>
-      <div class="tile"><div class="tile-key">201</div><div class="tile-title">{_count(201)}: booked</div>
-        <p>{len(_ok)} fields sent, {len(_good)} back. The server priced it: {_good["units_sold"]} &times;
-        CHF {_unit:,.2f} = CHF {_good["total_price"]:,.2f}.</p></div>
-    </div>
-        """
-    )
-    _why = mo.md(
-        f"""
-    A price the client may send is a price the client can invent: 10 sensors for CHF 0.01 instead of
-    CHF {_good["total_price"]:,.2f}. `SaleCreate` has no `total_price` field, and `Input` refuses fields it
-    does not know, so the slip that brought its own `total_price` was refused at both gates.
-        """
-    )
-    mo.vstack(
-        [
-            _top,
-            mo.ui.tabs({"Chart": _matrix, "Table": _table}),
-            _tiles,
-            mo.accordion({"Why a rep may not send total_price": _why}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(box, ch8_api, ch8_stop, chart_or_table, diagram, in_plain, mo, run_twice, sale_slip):
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: A Rep Presses Save Twice"),
-            in_plain(
-                "A rep's laptop times out and the rep presses Save again. A request is **idempotent** (safe to "
-                "repeat) when sending it twice leaves the sales file just as sending it once did. We send each "
-                "verb twice in a row, against one test order: 10 Edge Sensor X1 for Germany."
-            ),
-            run_twice,
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not run_twice.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** which verb changes the sales file again on the second press? "
-                    "Then click **Press every verb twice**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-
-    _post1, _first = ch8_api(_top, "POST", "/sales", sale_slip)
-    if _post1 != 201:
-        ch8_stop(_top, f"`POST /sales` answered `{_post1}`: `{_first}`")
-    _post2, _second = ch8_api(_top, "POST", "/sales", sale_slip)
-    _one = f"/sales/{_first['sale_id']}"
-    _put1, _ = ch8_api(_top, "PUT", _one, {"units_sold": 25})
-    _put2, _ = ch8_api(_top, "PUT", _one, {"units_sold": 25})
-    _get1, _got = ch8_api(_top, "GET", _one)
-    _get2, _ = ch8_api(_top, "GET", _one)
-    _del1, _ = ch8_api(_top, "DELETE", _one)
-    _del2, _ = ch8_api(_top, "DELETE", _one)
-    ch8_api(_top, "DELETE", f"/sales/{_second['sale_id']}")  # tidy up the duplicate
-
-    _rows = [
-        {
-            "verb": "GET",
-            "first press": _get1,
-            "second press": _get2,
-            "what happened to the sales file": "nothing: GET only reads",
-            "safe to repeat?": "yes",
-        },
-        {
-            "verb": "POST",
-            "first press": _post1,
-            "second press": _post2,
-            "what happened to the sales file": f"the order booked twice: #{_first['sale_id']} and #{_second['sale_id']}",
-            "safe to repeat?": "NO",
-        },
-        {
-            "verb": "PUT",
-            "first press": _put1,
-            "second press": _put2,
-            "what happened to the sales file": f"units_sold is {_got['units_sold']} either way",
-            "safe to repeat?": "yes",
-        },
-        {
-            "verb": "DELETE",
-            "first press": _del1,
-            "second press": _del2,
-            "what happened to the sales file": "the order is gone, both times",
-            "safe to repeat?": "yes",
-        },
-    ]
-    # One row per verb: the two status codes, then what the file looks like after both presses.
-    _svg = [
-        '<text x="235" y="20" text-anchor="middle" font-weight="700">first press</text>'
-        '<text x="405" y="20" text-anchor="middle" font-weight="700">second press</text>'
-        '<text x="748" y="20" text-anchor="middle" font-weight="700">what happened to the sales file</text>'
-    ]
-    for _i, _row in enumerate(_rows):
-        _y, _safe = 40 + _i * 58, _row["safe to repeat?"] == "yes"
-        _svg.append(
-            f'<text x="0" y="{_y + 20}" font-weight="700">{_row["verb"]}</text>'
-            f'<text class="dg-muted" x="0" y="{_y + 42}">{"safe to repeat" if _safe else "NOT safe to repeat"}</text>'
-            + box(160, _y, str(_row["first press"]), w=150, h=48)
-            + box(330, _y, str(_row["second press"]), w=150, h=48, cls="dg-box" if _safe else "dg-box dg-hot")
-            + box(500, _y, _row["what happened to the sales file"], w=496, h=48, cls="dg-box dg-ok" if _safe else "dg-box dg-hot")
-        )
-    _matrix = diagram(
-        "".join(_svg),
-        width=1000,
-        height=40 + 58 * len(_rows),
-        label="Each verb sent twice. "
-        + "; ".join(
-            f"{_r['verb']}: {_r['first press']} then {_r['second press']}, {_r['what happened to the sales file']}"
-            for _r in _rows
-        ),
-    )
-    _more = mo.md(
-        """
-    That is exactly why a checkout page begs you not to hit refresh, and why a payment that times
-    out is frightening in a way a profile edit is not.
-
-    Idempotence is a promise the API author makes, not something HTTP enforces. A carelessly
-    written `PUT` can behave exactly like `POST`. It holds here because this server updates a row
-    you named by id, not because the word PUT is magic.
-        """
-    )
-    mo.vstack(
-        [
-            _top,
-            chart_or_table(_matrix, _rows, label="Each verb, sent twice"),
-            mo.md(
-                f"**GET, PUT and DELETE are safe to repeat:** the sales file ends up the same. **POST is not:** "
-                f"the second press booked the order again, and Mia's revenue would count "
-                f"CHF {_first['total_price']:,.2f} twice. The second DELETE answers `{_del2}` yet changes nothing: "
-                "safe to repeat is about the effect, not the status code."
-            ).callout(kind="info"),
-            mo.accordion({"Idempotence is a promise, not a law": _more}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(
-    Path,
-    box,
-    ch8_api,
-    ch8_stop,
-    chart_or_table,
-    diagram,
-    duckdb,
-    in_plain,
-    mo,
-    run_follow,
-    sale_slip,
-):
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: Follow One Order Into the Sales File"),
-            in_plain(
-                "The API is not a database. It checks an order, prices it and appends it as one row to "
-                "`data/sales.parquet`, the data tier. We count the file's rows, POST one order, count again, and "
-                "set the stored row beside the API's answer."
-            ),
-            run_follow,
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not run_follow.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** does the file store the product's name, or only its id? "
-                    "Then click **Follow the order into the file**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-    _sales_file = Path(mo.notebook_dir()) / "data" / "sales.parquet"
-    if not _sales_file.exists():
-        ch8_stop(_top, "Needs a running API started from this folder (it creates `data/sales.parquet`).")
-    _con = duckdb.connect()
-    _count = f"SELECT count(*) FROM '{_sales_file.as_posix()}'"
-    _before = _con.sql(_count).fetchone()[0]
-    _status, _created = ch8_api(_top, "POST", "/sales", sale_slip)
-    if _status != 201:
-        ch8_stop(_top, f"`POST /sales` answered `{_status}`: `{_created}`")
-    try:
-        _after = _con.sql(_count).fetchone()[0]
-        _stored = _con.execute(
-            f"SELECT * FROM '{_sales_file.as_posix()}' WHERE sale_id = ?", [_created["sale_id"]]
-        ).df()
-    finally:
-        ch8_api(_top, "DELETE", f"/sales/{_created['sale_id']}")  # leave the file as we found it
-    if _stored.empty:
-        ch8_stop(
-            _top,
-            f"Order {_created['sale_id']} never reached `{_sales_file}`: the API at the base URL writes "
-            "to another `data/` folder. Start it from this notebook's folder.",
-        )
-
-    _file_row = _stored.iloc[0].to_dict()
-    _rows = [
-        {"field": _k, "in the file": str(_file_row.get(_k, "—")), "in the API answer": str(_v)}
-        for _k, _v in _created.items()
-    ]
-
-    def _band(y, tier, name, note):
-        return (
-            f'<g class="tier-{tier}"><rect class="dg-tier" x="2" y="{y}" width="996" height="88" rx="16"/>'
-            f'<text x="20" y="{y + 38}" font-weight="700">{name}</text>'
-            f'<text class="dg-muted" x="20" y="{y + 62}">{note}</text></g>'
-        )
-
-    # The request goes down the left column, the answer comes back up the right, like the tier map.
-    _trip = diagram(
-        _band(0, "presentation", "client", "this notebook")
-        + _band(120, "logic", "logic tier", "sw03_demo_api.py")
-        + _band(240, "data", "data tier", "data/sales.parquet")
-        + '<text x="402" y="110" class="dg-muted">request</text>'
-        + '<text x="822" y="110" class="dg-muted">answer</text>'
-        + box(220, 20, f"POST /sales · {len(sale_slip)} fields, no price", w=340, h=48)
-        + box(220, 140, "check · price it · lock · append", w=340, h=48)
-        + box(220, 260, f"{_before:,} rows &#8594; {_after:,} rows", w=340, h=48)
-        + box(640, 260, f"row stored: {len(_stored.columns)} columns, ids only", w=340, h=48)
-        + box(640, 140, "joins product, country, region names", w=340, h=48)
-        + box(640, 20, f"{_status} · {len(_created)} fields, names spelled out", w=340, h=48)
-        + '<path class="dg-edge" d="M390 68 V 134"/><path class="dg-edge" d="M390 188 V 254"/>'
-        + '<path class="dg-edge" d="M560 284 H 634"/>'
-        + '<path class="dg-edge" d="M810 260 V 194"/><path class="dg-edge" d="M810 140 V 74"/>',
-        width=1000,
-        height=330,
-        label=f"The POST goes down: the notebook sends {len(sale_slip)} fields, the API checks, prices and appends it, "
-        f"and the file grows from {_before:,} to {_after:,} rows. The answer comes up: the stored row has "
-        f"{len(_stored.columns)} columns of ids, the API joins the names and answers {_status} with {len(_created)} fields.",
-        tier="logic",
-    )
-    _caption = mo.md(
-        f"""
-    **What to notice:** the **file** keeps `product_id {_created["product_id"]}` and
-    `country_id {_created["country_id"]}`: ids, every fact written once. The **answer** spells out
-    "{_created["product_name"]}", "{_created["country_name"]}" and "{_created["region_name"]}": the logic tier
-    did the joining, so Mia's dashboard does not have to.
-        """
-    )
-    _more = mo.md(
-        """
-    The logic tier did not invent a database. It wrote to `data/sales.parquet`, a working copy of
-    the file you compressed in chapter 4 and queried in chapter 5 (the API copies `data/seed/` into
-    `data/` on every start). Even the date changes shape: the file keeps a timestamp, the API sends a
-    plain date.
-
-    **One honest callback.** We just read that file behind the API's back. The API takes a lock
-    around every write, but like the booking pen in chapter 1, a lock only protects those who ask
-    for it. Pandas rewrites the whole Parquet file on every change, so a read at the wrong instant
-    could catch it half-written. That is chapter 1's isolation problem, and the reason a real system
-    puts a database at the bottom of the data tier rather than a file.
-        """
-    )
-    mo.vstack(
-        [
-            _top,
-            chart_or_table(_trip, _rows, label="Same order, two tiers, two shapes"),
-            _caption,
-            mo.accordion({"Where the file came from, and one honest callback": _more}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(ch8_api, ch8_stop, chart_or_table, in_plain, mo, run_two_analysts):
-    _top = mo.vstack(
-        [
-            mo.md("### Try it: Two Analysts Change One Price"),
-            in_plain(
-                "Anna and Ben, two analysts, open Edge Sensor X1 at the same price. Anna saves a **10% raise**, "
-                "then Ben saves a **CHF 20 surcharge** on the price he saw. Each save is one `PUT`, and the API "
-                "locks the file during each one. Every sale booked afterwards is priced from what is left."
-            ),
-            run_two_analysts,
-        ],
-        gap=0.6,
-    )
-    mo.stop(
-        not run_two_analysts.value,
-        mo.vstack(
-            [
-                _top,
-                mo.md(
-                    "**Predict first:** what does an Edge Sensor X1 cost afterwards? Write it down, then click "
-                    "**Run the two-analyst test**."
-                ).callout(kind="neutral"),
-            ],
-            gap=0.6,
-        ),
-    )
-
-    def _price(method, body=None):
-        """GET or PUT product 1 and return its price. Anything but 200 OK stops the cell."""
-        status, answer = ch8_api(_top, method, "/products/1", body)
-        if status != 200:
-            ch8_stop(_top, f"`{method} /products/1` answered `{status}`: `{answer}`")
-        return answer["price"]
-
-    _start = _price("GET")
-    try:
-        # Both analysts open the page. Two ordinary GETs, nothing concurrent.
-        _anna_sees = _price("GET")
-        _ben_sees = _price("GET")
-        # Both save, strictly one after the other.
-        _anna_sends = round(_anna_sees * 1.10, 2)
-        _ben_sends = round(_ben_sees + 20, 2)
-        _after_anna = _price("PUT", {"price": _anna_sends})
-        _after_ben = _price("PUT", {"price": _ben_sends})
-        _final = _price("GET")
-    finally:
-        ch8_api(_top, "PUT", "/products/1", {"price": _start})  # put the price back, like the other labs tidy up
-    _correct = round(round(_start * 1.10, 2) + 20, 2)
-
-    _steps = [
-        {"step": "1. price before anyone touches it", "price": _start, "server said": "-"},
-        {"step": "2. Anna opens the product", "price": _anna_sees, "server said": "200 OK"},
-        {"step": "3. Ben opens the same product", "price": _ben_sees, "server said": "200 OK"},
-        {"step": "4. Anna saves a 10% raise", "price": _after_anna, "server said": "200 OK"},
-        {"step": "5. Ben saves a CHF 20 surcharge", "price": _after_ben, "server said": "200 OK"},
-        {"step": "6. price afterwards", "price": _final, "server said": "-"},
-        {"step": "what it should have been", "price": _correct, "server said": "-"},
-    ]
-    # Chapter 1's lost-update grid, with people instead of workers and a price instead of a counter.
-    _grid = mo.Html(
-        f"""
-    <div class="section-card flow-card">
-      <div class="lost-update-wrap">
-        <div class="lost-update-grid">
-          <div class="lu-header">Step</div>
-          <div class="lu-header">Anna</div>
-          <div class="lu-header">Ben</div>
-          <div class="lu-header">Price on the server (CHF)</div>
-
-          <div class="lu-step">1</div>
-          <div class="lu-event lu-read">GET: sees {_anna_sees:.2f}</div>
-          <div class="lu-event lu-read">GET: sees {_ben_sees:.2f}</div>
-          <div class="lu-state">{_start:.2f}</div>
-
-          <div class="lu-step">2</div>
-          <div class="lu-event lu-write">PUT {_anna_sends:.2f} (+10%): 200 OK</div>
-          <div class="lu-event">adds CHF 20 to his stale {_ben_sees:.2f}</div>
-          <div class="lu-state">{_after_anna:.2f}</div>
-
-          <div class="lu-step">3</div>
-          <div class="lu-event lu-idle">done</div>
-          <div class="lu-event lu-stale">PUT stale {_ben_sends:.2f}: 200 OK</div>
-          <div class="lu-state lu-problem">{_after_ben:.2f} (Anna's raise overwritten)</div>
-        </div>
-      </div>
-    </div>
-        """
-    )
-    _more = mo.md(
-        """
-    Every write in `sw03_demo_api.py` runs inside one `lock`, chapter 1's own fix, so each single
-    request is safe. But *there is no lock around what actually happened here*. The read and the
-    write were two separate HTTP requests, minutes apart in real life, and the API has no idea they
-    were meant to belong together. Ben's `PUT` carried a price computed from a page he opened
-    before Anna saved. Chapter 1's lesson holds exactly as stated: a lock, like a transaction,
-    protects the steps you put inside it, and nothing else. Correctness is a property of the
-    design, not of the tools.
-        """
-    )
-    mo.vstack(
-        [
-            _top,
-            mo.hstack(
-                [
-                    mo.stat(f"CHF {_correct:,.2f}", label="should be", bordered=True),
-                    mo.stat(f"CHF {_final:,.2f}", label="is", bordered=True),
-                    mo.stat(f"CHF {_correct - _final:,.2f}", label="lost on every sensor sold, and nobody was told", bordered=True),
-                ],
-                widths="equal",
-            ),
-            chart_or_table(_grid, _steps, label=f"Six requests, strictly in order (then the price goes back to {_start:.2f})"),
-            mo.md(
-                "**Chapter 1's lost update, over HTTP:** Anna's raise is gone, and both saves answered `200 OK`. "
-                "The requests ran one after another, so it fails on every click: a design bug, not a timing fluke."
-            ).callout(kind="danger"),
-            mo.accordion({"Why the API's lock did not save Anna": _more}),
         ],
         gap=0.6,
     )
@@ -6018,23 +4278,27 @@ def _(ch8_api, ch8_stop, chart_or_table, in_plain, mo, run_two_analysts):
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — FastAPI</h3>
+      <h3>Discussion: APIs</h3>
       <details>
-        <summary><strong>Q1:</strong> Gate 1 already checked the slip on the laptop. Why check it again at the server?</summary>
-        <p><strong>Answer:</strong> A partner's script can skip this notebook and post straight to the API with
-        <code>curl</code>. Checking on the laptop is a courtesy to the rep, instant feedback with no round trip,
-        never a substitute for the server's check.</p>
+        <summary><strong>Q1:</strong> A client's <code>POST /sales</code> timed out. When is it safe to resend it?</summary>
+        <p><strong>Answer:</strong> Only if the server can recognise the repetition: the client sends a unique key
+        (an idempotency key, or a client-generated id), and the server refuses to create a second record with that key.
+        This API assigns <code>sale_id</code> itself, so a retried POST creates a second sale.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> Is the split between 422 and 400 a law of HTTP?</summary>
-        <p><strong>Answer:</strong> No, it is this API's convention. FastAPI produces the 422 automatically from
-        the model; the 400s are business rules somebody wrote by hand.</p>
+        <summary><strong>Q2:</strong> Where should a sale be validated: in the dashboard, in the API, or both?</summary>
+        <p><strong>Answer:</strong> In both. The dashboard provides immediate feedback; the API must enforce the rules
+        (server-side validation), because any client can bypass the dashboard and call the API directly.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> How should Ben's save have failed?</summary>
-        <p><strong>Answer:</strong> Loudly. Send <em>the change</em> (<code>{"raise_percent": 10}</code>) instead of
-        the answer, so both changes apply. Or make the client say which version it read (<code>If-Match</code>
-        with an ETag) and let the server refuse a stale write with <code>412 Precondition Failed</code>.</p>
+        <summary><strong>Q3:</strong> A public API answers <code>429 Too Many Requests</code>. What should the client do?</summary>
+        <p><strong>Answer:</strong> Pause and retry with increasing waiting times, respect a <code>Retry-After</code>
+        header if the server sends one, and reduce the request rate, for example by requesting larger pages.</p>
+      </details>
+      <details>
+        <summary><strong>Q4:</strong> How can the API evolve without breaking the partners' scripts?</summary>
+        <p><strong>Answer:</strong> Add only optional fields, version endpoints when necessary, and deprecate gradually
+        with clear timelines (backward compatibility).</p>
       </details>
     </div>
     """)
@@ -6047,21 +4311,24 @@ def _(mo):
         [
             mo.md(
                 """
-    ### Chapter 8 Conclusion
+    ### Part 3 Summary
 
-    - Partners read `/docs`: FastAPI writes it from the models that check every request, so it cannot
-      drift. A hand-written docstring can.
-    - The shape is checked anywhere (422), facts only at the server (400). Only the server computes `total_price`.
-    - GET, PUT and DELETE are safe to press twice; a second POST books the order twice.
-    - A lock per request cannot stop a lost update split over two requests: send the change, or `If-Match`.
+    - An HTTP request consists of a verb, a URL (path and query parameters), headers and an optional body; the
+      response returns a status code and usually JSON.
+    - 2xx means success, 4xx a client error, 5xx a server error. GET, PUT and DELETE are idempotent, POST is not.
+    - `requests` retrieves data from an API, and the JSON converts directly into a DataFrame; authentication,
+      rate limits and pagination have to be handled.
+    - FastAPI maps Python functions to endpoints and generates the documentation (`/docs`) from the code.
+    - Pydantic validates every request against a model before the endpoint code runs; it checks structure,
+      not truth.
                 """
             ).callout(kind="success"),
             mo.md(
                 """
-    ### Bridge to Next Chapter
+    ### Next: Part 4
 
-    The sales API is ready. Next: the dashboard Mia actually opens, and what to build it with.
-    A correct API is worth little if nobody can use what it serves:
+    The sales API is complete. Next: the dashboard as the user-facing component, and the choice of its
+    framework. A correct API has limited value if its results cannot be used effectively:
 
     $$
     \\text{user value} = \\text{backend correctness} \\times \\text{frontend usability}
@@ -6069,7 +4336,7 @@ def _(mo):
                 """
             ).callout(kind="neutral"),
         ],
-        gap=1,
+        gap=0.8,
     )
     return
 
@@ -6078,12 +4345,19 @@ def _(mo):
 def _(chapter_intro, mo):
     mo.vstack(
         [
-            mo.md("## 9. Frontend Framework Comparison"),
+            mo.md("## Part 4 · Presentation Frameworks"),
             chapter_intro(
                 "presentation",
-                "What should we build the dashboard with?",
-                "The sales API from chapter 8 serves the data. Now the part Mia actually opens: what a frontend "
-                "must do, what it must not, and which tool fits our team.",
+                "With which framework should the dashboard be built, and how is the data presented faithfully?",
+                "The role of a frontend, Streamlit, marimo, Dash and React compared, and how analysis choices shape a chart.",
+                topics=(
+                    "Role of the frontend",
+                    "Framework landscape",
+                    "One dashboard, three frameworks",
+                    "Live: marimo and Streamlit",
+                    "Choosing a framework",
+                    "Analysis choices",
+                ),
             ),
         ],
         gap=1,
@@ -6094,7 +4368,7 @@ def _(chapter_intro, mo):
 @app.cell
 def _(box, diagram, in_plain, mo):
     def _tier(x, tier, name, note, file, rule, why):
-        """One tier of Mia's stack: its colour, what it holds, and how it states the units rule."""
+        """One tier of the stack: its colour, what it holds, and how it states the units rule."""
         return (
             f'<g class="tier-{tier}"><rect class="dg-tier" x="{x}" y="110" width="280" height="220" rx="16"/></g>'
             f'<text x="{x + 20}" y="144" font-size="20" font-weight="700">{name}</text>'
@@ -6106,16 +4380,16 @@ def _(box, diagram, in_plain, mo):
         )
 
     _stack = diagram(
-        _tier(2, "presentation", "Mia's dashboard", "ch. 9-10: what Mia sees", "sw03_demo_streamlit.py",
+        _tier(2, "presentation", "the dashboard", "Part 4: what users see", "sw03_demo_streamlit.py",
               "min_value=1", "repeated for convenience")
-        + _tier(360, "logic", "the sales API", "ch. 6-8: the rules", "sw03_demo_api.py", "ge=1, le=100_000", "the rule")
-        + _tier(718, "data", "the sales files", "ch. 1-5: the facts", "data/*.parquet", "sales, products, ...",
+        + _tier(360, "logic", "the sales API", "Part 3: the rules", "sw03_demo_api.py", "ge=1, le=100_000", "the rule")
+        + _tier(718, "data", "the sales files", "Parts 1-2: the data", "data/*.parquet", "sales, products, ...",
                 "five tables, ids only")
-        # a request goes right, the answer comes back left
+        # a request goes right, the response comes back left
         + '<path class="dg-edge" d="M284 206 H 354"/><path class="dg-edge" d="M358 250 H 288"/>'
         + '<path class="dg-edge" d="M642 206 H 712"/><path class="dg-edge" d="M716 250 H 646"/>'
         + '<text class="dg-muted" x="321" y="196" text-anchor="middle">request</text>'
-        + '<text class="dg-muted" x="321" y="274" text-anchor="middle">answer</text>'
+        + '<text class="dg-muted" x="321" y="274" text-anchor="middle">response</text>'
         + '<text class="dg-muted" x="679" y="196" text-anchor="middle">query</text>'
         + '<text class="dg-muted" x="679" y="274" text-anchor="middle">rows</text>'
         # the side door: a partner's script calls the API without passing the dashboard
@@ -6124,37 +4398,24 @@ def _(box, diagram, in_plain, mo):
         + '<text class="dg-hot" x="512" y="88">no dashboard in between</text>',
         width=1000,
         height=340,
-        label="Three tiers: Mia's dashboard (Streamlit, chapters 9 and 10) sends requests to the sales API "
-        "(chapters 6 to 8), which queries the sales files (Parquet, chapters 1 to 5). The units rule sits in the "
+        label="Three tiers: the dashboard (Streamlit, Part 4) sends requests to the sales API "
+        "(Part 3), which queries the sales files (Parquet, Parts 1 and 2). The units rule sits in the "
         "API; the dashboard's form repeats only its lower bound. A partner's script or curl calls the API directly.",
-    )
-    _more = mo.md(
-        """
-    - **The payoff for splitting the tiers.** Move the sales files from Parquet to DuckDB and Mia
-      notices nothing. Rebuild the whole dashboard, Streamlit for React, and the API does not change one line.
-    - **What a frontend does.** It sends a request to a path, like `GET /sales?region=Europe`, and
-      arranges whatever comes back so Mia can decide something.
-    - **It still computes.** The dashboard sorts, formats, adds up and draws every chart. So do not
-      read this as "the frontend is dumb". Read it as **the frontend owns no rules**.
-    - **The same rule, twice, on purpose.** The Streamlit form sets `min_value=1` for units sold; the API
-      states `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
-      limit: only the API knows it.
-        """
     )
     mo.vstack(
         [
-            mo.md("### The Dashboard Shows, the API Decides"),
+            mo.md("### The Dashboard Presents, the API Enforces"),
             in_plain(
-                "A **frontend** is the part people see and click. Mia's dashboard sends requests to the sales API "
-                "and draws the answers. It owns no rules: a partner's script calls the API directly and never sees "
-                "the dashboard, so every rule has to live in the API."
+                "A **frontend** is the user-facing component of a system. The dashboard sends requests to the sales "
+                "API and visualises the responses. It owns no business rules: a partner's script calls the API "
+                "directly and never passes the dashboard, so every rule must be enforced in the API."
             ),
             _stack,
             mo.md(
-                "**What to notice:** the dashboard's *Units sold* box starts at 1 (`min_value=1`), a convenience "
-                "for Mia. The rule itself, 1 to 100,000 units, lives in the API, where the partner's script meets it too."
+                "**Observation:** the dashboard's *Units sold* field starts at 1 (`min_value=1`), a convenience for "
+                "users. The rule itself, 1 to 100,000 units, is enforced in the API, where it also applies to the "
+                "partner's script. The frontend still sorts, aggregates and draws, but it owns no business rules."
             ),
-            mo.accordion({"Why split the tiers, and what a frontend still computes": _more}),
         ],
         gap=0.6,
     )
@@ -6163,50 +4424,44 @@ def _(box, diagram, in_plain, mo):
 
 @app.cell
 def _(diagram, in_plain, mo):
-    # Ordered by the fit assistant's iteration-speed weight, fastest first.
+    # Ordered from the fastest first version to the most layout control.
     _frameworks = [
-        ("Streamlit", "Python", "our data team, in Python", "fastest: the whole dashboard is one Python script",
-         "little: Streamlit lays out the page", "Every click reruns the script; big apps get hard to steer"),
-        ("Marimo", "Python", "our data team, in Python", "fast: a notebook becomes the app (this deck is one)",
-         "some: cells, tabs, slides", "Notebook-first, not for a big public website"),
-        ("Dash", "Python", "our data team, in Python", "medium: a callback wires each widget to its charts",
-         "more: Plotly charts, many components", "The callbacks tangle as the dashboard grows"),
-        ("Flask", "Python + JavaScript", "our team plus some HTML and JavaScript", "slow: we build every page and widget",
-         "full: every pixel is ours", "More setup, no ready-made widgets"),
-        ("React", "JavaScript", "a web developer, in JavaScript", "slowest to start: a second language and its tools",
-         "full: any layout Mia asks for", "Needs a JS/TS stack, a build step and someone to maintain it"),
+        ("Streamlit", "Python", "fastest start: the whole dashboard is one script", "every interaction reruns the script"),
+        ("marimo", "Python", "reactive notebook that also runs as an app (this deck is one)", "notebook-oriented, not for large public websites"),
+        ("Dash", "Python", "Plotly charts linked by callbacks", "callbacks become complex as the app grows"),
+        ("Flask", "Python + HTML/JS", "full control over pages and forms", "every page and widget is built by hand"),
+        ("React", "JavaScript", "any interface, for many users", "requires web developers and a build toolchain"),
     ]
     _tiles = "".join(
         f'<div class="tile"><div class="tile-key">{_name}</div><div class="tile-title">{_lang}</div>'
-        f"<p><strong>Who builds it:</strong> {_who}</p><p><strong>First version:</strong> {_speed}</p>"
-        f'<p><strong>Layout control:</strong> {_control}</p><p class="tile-bad">{_bad}</p></div>'
-        for _name, _lang, _who, _speed, _control, _bad in _frameworks
+        f'<p>{_strength}</p><p class="tile-bad">{_limit}</p></div>'
+        for _name, _lang, _strength, _limit in _frameworks
     )
     _tradeoff = diagram(
         '<text x="0" y="26" font-weight="700">faster first version</text>'
         '<path class="dg-edge" d="M400 20 H 190"/>'
-        '<text class="dg-muted" x="500" y="26" text-anchor="middle">the usual trade-off</text>'
+        '<text class="dg-muted" x="500" y="26" text-anchor="middle">typical trade-off</text>'
         '<path class="dg-edge" d="M600 20 H 810"/>'
         '<text x="1000" y="26" text-anchor="end" font-weight="700">more layout control</text>',
         width=1000,
         height=40,
-        label="The usual trade-off: the further left, the faster the first version; the further right, the more layout control.",
+        label="The typical trade-off: the further left, the faster the first version; the further right, the more layout control.",
     )
     mo.vstack(
         [
-            mo.md("### Five Ways to Build Mia's Dashboard"),
+            mo.md("### Five Frameworks for the Dashboard"),
             in_plain(
-                "All five tools can draw Mia's dashboard. They differ in **who on our team can build it**, **how "
-                "soon Mia sees a first version**, and **how much say we have over the layout**. Faster usually "
+                "All five frameworks can implement the dashboard. They differ in **the skills required to build it**, "
+                "**the time to a first version**, and **the degree of layout control**. Faster development usually "
                 "means less control."
             ),
             _tradeoff,
             mo.Html(f'<div class="tiles tier-presentation" style="grid-template-columns: repeat(5, 1fr)">{_tiles}</div>'),
             mo.md(
-                "**What to notice:** the three Python tools need nobody new on the team; Flask and React need "
-                "JavaScript, the language browsers run, and buy full control with it.\n\n"
-                '<p class="vis-caption">A rough guide, not a measurement. Showcases: '
-                '<a href="https://marimo.io/gallery">Marimo gallery</a> · '
+                "**Observation:** the three Python frameworks require no additional skills in the team; Flask and React "
+                "require JavaScript, the language browsers execute, and offer full control in return.\n\n"
+                '<p class="vis-caption">An approximate guide, not a measurement. Showcases: '
+                '<a href="https://marimo.io/gallery">marimo gallery</a> · '
                 '<a href="https://dash.gallery/Portal/">Dash gallery</a> · '
                 '<a href="https://react.dev/community">React community</a> · '
                 '<a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask patterns</a></p>'
@@ -6218,96 +4473,129 @@ def _(diagram, in_plain, mo):
 
 
 @app.cell
-def _(mo):
-    # The fit assistant's three questions, about EdgeWorks, not about the tools. Shown by the slide below.
-    fw_speed = mo.ui.slider(1, 5, value=5, label="Mia needs changes fast", show_value=True, debounce=True)
-    fw_control = mo.ui.slider(1, 5, value=3, label="Mia needs a custom layout", show_value=True, debounce=True)
-    fw_js = mo.ui.slider(1, 5, value=2, label="Our team knows JavaScript", show_value=True, debounce=True)
-    return fw_control, fw_js, fw_speed
+def _(in_plain, mo):
+    _streamlit = """
+import pandas as pd, requests, streamlit as st
+
+API = "http://127.0.0.1:8000"
+sales = pd.DataFrame(requests.get(f"{API}/sales", timeout=5).json())
+region = st.selectbox("Region", sorted(sales["region_name"].unique()))
+
+picked = sales[sales["region_name"] == region]
+st.bar_chart(picked.groupby("product_name")["total_price"].sum())
+"""
+    _marimo = """
+# cell 1
+import altair as alt, marimo as mo, pandas as pd, requests
+
+API = "http://127.0.0.1:8000"
+sales = pd.DataFrame(requests.get(f"{API}/sales", timeout=5).json())
+region = mo.ui.dropdown(sorted(sales["region_name"].unique()), value="Europe", label="Region")
+region
+
+# cell 2: reruns automatically when region changes
+picked = sales[sales["region_name"] == region.value]
+alt.Chart(picked).mark_bar().encode(x="sum(total_price)", y="product_name")
+"""
+    _dash = """
+import pandas as pd, plotly.express as px, requests
+from dash import Dash, Input, Output, dcc, html
+
+API = "http://127.0.0.1:8000"
+sales = pd.DataFrame(requests.get(f"{API}/sales", timeout=5).json())
+app = Dash()
+app.layout = html.Div([dcc.Dropdown(sorted(sales["region_name"].unique()), "Europe", id="region"),
+                       dcc.Graph(id="chart")])
+
+@app.callback(Output("chart", "figure"), Input("region", "value"))
+def update(region):  # Dash calls this function whenever the dropdown changes
+    picked = sales[sales["region_name"] == region]
+    return px.histogram(picked, x="product_name", y="total_price")
+
+app.run()
+"""
+    mo.vstack(
+        [
+            mo.md("### One dashboard, three frameworks"),
+            in_plain(
+                "Streamlit, marimo and Dash build the same small dashboard in about ten lines of Python: a region "
+                "selector and the revenue per product. They differ in **how they react to user input**."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-presentation" style="grid-template-columns: repeat(3, 1fr)">
+      <div class="tile"><div class="tile-key">Streamlit</div><div class="tile-title">Script</div>
+        <p>Every interaction reruns the whole script from the top; <code>st.cache_data</code> avoids repeating expensive steps.</p></div>
+      <div class="tile"><div class="tile-key">marimo</div><div class="tile-title">Reactive cells</div>
+        <p>A change reruns only the cells that depend on it; the same file runs as a notebook, an app or slides.</p></div>
+      <div class="tile"><div class="tile-key">Dash</div><div class="tile-title">Callbacks</div>
+        <p>Each function declares its inputs and outputs; Dash calls it when one of its inputs changes.</p></div>
+    </div>
+                """
+            ),
+            mo.ui.tabs(
+                {
+                    "Streamlit": mo.md(f"```python\n{_streamlit.strip()}\n```"),
+                    "marimo": mo.md(f"```python\n{_marimo.strip()}\n```"),
+                    "Dash": mo.md(f"```python\n{_dash.strip()}\n```"),
+                }
+            ),
+        ],
+        gap=0.6,
+    )
+    return
 
 
 @app.cell
-def _(
-    TIER,
-    alt,
-    chart_or_table,
-    fw_control,
-    fw_js,
-    fw_speed,
-    in_plain,
-    mo,
-    pd,
-    tier_chart,
-):
-    # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
-    # so no framework wins just by carrying more weight than the others.
-    _weights = {
-        # framework:   (fast changes, custom layout, JavaScript), python_native
-        "Marimo":      ((1.3, 0.5, 1.2), True),
-        "Streamlit":   ((1.6, 0.4, 1.0), True),
-        "Dash":        ((1.0, 1.0, 1.0), True),
-        "Flask":       ((0.6, 1.6, 0.8), False),
-        "React":       ((0.4, 1.4, 1.2), False),
-    }
-    # Python-native tools benefit from a team that knows LITTLE JavaScript, hence 6 - j.
-    # Rounded like the table, so two scores that look equal are equal.
-    _scores = {
-        name: round(w_s * fw_speed.value + w_c * fw_control.value + w_j * (6 - fw_js.value if python_native else fw_js.value), 2)
-        for name, ((w_s, w_c, w_j), python_native) in _weights.items()
-    }
-    _ranked = sorted(_scores.items(), key=lambda item: item[1], reverse=True)
-    _top = [name for name, score in _ranked if score == _ranked[0][1]]
-    _rows = [
-        {"framework": name, "score": score, "weights (speed / layout / JS)": " / ".join(map(str, _weights[name][0]))}
-        for name, score in _ranked
-    ]
-    _df = pd.DataFrame(_rows)
-    _df["best"] = _df["framework"].isin(_top)
-    _bars = alt.Chart(_df).encode(
-        y=alt.Y("framework:N", sort=None, title=None),
-        x=alt.X("score:Q", title="fit score (higher = better fit)", scale=alt.Scale(domain=[0, 15])),
-        tooltip=["framework:N", "score:Q", "weights (speed / layout / JS):N"],
-    )
+def _(mo, shop_sales):
+    p4_region = mo.ui.dropdown(sorted(shop_sales["region"].unique()), value="Europe", label="Region")
+    p4_measures = {"revenue (CHF)": "total_price", "units sold": "units_sold"}
+    p4_measure = mo.ui.radio(options=list(p4_measures), value="revenue (CHF)", label="Measure", inline=True)
+    return p4_measure, p4_measures, p4_region
+
+
+@app.cell
+def _(alt, in_plain, mo, p4_measure, p4_measures, p4_region, shop_sales, tier_chart):
+    _column = p4_measures[p4_measure.value]
+    _picked = shop_sales[shop_sales["region"] == p4_region.value]
+    _by_product = _picked.groupby("product", as_index=False)[_column].sum()
     _chart = (
-        _bars.mark_bar(cornerRadiusEnd=4, size=28).encode(
-            color=alt.condition("datum.best", alt.value(TIER["presentation"]), alt.value(TIER["muted"]))
+        alt.Chart(_by_product)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(
+            x=alt.X(f"{_column}:Q", title=p4_measure.value),
+            y=alt.Y("product:N", sort="-x", title=None),
+            tooltip=["product:N", f"{_column}:Q"],
         )
-        + _bars.mark_text(align="left", dx=6).encode(text=alt.Text("score:Q", format=".2f"))
-    ).properties(
-        width="container",
-        height=46 * len(_df),
-        title=f"Best fit: {' / '.join(_top)}" + (" (a tie)" if len(_top) > 1 else ""),
+        .properties(width="container", height=230)
     )
-    _more = mo.md(
-        """
-    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let our team
-    stay in Python; React is written in JavaScript, and a Flask app needs some as soon as a page has to
-    react. So a low score on that slider is not a weakness, it just points at different tools.
-
-    Each framework scores the three answers with its own weights, and every weight row adds up to the
-    same total (3.0), so no framework wins just by carrying more weight. For the three Python-native
-    tools the JavaScript answer counts as $6 - j$: they get *more* attractive when the team knows *less*
-    JavaScript. For Flask and React it counts as $j$. Heuristic only: check it against the real team.
-        """
-    )
+    _total = _picked[_column].sum()
     mo.vstack(
         [
-            mo.md("### Try it: Which Tool Fits Our Team?"),
+            mo.md("### This slide is a marimo app"),
             in_plain(
-                "Answer three questions about EdgeWorks, from 1 (not at all) to 5 (very much), not about the tools. "
-                "Each tool weighs the answers differently: Streamlit cares most about speed, Flask about layout, and "
-                "the three Python tools score higher the less JavaScript the team knows."
+                "The controls below are marimo UI elements. Changing one reruns only the cells that read it, and the "
+                "chart updates; the code of this slide is about a dozen lines, like the marimo tab on the previous slide."
             ),
-            mo.hstack([fw_speed, fw_control, fw_js], widths="equal", gap=2),
-            chart_or_table(tier_chart(_chart, "presentation"), _rows, label="Fit score (higher = better fit)"),
-            mo.md(
-                "**What to notice:** at the start (changes fast, little JavaScript) Streamlit wins, which is why "
-                "Mia's dashboard is `sw03_demo_streamlit.py`. Set speed to 2 and layout and JavaScript to 5: React "
-                "takes over.\n\n"
-                "**In one line:** $\\text{score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{layout} + w_j \\cdot "
-                "\\text{JS}$, and each tool's three weights add up to 3."
+            mo.hstack([p4_region, p4_measure], justify="start", gap=3),
+            mo.hstack(
+                [
+                    mo.vstack(
+                        [
+                            mo.stat(f"{len(_picked):,}", label=f"sales in {p4_region.value}", bordered=True),
+                            mo.stat(
+                                f"CHF {_total:,.0f}" if _column == "total_price" else f"{_total:,}",
+                                label=p4_measure.value,
+                                bordered=True,
+                            ),
+                        ],
+                        gap=0.6,
+                    ),
+                    tier_chart(_chart, "presentation"),
+                ],
+                widths=[1, 3],
+                gap=2,
             ),
-            mo.accordion({"How the score works": _more}),
         ],
         gap=0.6,
     )
@@ -6315,254 +4603,71 @@ def _(
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    <div class="section-card">
-      <h3>Discussion — Frontends</h3>
-      <details>
-        <summary><strong>Q1:</strong> The dashboard's form already refuses 0 units. Why does the API check again?</summary>
-        <p><strong>Answer:</strong> A partner's script calls the API directly, with <code>curl</code> or its own
-        code, and never sees the form. A rule that lives only in the dashboard is not a rule. The form repeats it
-        for convenience: instant feedback for Mia, no round trip.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> The fit assistant says Streamlit. Is that the decision?</summary>
-        <p><strong>Answer:</strong> No, it is a teaching heuristic with hand-picked weights. Check it against
-        real constraints: how much layout and state control the dashboard needs, who will maintain it, and
-        what the team already knows.</p>
-      </details>
-    </div>
-    """)
-    return
-
-
-@app.cell
-def _(mo):
+def _(in_plain, mo):
+    _excerpt = '''
+# sw03_demo_streamlit.py (abridged)
+@st.cache_data(ttl="15s", show_spinner="Loading sales…")
+def fetch_sales(url: str, params: dict[str, Any]) -> pd.DataFrame:
+    df = pd.DataFrame(api("GET", url, params=params))  # GET /sales with the chosen filters
+    ...
+'''
     mo.vstack(
         [
-            mo.md(
-                """
-    ### Chapter 9 Conclusion
-
-    - A frontend sends requests and arranges the answers. It owns no rules, so the API enforces
-      every rule again.
-    - Choose by who will build it, how soon Mia needs it and how much layout control she needs:
-      a faster first version usually costs control. For our Python team, Streamlit.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Bridge to Next Chapter
-
-    The dashboard can draw any chart. The last question is which chart tells the truth: Mia wants
-    one for the board, and a chart can show a pattern that is not there.
-
-    $$
-    \\text{what you plot} = \\text{signal} + \\text{noise}
-    $$
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(chapter_intro, mo):
-    mo.vstack(
-        [
-            mo.md("## 10. Honest Charts (Signal vs Noise)"),
-            chapter_intro(
-                "presentation",
-                "Does spending more make customers happier? Mia wants a chart for the board.",
-                "A chart can show a pattern that is not there. First we learn to read how sure a trend line is, "
-                "then we see three ways the same sales can tell three different stories.",
-            ),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(in_plain, mo, shop_sales, statistics):
-    def ch10_fit(xs, ys):
-        """The least-squares line through (xs, ys): slope beta, intercept alpha, the slope's standard error, R²."""
-        beta, alpha = statistics.linear_regression(xs, ys)
-        r2 = statistics.correlation(xs, ys) ** 2
-        # Standard error of the slope: how far beta would wander if we drew other sales.
-        se = ((1 - r2) / (len(xs) - 2)) ** 0.5 * statistics.stdev(ys) / statistics.stdev(xs)
-        return beta, alpha, se, r2
-
-    # Every real sale: CHF spent (in CHF 10,000s) against the customer's rating.
-    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
-    _clear = abs(_beta) > 2 * _se
-    _more = mo.md(
-        f"""
-    - The line is $\\text{{rating}} = \\alpha + \\beta \\times \\text{{CHF spent}}$. Here
-      $\\alpha = {_alpha:.2f}$, the rating the line gives a sale of CHF 0, and $\\beta = {_beta:+.3f}$, the
-      change in rating per CHF 10,000.
-    - The **standard error** (SE) of $\\beta$ is how much it would wobble if we had drawn other sales.
-      $\\beta \\pm 2\\,\\text{{SE}}$ is the range we are about 95% sure of.
-    - $R^2$ is the share of the spread in ratings the line explains: 0 is none, 1 is every dot on the line.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md("### Two Questions Every Trend Line Answers"),
+            mo.md("### Live: the EdgeWorks dashboard in Streamlit"),
             in_plain(
-                "Put one dot per sale, CHF spent across and the customer's rating up, and draw the straight line "
-                "that fits best. That line answers two different questions. **Is there a trend?** Does the rating "
-                "really rise with spending, or could the slope be luck? **Does it predict one sale?** Do single "
-                "sales sit close to the line?"
+                "The demo dashboard `sw03_demo_streamlit.py` is a Streamlit app that obtains all of its data from the "
+                "sales API. It runs while the API is running: `streamlit run sw03_demo_streamlit.py`, then "
+                "`http://localhost:8501`."
             ),
             mo.md(
-                f"""
-    <div class="tiles tier-presentation">
-      <div class="tile"><div class="tile-key">{_beta:+.3f} &plusmn; {2 * _se:.3f}</div>
-        <div class="tile-title">Trend: is there a slope? (&beta; &plusmn; 2 SE)</div>
-        <p>Per CHF 10,000 spent, the rating rises {_beta:.3f} points, give or take {2 * _se:.3f}.
-        {"The range stays clear of 0: the trend is real, if small." if _clear else "The range includes 0: no trend we can tell from luck."}</p></div>
-      <div class="tile"><div class="tile-key">R&sup2; = {_r2:.2f}</div>
-        <div class="tile-title">Fit: how close are the dots?</div>
-        <p>Spending accounts for {_r2:.0%} of the differences in rating between sales. The other
-        {1 - _r2:.0%} is everything else.</p></div>
+                """
+    <div class="tiles tier-presentation" style="grid-template-columns: repeat(3, 1fr)">
+      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">Reads</div>
+        <p>The <em>Dashboard</em> tab requests <code>GET /sales</code> with the selected filters and draws time series,
+        a heatmap and a rating chart.</p></div>
+      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">Writes</div>
+        <p>The <em>Records</em> tab creates and edits records with <code>POST</code> and <code>PUT</code>; the API
+        validates every change and rejects invalid input with 422.</p></div>
+      <div class="tile"><div class="tile-key">15 s</div><div class="tile-title">Caches</div>
+        <p>Responses are cached for 15 seconds (<code>st.cache_data</code>), so a rerun of the script does not repeat
+        every request.</p></div>
     </div>
                 """
             ),
-            mo.Html(f'<p class="vis-caption">All {len(shop_sales):,} EdgeWorks sales, one dot each.</p>'),
-            mo.md(
-                "**What to notice:** a trend can be real and still predict single sales badly. They are two "
-                "questions: read both numbers, never one."
-            ),
-            mo.accordion({"What α, β, SE and R² mean": _more}),
+            mo.md(f"```python\n{_excerpt.strip()}\n```"),
         ],
         gap=0.6,
     )
-    return (ch10_fit,)
+    return
 
 
 @app.cell
-def _(mo):
-    # The signal-or-noise lab's controls, shown by the slide below.
-    ch10_effect = mo.ui.slider(
-        -0.06, 0.06, step=0.01, value=0.05, label="True effect: rating points per CHF 10,000", show_value=True, debounce=True
-    )
-    ch10_sales = mo.ui.slider(
-        steps=[50, 100, 200, 500, 1000, 2000, 3360], value=500, label="Sales we look at", show_value=True, debounce=True
-    )
-    ch10_draw = mo.ui.button(value=0, on_click=lambda n: n + 1, label="Draw other sales")
-    return ch10_draw, ch10_effect, ch10_sales
-
-
-@app.cell
-def _(
-    TIER,
-    alt,
-    ch10_draw,
-    ch10_effect,
-    ch10_fit,
-    ch10_sales,
-    chart_or_table,
-    in_plain,
-    mo,
-    pd,
-    random,
-    shop_sales,
-    statistics,
-    tier_chart,
-):
-    _effect = round(ch10_effect.value, 2)
-    _rng = random.Random(ch10_draw.value)
-    _picked = _rng.sample(range(len(shop_sales)), ch10_sales.value)
-    _xs = [shop_sales["total_price"].iat[_i] / 1e4 for _i in _picked]  # CHF 10,000s
-    # Real ratings, drawn apart from the spend so spending says nothing, plus the effect set above.
-    _base = _rng.sample(list(shop_sales["customer_rating"]), ch10_sales.value)
-    _xbar = statistics.fmean(_xs)
-    _ys = [_r + _effect * (_x - _xbar) for _r, _x in zip(_base, _xs, strict=True)]
-    _beta, _alpha, _se, _r2 = ch10_fit(_xs, _ys)
-    _clear = abs(_beta) > 2 * _se  # the ± range below excludes 0
-
-    _trend = (
-        "The range stays clear of 0: these sales rule out *spending changes nothing*."
-        if _clear
-        else "The range includes 0: these sales cannot tell this effect from no effect at all."
-    )
-    _fit = (
-        "single sales sit close to the line"
-        if _r2 >= 0.5
-        else "a trend with plenty of scatter around it"
-        if _r2 >= 0.15
-        else "single sales sit far from the line"
-    )
-    _verdict = mo.md(
-        f"**Trend:** $\\beta = {_beta:+.3f} \\pm {2 * _se:.3f}$ rating points per CHF 10,000 (you set {_effect:+.2f}). "
-        f"{_trend}  \n"
-        f"**Fit:** $R^2 = {_r2:.2f}$: spending explains {_r2:.0%} of the differences in rating between these "
-        f"sales; {_fit}."
-    ).callout(kind="success" if _clear else "warn")
-
-    # The fan: every line whose slope lies in beta ± 2 SE, pivoting on the centre of the data.
-    _ybar = statistics.fmean(_ys)
-    _grid = [min(_xs) + (max(_xs) - min(_xs)) * _i / 40 for _i in range(41)]
-    _ends = [((_beta - 2 * _se) * (_g - _xbar), (_beta + 2 * _se) * (_g - _xbar)) for _g in _grid]
-    _fan = pd.DataFrame(
-        {
-            "x": [_g * 1e4 for _g in _grid],
-            "low": [_ybar + min(_e) for _e in _ends],
-            "high": [_ybar + max(_e) for _e in _ends],
-            "flat": _ybar,
-        }
-    )
-    _x = alt.X("x:Q", title="CHF spent on the sale", axis=alt.Axis(format="~s", tickCount=8))
-    _y = alt.Y("y:Q", title="rating (simulated)", scale=alt.Scale(zero=False))
-    _points = (
-        alt.Chart(pd.DataFrame({"x": [_v * 1e4 for _v in _xs], "y": _ys}))
-        .mark_circle(size=30, opacity=0.35, color=TIER["muted"])
-        .encode(x=_x, y=_y)
-    )
-    _band = alt.Chart(_fan).mark_area(opacity=0.25, color=TIER["presentation"]).encode(x=_x, y=alt.Y("low:Q", title="rating (simulated)"), y2="high:Q")
-    _flat = alt.Chart(_fan).mark_line(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x=_x, y=alt.Y("flat:Q", title="rating (simulated)"))
-    _line = _points.transform_regression("x", "y").mark_line(color=TIER["presentation"], strokeWidth=4)
-    _chart = (_band + _points + _flat + _line).properties(width="container", height=270)
-    _summary = [
-        {"quantity": "effect you set (rating per CHF 10,000)", "value": _effect},
-        {"quantity": "fitted slope β", "value": round(_beta, 3)},
-        {"quantity": "margin of error (2 SE)", "value": round(2 * _se, 3)},
-        {"quantity": "intercept α", "value": round(_alpha, 3)},
-        {"quantity": "R²", "value": round(_r2, 3)},
-        {"quantity": "sales (n)", "value": len(_xs)},
+def _(in_plain, mo, static_table):
+    _rows = [
+        ("Internal dashboard on a DataFrame or an API, built by data scientists", "Streamlit", "one Python script; widgets and charts in a few lines"),
+        ("Analysis that should also run as an app or as slides", "marimo", "reactive notebook; the same file runs as an app"),
+        ("Larger app with many linked charts and precise control of updates", "Dash", "explicit callbacks, Plotly charts"),
+        ("Server-rendered pages and forms, small web services", "Flask", "minimal web framework with HTML templates"),
+        ("Public product with a custom design and many users", "React, with an API", "full control of the interface; requires web developers"),
     ]
-    _more = mo.md(
-        """
-    - **Effect 0:** the equation still prints a slope, and the ± range includes 0, which tells you not to
-      believe it. About 1 draw in 20 still clears the bar at effect 0: that is what 95% means.
-    - **Effect 0.05**, about the size of the real slope on the previous slide: $R^2$ calls the line
-      nearly useless, yet with 500 sales the slope is clearly real.
-    - **More sales** shrink the ±, but they do not push $R^2$ up. $R^2$ measures how predictable single
-      sales are, not whether a trend exists.
-    - The ratings are simulated so that we know the truth: each sale keeps its real price, gets a real
-      rating drawn from another sale, and then the effect you set is added.
-        """
-    )
     mo.vstack(
         [
-            mo.md("### Try it: If Spending Really Moved Ratings, Would We See It?"),
+            mo.md("### Which framework for which purpose?"),
             in_plain(
-                "Here **you** set the truth. We take real EdgeWorks sales, give each one a real rating drawn from "
-                "another sale, so spending says nothing, then add the effect you choose. The fitted line has to "
-                "find that effect again among the real spread of ratings."
+                "No framework is best in general. The choice depends on who builds and maintains the app, how much the "
+                "layout must be customised, and who uses it."
             ),
-            mo.hstack([ch10_effect, ch10_sales, ch10_draw], widths=[3, 3, 1], align="center", gap=2),
-            _verdict,
-            chart_or_table(tier_chart(_chart, "presentation"), _summary, label="Regression summary"),
+            static_table(
+                [{"situation": _s, "suitable choice": _f, "reason": _r} for _s, _f, _r in _rows],
+                label="A guide, not a rule",
+                wrapped_columns=["situation", "reason"],
+                column_widths={"situation": 620, "suitable choice": 220, "reason": 620},
+            ),
             mo.md(
-                "**What to notice:** the orange fan holds every slope inside β ± 2 SE. Set the effect to 0: the "
-                "dashed flat line fits inside the fan. Set 0.01 with 500 sales, then 3,360: the fan narrows until "
-                "the effect shows, while R² stays near 0."
+                "**Observation:** for EdgeWorks, a data team without web developers that builds a dashboard for internal "
+                "users, Streamlit or marimo is the natural choice. Because the API enforces the rules, this decision can "
+                "be revised later without touching the data and logic tiers."
             ),
-            mo.accordion({"What each experiment shows": _more}),
         ],
         gap=0.6,
     )
@@ -6574,12 +4679,12 @@ def _(mo):
     # The three-ways lab's control, shown by the slide below.
     honest_view = mo.ui.radio(
         options=[
-            "A - average the sales into fewer dots",
-            "B - split by category",
-            "C - drop one category",
+            "A - aggregate the sales into fewer points",
+            "B - stratify by category",
+            "C - exclude one category",
         ],
-        value="A - average the sales into fewer dots",
-        label="Ask the same question a different way",
+        value="A - aggregate the sales into fewer points",
+        label="Analysis variant",
         inline=True,
     )
     return (honest_view,)
@@ -6594,7 +4699,6 @@ def _(
     duckdb,
     honest_view,
     in_plain,
-    mia_asks,
     mo,
     tier_chart,
 ):
@@ -6615,32 +4719,32 @@ def _(
         _n, _slope, _r2 = _con.execute(
             f"SELECT count(*), regr_slope(y, x) * 10000, regr_r2(y, x) FROM {source}", params
         ).fetchone()
-        return {"what we plotted": label, "dots (n)": _n, "slope (rating per CHF 10k)": round(_slope, 3), "R²": round(_r2, 3)}
+        return {"unit of analysis": label, "points (n)": _n, "slope (rating per CHF 10k)": round(_slope, 3), "R²": round(_r2, 3)}
 
     def _averaged(group_by):
         return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
 
     if honest_view.value.startswith("A"):
         _trick = (
-            "**The trick:** average many sales into one dot. Fewer dots means less disagreement between them, "
-            "so the line looks tight."
+            "**Variant A:** many sales are averaged into one point. Fewer points mean less variance between them, "
+            "so the line appears to fit closely."
         )
         _views = [
-            ("one dot per sale", "sales", ()),
+            ("one point per sale", "sales", ()),
             ("per product per month", _averaged("product, month"), ()),
             ("per category per month", _averaged("category, month"), ()),
             ("per category", _averaged("category"), ()),
         ]
     elif honest_view.value.startswith("B"):
         _trick = (
-            "**The trick:** one line through all sales, or one line per category. The all-sales line mostly "
-            "measures the gap between the categories."
+            "**Variant B:** one line through all sales, or one line per category. The pooled line mainly reflects "
+            "the differences between the categories."
         )
         _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
         _views = [("all sales pooled", "sales", ())] + [(f"only {_c}", "sales WHERE category = ?", (_c,)) for _c in _cats]
     else:
-        _trick = "**The trick:** leave one category out, and the slope can change sign."
-        _views = [("all sales", "sales", ()), ("every sale except Services", "sales WHERE category <> 'Services'", ())]
+        _trick = "**Variant C:** excluding one category can reverse the sign of the slope."
+        _views = [("all sales", "sales", ()), ("all sales except Services", "sales WHERE category <> 'Services'", ())]
     _rows = [_measure(_label, _source, *_params) for _label, _source, _params in _views]
 
     def _panel(i, row, source, params):
@@ -6662,8 +4766,8 @@ def _(
             width="container",
             height=220,
             title=alt.TitleParams(
-                row["what we plotted"],
-                subtitle=f"n {row['dots (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
+                row["unit of analysis"],
+                subtitle=f"n {row['points (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
                 fontSize=15,
                 subtitleFontSize=14,
             ),
@@ -6680,74 +4784,184 @@ def _(
 
     if honest_view.value.startswith("A"):
         _lesson = (
-            f"**$R^2$ climbed from {_rows[0]['R²']:.2f} to {_rows[-1]['R²']:.2f} and no new information entered "
-            f"the room.** The last panel has {_rows[-1]['dots (n)']} dots and a story you could put on a slide."
-        )
-        _more = mo.md(
-            f"""
-    Every panel is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
-    strengthen a relationship, it **deletes the disagreement** that was telling you the
-    relationship is weak.
-
-    This is why a goodness-of-fit number is meaningless without its sample size. Always read $R^2$
-    and $n$ together, which is why every panel prints both. The dashboard's *What goes with a good
-    rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
-            """
+            f"**$R^2$ rose from {_rows[0]['R²']:.2f} to {_rows[-1]['R²']:.2f} without any new information.** The last "
+            f"panel has only {_rows[-1]['points (n)']} points and suggests a much stronger relationship than the "
+            "individual sales support: averaging removes the variance that showed the relationship is weak."
         )
     elif honest_view.value.startswith("B"):
         _down = [_c for _c, _row in zip(_cats, _rows[1:], strict=True) if _row["slope (rating per CHF 10k)"] < 0]
         _up = [_c for _c in _cats if _c not in _down]
         _lesson = (
-            f"**The pooled line does not describe the groups.** Pooled, the slope is positive. Inside "
-            f"{' and '.join(_down)} it points the other way (red); only {' and '.join(_up)} still slopes upward."
-        )
-        _more = mo.md(
-            f"""
-    The upward pooled line is mostly describing the gaps **between** categories: Services happen to
-    be expensive and well rated, while Hardware is mid-priced and rated worst.
-
-    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here it
-    reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap. Three
-    groups' worth of difference, wearing three thousand dots' worth of authority.
-            """
+            f"**The pooled line does not describe the groups.** Pooled, the slope is positive. Within "
+            f"{' and '.join(_down)} it is negative (red); only {' and '.join(_up)} still has a positive slope. The "
+            "pooled slope mainly reflects the differences between the categories (related to Simpson's paradox)."
         )
     else:
         _lesson = (
-            "**One group out of three decided the direction of the answer.** Remove Services and the slope "
-            "flips sign, and $R^2$ barely moves."
-        )
-        _more = mo.md(
-            """
-    $R^2$ tells you how tightly the dots hug the line. It never tells you whether the line was the
-    right line to draw, and it will not warn you when one group is carrying the entire result.
-            """
+            "**One group out of three determines the direction of the result.** Without Services, the slope "
+            "changes sign, while $R^2$ barely changes: it does not reveal that a single group drives the result."
         )
 
     mo.vstack(
         [
-            mo.md("### Try it: Three Ways to Change the Answer Without Changing the Data"),
-            mia_asks("Does spending more make customers happier? I need one chart for the board."),
+            mo.md("### Three Analysis Choices That Change the Result Without Changing the Data"),
             in_plain(
-                f"Every view below uses the same {_rows[0]['dots (n)']:,} real sales and the same question: rating "
-                "against CHF spent. Only the way we look changes. Each panel prints its number of dots (n), its R² "
+                f"Every variant below uses the same {_rows[0]['points (n)']:,} sales and the same question: rating "
+                "against CHF spent. Only the analysis changes. Each panel reports its number of points (n), its R² "
                 "and its slope."
             ),
             honest_view,
             mo.md(_trick),
-            chart_or_table(_panels, _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"),
+            chart_or_table(_panels, _rows, label=f"Same {_rows[0]['points (n)']:,} sales, same question"),
             mo.md(_lesson).callout(kind="warn"),
-            mo.accordion(
-                {
-                    "Why it happens": mo.vstack(
-                        [
-                            _more,
-                            mo.md(
-                                "*The lab reads the seed files directly, a notebook shortcut past the API; "
-                                "the dashboard asks the API.*"
-                            ),
-                        ]
-                    )
-                }
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion: Presentation</h3>
+      <details>
+        <summary><strong>Q1:</strong> The dashboard's form already rejects 0 units. Why does the API validate again?</summary>
+        <p><strong>Answer:</strong> A partner's script calls the API directly, with <code>curl</code> or its own
+        code, and never passes the form. A rule enforced only in the dashboard can be bypassed. The form repeats
+        it for convenience: immediate feedback for the user, without a round trip.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> When is Streamlit not a good choice?</summary>
+        <p><strong>Answer:</strong> When many users need a custom, highly interactive interface, or when parts of a
+        page must update independently: every interaction reruns the whole script. Dash, with its callbacks, or a
+        React frontend on top of the API then fits better.</p>
+      </details>
+      <details>
+        <summary><strong>Q3:</strong> A slide shows a closely fitting line and a high R². What should be asked first?</summary>
+        <p><strong>Answer:</strong> What one point represents, and how many points there are. Averaging the same sales
+        into a few groups turns a weak per-sale relationship into a close fit, without any new information.</p>
+      </details>
+    </div>
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.vstack(
+        [
+            mo.md(
+                """
+    ### Part 4 Summary
+
+    - A frontend presents data and collects input; the rules remain in the API, which every client must pass.
+    - Streamlit reruns a script, marimo reruns dependent cells, Dash calls callbacks; Flask and React require
+      web development skills.
+    - The choice depends on who builds and maintains the app, the layout control required and the audience.
+    - Aggregating, stratifying or excluding a group can change a finding without changing the data: the unit of
+      analysis and the number of points must be reported.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
+    ### Next: the Wrap-up
+
+    One question, followed through all three tiers.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    _tiers = [
+        (
+            "data",
+            "SQL on Parquet (Part 2)",
+            "sql",
+            """
+SELECT r.name AS region, sum(s.total_price) AS revenue
+FROM 'sales.parquet' s
+JOIN 'countries.parquet' c USING (country_id)
+JOIN 'sales_regions.parquet' r USING (region_id)
+GROUP BY region
+""",
+        ),
+        (
+            "logic",
+            "an endpoint in FastAPI (Part 3)",
+            "python",
+            """
+@app.get("/revenue")
+def revenue_per_region() -> list[dict]:
+    rows = duckdb.sql(SQL).fetchall()
+    return [{"region": r, "revenue": v} for r, v in rows]
+""",
+        ),
+        (
+            "presentation",
+            "a chart in Streamlit (Part 4)",
+            "python",
+            """
+revenue = requests.get(f"{API}/revenue", timeout=5).json()
+st.bar_chart(pd.DataFrame(revenue), x="region", y="revenue")
+""",
+        ),
+    ]
+    _columns = [
+        mo.vstack(
+            [
+                mo.Html(
+                    f'<div class="key-q tier-{_tier}" style="padding: 10px 16px">'
+                    f'<span class="tier-badge">{_tier} tier</span> <strong>{_title}</strong></div>'
+                ),
+                mo.md(f"```{_lang}\n{_code.strip()}\n```"),
+            ],
+            gap=0.4,
+        )
+        for _tier, _title, _lang, _code in _tiers
+    ]
+    mo.vstack(
+        [
+            mo.md("### Wrap-up: One Question Through Three Tiers"),
+            mo.md("*How does revenue per region get from the sales file onto a dashboard?*"),
+            mo.hstack(_columns, widths="equal", gap=1.5),
+            mo.md(
+                '<p class="vis-caption">Each tier uses the formats and interfaces of this lecture: Parquet and SQL in the '
+                "data tier, HTTP and JSON in the logic tier, a Python framework in the presentation tier. About a dozen "
+                "lines per tier are enough for a working end-to-end prototype.</p>"
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo, tier_map):
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Wrap-up: The Three-Tier Architecture Revisited</h3>
+      {tier_map}
+      <p class="vis-caption">Each tier communicates only with its neighbour, so any one of them can be
+      replaced without changing the others.</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-key">1</div><div class="tile-title">Correctness</div>
+          <p>A property of the design, not of a tool; established first.</p></div>
+        <div class="tile"><div class="tile-key">2</div><div class="tile-title">Performance</div>
+          <p>Optimised once correctness is established.</p></div>
+        <div class="tile"><div class="tile-key">3</div><div class="tile-title">Usability</div>
+          <p>Results presented clearly and without distortion.</p></div>
+      </div>
+    </div>
+                """
             ),
         ],
         gap=0.6,
@@ -6759,128 +4973,25 @@ def _(
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — Honest Charts</h3>
-      <details>
-        <summary><strong>Q1:</strong> A slide shows a tight line and a high R². What do you ask first?</summary>
-        <p><strong>Answer:</strong> What one dot is, and how many there are. View A turns the same sales from a
-        weak per-sale relationship into a tight line of category averages, with no new information.</p>
-      </details>
-      <details>
-        <summary><strong>Q2:</strong> When is it fair to drop a category?</summary>
-        <p><strong>Answer:</strong> When the reason is stated before you look at the result (a different
-        business, a data error), and both answers are shown. Dropping a group because it spoils the story is
-        exactly how view C reverses the finding.</p>
-      </details>
+      <h3>Wrap-up: Key Takeaways</h3>
+      <ol class="question-list" style="font-size: 1.15rem; gap: 10px">
+        <li class="tier-data"><strong>Formats:</strong> CSV and JSON are readable text; Avro, Parquet and Arrow are
+        binary and typed. Parquet suits analytics, Avro streams, Arrow in-memory exchange; Pickle only trusted data.</li>
+        <li class="tier-data"><strong>Storage:</strong> a column layout reads only the needed columns and compresses
+        well; compression trades CPU time for fewer bytes.</li>
+        <li class="tier-data"><strong>Queries:</strong> DuckDB runs SQL directly on files; schema-on-write rejects
+        invalid data early, schema-on-read fails silently.</li>
+        <li class="tier-data"><strong>Transactions:</strong> concurrent read-modify-write cycles on files lose updates;
+        transactions make changes atomic and isolated.</li>
+        <li class="tier-logic"><strong>APIs:</strong> a request is a verb and a URL, the response a status code and JSON.
+        <code>requests</code> retrieves data; FastAPI and Pydantic serve and validate it.</li>
+        <li class="tier-presentation"><strong>Presentation:</strong> Streamlit, marimo and Dash differ in how they react
+        to input; the choice depends on team, layout and audience. Analysis choices change what a chart shows.</li>
+      </ol>
+      <p class="vis-caption">Practice: exercises 1–2 (marimo) · 3–4 (CSV and Parquet) · 5–6 (compression) ·
+      7–8 (building and calling an API), in <code>sw03_lecture_exercises.py</code>.</p>
     </div>
     """)
-    return
-
-
-@app.cell
-def _(ch10_fit, mo, shop_sales):
-    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    ### Chapter 10 Conclusion
-
-    - Read a slope with its ± range, and $R^2$ with its $n$.
-    - $R^2$ says how close single sales sit to the line, not whether a trend exists.
-    - Averaging, splitting or dropping a group can reverse a finding without changing one row: say which you did.
-    - For Mia's board: one dot per sale, the slope with its ±, and $n$. The rating rises
-      {_beta:.3f} ± {2 * _se:.3f} per CHF 10,000 ($R^2$ {_r2:.2f}), and most of that is Services being both
-      dear and well rated.
-                """
-            ).callout(kind="success"),
-            mo.md(
-                """
-    ### Next: the Wrap-up
-
-    Mia asked ten questions today. One slide answers all ten, and one more puts them back on the map.
-                """
-            ).callout(kind="neutral"),
-        ],
-        gap=1,
-    )
-    return
-
-
-@app.cell
-def _(ch10_fit, mo, shop_sales):
-    _beta, _alpha, _se, _r2 = ch10_fit(list(shop_sales["total_price"] / 1e4), list(shop_sales["customer_rating"]))
-    _hardware = shop_sales[shop_sales["category"] == "Hardware"]
-    _hw_beta = ch10_fit(list(_hardware["total_price"] / 1e4), list(_hardware["customer_rating"]))[0]
-    _answers = [
-        ("data", "Locks", "Both reps read the same count and each saved it + 1: 9 orders booked, 8 counted. A lock or "
-         "one transaction makes read-and-save one step."),
-        ("data", "Formats", "Parquet: it carries the types, so store code 007 stays text. CSV keeps characters only, and "
-         "the reader guessed a number."),
-        ("data", "Layout", "Because the file stores sales row by row. Stored by column, as Parquet does, the total reads "
-         "only <code>total_price</code>."),
-        ("data", "Compression", "Yes: gzip keeps 35% of the sales CSV's bytes and unpacks it to the exact cent. "
-         "Rounding the prices would shrink it more, and lose cents."),
-        ("data", "DuckDB", "Yes: DuckDB runs SQL straight on the Parquet files and reads only the columns and rows the "
-         "query needs."),
-        ("logic", "REST", "Over HTTP: a verb and a path (<code>GET /sales</code>), and a status code that says who "
-         "must act."),
-        ("logic", "Pydantic", "A Pydantic model at the door: rating 9 and 0 units come back as one 422 that lists "
-         "both, before our code runs."),
-        ("logic", "FastAPI", "They open <code>/docs</code>: FastAPI writes it from the same models that check every "
-         "request."),
-        ("presentation", "Frontends", "Streamlit: our Python team ships it fast, and the API keeps every rule."),
-        ("presentation", "Honest charts", f"Barely: {_beta:+.3f} rating per CHF 10,000 (R² {_r2:.2f}), and inside "
-         f"Hardware it {'falls' if _hw_beta < 0 else 'rises'}. Show the board each sale, the ± and n."),
-    ]
-    _items = "".join(
-        f'<li class="tier-{_tier}"><strong>{_topic}</strong>: {_text}</li>' for _tier, _topic, _text in _answers
-    )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Wrap-up: Mia's Ten Questions, Answered</h3>
-      <ol class="mia-list" style="font-size: 1.2rem; gap: 12px">{_items}</ol>
-      <p class="vis-caption">Blue: the sales files (data tier). Pink: the sales API (logic tier). Orange: Mia's
-      dashboard (presentation tier).</p>
-    </div>
-        """
-    )
-    return
-
-
-@app.cell
-def _(mo, tier_map):
-    _more = mo.md(
-        """
-    Move the sales from Parquet files into a DuckDB database and only the storage code in
-    `sw03_demo_api.py` changes (the file names in `TABLES` and `reset`, `read`, `write`), not one
-    endpoint. Swap Streamlit for React and neither lower tier notices.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Wrap-up: the Map, Filled In</h3>
-      {tier_map}
-      <p class="vis-caption">Each tier only talks to its neighbour, so any one can be replaced without
-      rewriting the others.</p>
-      <div class="tiles">
-        <div class="tile"><div class="tile-key">1</div><div class="tile-title">Correctness</div>
-          <p>Designed in, not bought with a tool. Get it first.</p></div>
-        <div class="tile"><div class="tile-key">2</div><div class="tile-title">Performance</div>
-          <p>Then make it fast.</p></div>
-        <div class="tile"><div class="tile-key">3</div><div class="tile-title">Usability</div>
-          <p>Then make it clear, and honest.</p></div>
-      </div>
-    </div>
-                """
-            ),
-            mo.accordion({"What replacing one tier would touch": _more}),
-        ],
-        gap=0.6,
-    )
     return
 
 
@@ -6888,7 +4999,7 @@ def _(mo, tier_map):
 def _(mo):
     mo.vstack(
         [
-            mo.md("## Some Useful Links"),
+            mo.md("## Further Reading and Documentation"),
             mo.md("""
     <div class="tiles">
       <div class="tile tier-data"><div class="tile-title">Data tier</div>
