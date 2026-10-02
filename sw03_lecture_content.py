@@ -1787,8 +1787,9 @@ def _(chapter_intro, mo):
             mo.md("## 3. Column-Based vs Row-Based Storage"),
             chapter_intro(
                 "data",
-                "Is read work spent on data the query does not need?",
-                "Chapter 2 picked a format; now we choose how its bytes are arranged on disk.",
+                '"Total revenue" reads one column. Why does it read the whole file?',
+                "The same sales can sit on disk sale by sale or field by field, and that choice decides how much "
+                "of the file a question has to read.",
             ),
         ],
         gap=1,
@@ -1799,128 +1800,152 @@ def _(chapter_intro, mo):
 @app.cell
 def _(mo):
     ch3_query = mo.ui.radio(
-        options=["Show me sale 2,914", "Total revenue", "Revenue in January 2026"],
+        options=["Total revenue", "Show me sale 3,082", "Revenue in January 2026"],
         value="Total revenue",
-        label="Ask the shop:",
+        label="Mia asks:",
         inline=True,
     )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Row Store vs Column Store: the Shoebox and the Ledger
-
-    A shop keeps its sales twice: a **shoebox** of till receipts, one slip per sale, and a **ledger**
-    with one page per field. Pick a question and watch what each one has to read.
-                """
-            ),
-            ch3_query,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
     return (ch3_query,)
 
 
 @app.cell
-def _(ch3_query, diagram, mo):
+def _(ch3_query, diagram, in_plain, mo, shop_sales):
     _fields = ["id", "date", "product", "country", "units", "price", "rating"]
-    _sales = list(range(2911, 2919))
-    # (sales the question needs, fields it needs); a filter on the date needs the date of every sale
-    _rows, _cols = {
-        "Show me sale 2,914": ([2914], _fields),
-        "Total revenue": (_sales, ["price"]),
-        "Revenue in January 2026": (_sales, ["date", "price"]),
-    }[ch3_query.value]
+    _sales = list(range(3079, 3085))  # the last two sales of December 2025, then the first four of January 2026
+    _first_jan, _lookup = 3081, 3082
+    _q = ch3_query.value
+
+    def _needed(sale, field):
+        """Does Mia's question use this field of this sale?"""
+        if _q == "Total revenue":
+            return field == "price"
+        if _q == "Revenue in January 2026":  # every date, to find January; the price of January's sales
+            return field == "date" or (field == "price" and sale >= _first_jan)
+        return sale == _lookup
+
+    def _row_reads(sale, field):
+        """A slip is picked up whole: every field of a sale the question touches is read."""
+        return any(_needed(sale, _f) for _f in _fields)
+
+    def _col_reads(sale, field):
+        """A total reads a page top to bottom; a lookup jumps to one line of every page."""
+        if _q.startswith("Show me"):
+            return sale == _lookup
+        return any(_needed(_s, field) for _s in _sales)
+
     _cls = {"used": "dg-tier", "wasted": "dg-hot", "idle": "dg-box"}
 
-    def _cell(x, y, state):
+    def _cell(x, y, reads, sale, field):
+        state = "used" if _needed(sale, field) else "wasted" if reads(sale, field) else "idle"
         opacity = ' opacity="0.45"' if state == "idle" else ""
         return f'<rect class="{_cls[state]}" x="{x}" y="{y}" width="52" height="26" rx="4"{opacity}/>'
 
-    # The shoebox: one slip per sale. A slip is picked up whole, so every field on it is read.
-    _box = ['<text x="0" y="20" font-weight="700">Shoebox: row layout</text>']
-    _box += [f'<text class="dg-muted" x="{88 + _j * 56}" y="54" text-anchor="middle">{_f}</text>' for _j, _f in enumerate(_fields)]
+    _parts = [
+        '<text x="0" y="20" font-weight="700">Row layout: one slip per sale</text>',
+        '<text x="600" y="20" font-weight="700">Column layout: one page per field</text>',
+    ]
+    for _j, _f in enumerate(_fields):
+        _parts.append(f'<text class="dg-muted" x="{134 + _j * 56}" y="54" text-anchor="middle">{_f}</text>')
+        _parts.append(f'<text class="dg-muted" x="{670 + _j * 59}" y="54" text-anchor="middle">{_f}</text>')
+        _taken = any(_col_reads(_s, _f) for _s in _sales)
+        _parts.append(
+            f'<rect class="{"dg-tier" if _taken else "dg-box"}" x="{642 + _j * 59}" y="62" width="56" '
+            f'height="{len(_sales) * 38 + 4}" rx="6" fill-opacity="0.35"/>'
+        )
     for _i, _sale in enumerate(_sales):
         _y = 66 + _i * 38
-        _picked = _sale in _rows
-        _box.append(f'<rect class="{"dg-tier" if _picked else "dg-box"}" x="58" y="{_y}" width="400" height="34" rx="6" fill-opacity="0.35"/>')
-        _box.append(f'<text class="dg-muted" x="50" y="{_y + 22}" text-anchor="end">{_sale}</text>')
-        _box += [
-            _cell(62 + _j * 56, _y + 4, ("used" if _f in _cols else "wasted") if _picked else "idle")
-            for _j, _f in enumerate(_fields)
-        ]
+        _picked = _row_reads(_sale, "id")
+        _parts.append(f'<rect class="{"dg-tier" if _picked else "dg-box"}" x="104" y="{_y}" width="400" height="34" rx="6" fill-opacity="0.35"/>')
+        _parts.append(f'<text class="dg-muted" x="96" y="{_y + 22}" text-anchor="end">{_sale}</text>')
+        _parts.append(f'<text class="dg-muted" x="632" y="{_y + 22}" text-anchor="end">{_sale}</text>')
+        _parts += [_cell(108 + _j * 56, _y + 4, _row_reads, _sale, _f) for _j, _f in enumerate(_fields)]
+        _parts += [_cell(644 + _j * 59, _y + 4, _col_reads, _sale, _f) for _j, _f in enumerate(_fields)]
+    # where January starts, across both layouts
+    _jan_y = 66 + _sales.index(_first_jan) * 38 - 2
+    _parts.append(f'<path d="M0 {_jan_y} H 1060" style="stroke: var(--ink-muted); stroke-width: 1.5; stroke-dasharray: 6 6"/>')
+    _parts.append('<text class="dg-muted" x="0" y="88">Dec</text>')
+    _parts.append(f'<text class="dg-muted" x="0" y="{_jan_y + 24}">Jan</text>')
 
-    # The ledger: one page per field. Only the pages the question needs come down, at the lines it needs.
-    _ledger = ['<text x="560" y="20" font-weight="700">Ledger: column layout</text>']
-    for _j, _f in enumerate(_fields):
-        _x = 600 + _j * 64
-        _taken = _f in _cols
-        _ledger.append(f'<text class="dg-muted" x="{_x + 29}" y="54" text-anchor="middle">{_f}</text>')
-        _ledger.append(f'<rect class="{"dg-tier" if _taken else "dg-box"}" x="{_x}" y="62" width="58" height="248" rx="6" fill-opacity="0.35"/>')
-        _ledger += [_cell(_x + 3, 66 + _i * 30, "used" if _taken and _sale in _rows else "idle") for _i, _sale in enumerate(_sales)]
-    _ledger += [f'<text class="dg-muted" x="590" y="{84 + _i * 30}" text-anchor="end">{_sale}</text>' for _i, _sale in enumerate(_sales)]
-
-    _used = len(_rows) * len(_cols)
-    _row_read, _col_read = len(_rows) * len(_fields), _used
+    _used = sum(_needed(_s, _f) for _s in _sales for _f in _fields)
+    _row_read = sum(_row_reads(_s, _f) for _s in _sales for _f in _fields)
+    _col_read = sum(_col_reads(_s, _f) for _s in _sales for _f in _fields)
+    _slips = sum(_row_reads(_s, "id") for _s in _sales)
+    _pages = sum(any(_col_reads(_s, _f) for _s in _sales) for _f in _fields)
+    _tally_y = 66 + len(_sales) * 38 + 32
 
     def _tally(x, grabbed, read):
         hot = ' class="dg-hot"' if read > _used else ""
-        return (
-            f'<text x="{x}" y="400">{grabbed} · reads <tspan font-weight="700"{hot}>{read} fields</tspan>'
-            f" to use {_used}</text>"
-        )
+        return f'<text x="{x}" y="{_tally_y}">{grabbed} · reads <tspan font-weight="700"{hot}>{read} fields</tspan> to use {_used}</text>'
 
-    _legend = "".join(
-        f'<rect class="{_cls[_state]}" x="{_x}" y="424" width="22" height="16" rx="3"/>'
-        f'<text class="dg-muted" x="{_x + 30}" y="437">{_label}</text>'
+    _parts.append(_tally(0, f"picks up {_slips} slip{'s' if _slips > 1 else ''}", _row_read))
+    _parts.append(_tally(600, f"opens {_pages} page{'s' if _pages > 1 else ''}", _col_read))
+    _parts += [
+        f'<rect class="{_cls[_state]}" x="{_x}" y="{_tally_y + 22}" width="22" height="16" rx="3"/>'
+        f'<text class="dg-muted" x="{_x + 30}" y="{_tally_y + 35}">{_label}</text>'
         for _x, _state, _label in [(0, "used", "needed"), (130, "wasted", "read, not needed"), (330, "idle", "left alone")]
-    )
+    ]
     _picture = diagram(
-        "".join(_box + _ledger)
-        + _tally(0, f"picks up {len(_rows)} slip{'s' if len(_rows) > 1 else ''}", _row_read)
-        + _tally(560, f"takes down {len(_cols)} page{'s' if len(_cols) > 1 else ''}", _col_read)
-        + _legend,
+        "".join(_parts),
         width=1060,
-        height=450,
-        label=f"{ch3_query.value}: the shoebox picks up {len(_rows)} slips and reads {_row_read} fields; "
-        f"the ledger takes down {len(_cols)} pages and reads {_col_read} fields; the question needs {_used}.",
+        height=_tally_y + 44,
+        label=f"{_q}: on six sales, the row layout picks up {_slips} slips and reads {_row_read} fields; the column "
+        f"layout opens {_pages} pages and reads {_col_read} fields; the question needs {_used}.",
         tier="data",
     )
+
+    # The same counts on the whole file, and Mia's answer.
+    _n = len(shop_sales)
+    _jan = shop_sales[shop_sales["sale_date"].dt.strftime("%Y-%m") == "2026-01"]
+    _one = shop_sales[shop_sales["sale_id"] == _lookup].iloc[0]
+    if _q == "Total revenue":
+        _notice = (
+            f"**What to notice:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
+            f"**{_n:,}**: just the prices. Mia's answer: CHF {shop_sales['total_price'].sum():,.2f}."
+        )
+    elif _q == "Revenue in January 2026":
+        _notice = (
+            f"**What to notice:** on all {_n:,} sales the row layout reads **{_n * 7:,}** fields, the column layout "
+            f"**{_n * 2:,}** (every date, every price) to use {_n + len(_jan):,}. Mia's answer: "
+            f"CHF {_jan['total_price'].sum():,.2f} from {len(_jan)} sales."
+        )
+    else:
+        _notice = (
+            "**What to notice:** one sale is the row layout's home game. All 7 fields lie on one slip, while the column layout "
+            f"opens 7 pages for one line each. Sale {_lookup:,}: {_one['sale_date'].day} {_one['sale_date']:%B %Y}, {_one['product']}, "
+            f"{_one['country']}, {_one['units_sold']} units, CHF {_one['total_price']:,.2f}."
+        )
+
     _story = mo.md(
         """
-    **The shoebox.** Every sale is one till receipt: sale number, date, product, country, units,
-    price and rating printed together on one slip. To answer *what did we take in January 2026?*
-    you pick up all 3,360 slips one at a time, read the date, read the price, and put down the
-    other five fields untouched. That is a **row store**, and it is exactly the right shape for
-    *show me sale 2,914*: one slip, one grab. Row stores suit OLTP (Online Transaction
-    Processing): point lookups and updates of whole records.
+    **The shoebox.** Every sale is one till receipt: number, date, product, country, units, price and
+    rating printed together on one slip. To total January you pick up every slip, read the date and
+    the price, and put the other five fields down unread. That is a **row store**, and it is exactly
+    right for *show me sale 3,082*: one slip, one grab. Row stores suit OLTP (Online Transaction
+    Processing): booking, looking up and correcting single records, like the sales reps' order system.
 
-    **The ledger.** The same sales copied into a bookkeeper's ledger, one field per page. The same
-    question now means taking down two pages and leaving the other five on the shelf. That is a
-    **column store**: right for scans, aggregates and compression, wrong for *show me sale 2,914*,
-    which is now line 2,914 of seven different pages.
+    **The ledger.** The same sales copied into a ledger, one field per page. A total now means taking
+    down one or two pages and leaving the rest on the shelf. That is a **column store**: right for
+    totals over many sales and for compression, wrong for *show me sale 3,082*, which is now one line
+    on seven different pages.
 
-    *Two things the picture does not show.* The ledger pages are written in shorthand, so they are
-    not all the same size, which is chapter 4. And the ledger is not one endless page per field,
-    which comes right after the benchmark.
+    *Two things the picture does not show.* The ledger pages are written in shorthand, so they are not
+    all the same size: chapter 4. And a real ledger is cut into sections with an index at the back:
+    two slides from here.
         """
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      {_picture}
-      <p class="vis-caption">Same sales, same shop: <strong>the cost of a question depends on how the paper
-      is arranged.</strong></p>
-    </div>
-                """
+            mo.md("### Two Ways to Lay Out the Same Sales"),
+            in_plain(
+                "A file is one long line of bytes, so the sales have to go in some order. A **row layout** writes "
+                "one whole sale after another, like a box of till receipts (CSV, Avro, most databases). A **column "
+                "layout** writes one field after another, all 3,360 dates, then all 3,360 prices, like a ledger "
+                "with one page per field (Parquet)."
             ),
-            mo.md(
-                "A scan of $N$ rows that needs $k$ of $C$ columns reads "
-                "$\\text{IO}_{\\text{row}} \\approx N \\times C$ in a row store, "
-                "$\\text{IO}_{\\text{col}} \\approx N \\times k$ in a column store."
-            ),
+            ch3_query,
+            _picture,
+            mo.md(_notice),
+            mo.md("**In short:** a total over $N$ sales reads $N \\times 7$ fields in a row layout, $N \\times$ the fields it needs in a column layout."),
             mo.accordion({"The shoebox and the ledger, told in full": _story}),
         ],
         gap=0.6,
@@ -1930,63 +1955,77 @@ def _(ch3_query, diagram, mo):
 
 @app.cell
 def _(mo):
-    n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Rows (thousands)", show_value=True)
+    n_rows = mo.ui.slider(250, 1000, step=250, value=1000, label="Sales in memory (thousands)", show_value=True, debounce=True)
     run_storage = mo.ui.run_button(label="Run storage benchmark", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Benchmark: One Column, Two Layouts"),
-            mo.md("The same random numbers kept twice in memory, record by record and column by column."),
-            mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
     return n_rows, run_storage
 
 
 @app.cell
-def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, tier_chart):
+def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, shop_sales, tier_chart):
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: Total Revenue From a Row Layout and a Column Layout"),
+            mo.md(
+                "Our 3,360 real sales, repeated until there are up to a million (so the times are long enough to "
+                "measure), kept twice in memory: sale by sale and field by field. Each run adds up one field, the "
+                "price, while every sale carries 2, 4, 7 (our sales file) or 10 fields (list price, category and "
+                "region joined in)."
+            ),
+            mo.hstack([n_rows, run_storage], justify="start", align="center", gap=2),
+        ],
+        gap=0.6,
+    )
     mo.stop(
         not run_storage.value,
-        mo.md(
-            "**Predict first:** give every record more columns. Which layout slows down when you sum one of them? "
-            "Then click **Run storage benchmark**."
-        ).callout(kind="neutral"),
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** as every sale carries more fields, which layout gets slower at adding up the "
+                    "prices? Then click **Run storage benchmark**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
+    # The price first, then the rest of the sale row, then three fields joined in from products and countries.
+    _fields = ["total_price", "sale_id", "sale_date", "product_id", "country_id", "units_sold", "customer_rating", "list_price", "category_id", "region_id"]
+    _real = shop_sales[_fields].assign(sale_date=shop_sales["sale_date"].astype("int64")).to_numpy(dtype=float)
+    _n = n_rows.value * 1000
+    _all = np.tile(_real, (-(-_n // len(_real)), 1))[:_n]  # the real sales, repeated to n rows
     _operations = {
-        "Count c0 > 0.75": lambda t: np.count_nonzero(t[:, 0] > 0.75),
-        "Sum c0": lambda t: t[:, 0].sum(),
+        "Total revenue (sum of prices)": lambda t: t[:, 0].sum(),
+        "Big deals (count of sales over CHF 50,000)": lambda t: np.count_nonzero(t[:, 0] > 50_000),
     }
     _results = []
-    for _cols in (2, 4, 8, 16):
-        # The same numbers stored twice in memory, like the shoebox and the ledger.
-        _row_store = np.random.default_rng(7).random((n_rows.value * 1000, _cols))  # C order: each record contiguous
-        _col_store = np.asfortranarray(_row_store)  # F order: each column contiguous
+    for _cols in (2, 4, 7, 10):
+        _row_store = np.ascontiguousarray(_all[:, :_cols])  # C order: each sale's fields side by side
+        _col_store = np.asfortranarray(_row_store)  # F order: each field's values side by side
         for _operation, _fn in _operations.items():
-            # best of 5: each operation is sub-millisecond, so a stray hiccup would dominate
+            # best of 5: each operation takes milliseconds, so a stray hiccup would dominate
             _row_ms = best_seconds(_fn, _row_store, repeat=5) * 1000
             _col_ms = best_seconds(_fn, _col_store, repeat=5) * 1000
             _results.append(
                 {
-                    "operation": _operation,
-                    "columns (C)": _cols,
+                    "question": _operation,
+                    "fields per sale": _cols,
                     "row layout (ms)": round(_row_ms, 3),
                     "column layout (ms)": round(_col_ms, 3),
                     "column is faster by": f"{_row_ms / _col_ms:.1f}x",
                 }
             )
-    _results.sort(key=lambda r: r["operation"])  # stable: each operation's rows stay in column order
 
     _df = pd.DataFrame(_results)
     _long = _df.melt(
-        id_vars=["operation", "columns (C)"], value_vars=["row layout (ms)", "column layout (ms)"], var_name="layout", value_name="ms"
+        id_vars=["question", "fields per sale"], value_vars=["row layout (ms)", "column layout (ms)"], var_name="layout", value_name="ms"
     )
     _long["layout"] = _long["layout"].str.removesuffix(" (ms)")
-    _x = alt.X("columns (C):O", title="columns per record (C)", axis=alt.Axis(labelAngle=0))
+    _x = alt.X("fields per sale:O", title="fields per sale", axis=alt.Axis(labelAngle=0))
     _charts = []
     for _operation in _operations:
         _lines = (
-            alt.Chart(_long[_long["operation"] == _operation])
+            alt.Chart(_long[_long["question"] == _operation])
             .mark_line(point=alt.OverlayMarkDef(size=90), strokeWidth=3)
             .encode(
                 x=_x,
@@ -1994,33 +2033,39 @@ def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, 
                 color=alt.Color(
                     "layout:N", title=None, scale=alt.Scale(domain=["row layout", "column layout"], range=[TIER["hot"], TIER["data"]])
                 ),
-                tooltip=["layout:N", "columns (C):O", "ms:Q"],
+                tooltip=["layout:N", "fields per sale:O", "ms:Q"],
             )
         )
         # over each row-layout point: how many times faster the column layout was
         _speedup = (
-            alt.Chart(_df[_df["operation"] == _operation])
+            alt.Chart(_df[_df["question"] == _operation])
             .mark_text(align="right", dx=-8, dy=-12)
             .encode(x=_x, y="row layout (ms):Q", text="column is faster by:N")
         )
         _charts.append((_lines + _speedup).properties(width="container", height=260, title=_operation))
 
+    _seven = _df[(_df["fields per sale"] == 7) & (_df["question"] == next(iter(_operations)))].iloc[0]
     _why = mo.md(
         """
-    No file is written, so this is not Avro against Parquet, only the access pattern each one uses.
-    Both operations read one column. In the row layout its values sit a whole record apart, and the
-    CPU fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
-    away. In the column layout the values lie side by side and every byte fetched is used. Parquet
+    No file is written, so this is not CSV against Parquet, only the access pattern each one uses.
+    Both questions read one field. In the row layout the prices sit a whole sale apart, and the CPU
+    fetches memory in 64-byte cache lines, so it hauls in the neighbouring fields and throws them
+    away. In the column layout the prices lie side by side and every byte fetched is used. Parquet
     goes further and never reads the unused columns from disk.
         """
     )
     mo.vstack(
         [
-            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _results, label="Row vs column layout, same numbers"),
+            _top,
+            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _results, label="Row vs column layout, the same sales"),
             mo.md(
-                "Labels: how many times faster the column layout was. As $C$ grows the row layout slows and the "
-                "column layout stays put: $\\text{IO}_{\\text{row}} / \\text{IO}_{\\text{col}} = C/k$ with $k = 1$, "
-                "a direction, not an exact ratio."
+                f"**What to notice:** at 7 fields, our real sale, the column layout adds up the prices "
+                f"**{_seven['column is faster by']}** faster ({_seven['column layout (ms)']:.2f} against "
+                f"{_seven['row layout (ms)']:.2f} ms). Labels: how many times faster the column layout was."
+            ),
+            mo.md(
+                "**In short:** to use 1 of $C$ fields, the row layout reads all $C$ and the column layout 1. The gap "
+                "grows with $C$, though not exactly by $C$."
             ),
             mo.accordion({"Why: cache lines, and what Parquet adds": _why}),
         ],
@@ -2030,80 +2075,79 @@ def _(TIER, alt, best_seconds, chart_or_table, mo, n_rows, np, pd, run_storage, 
 
 
 @app.cell
-def _(SALES_SEED, box, diagram, mo, pd):
-    # The real sales in date order, cut into 420-sale sections like the audit below writes them.
+def _(SALES_SEED, box, diagram, in_plain, label_w, mo, pd):
+    # The real sales in date order, cut into row groups of 420, as the lab on the next slide writes them.
     _dates = pd.read_parquet(SALES_SEED, columns=["sale_date"])["sale_date"].sort_values().reset_index(drop=True)
-    _sections = [(_dates[_i : _i + 420].min(), _dates[_i : _i + 420].max()) for _i in range(0, len(_dates), 420)]
-    _cut = pd.Timestamp("2026-01-01")
-    _open = [_hi >= _cut for _lo, _hi in _sections]
-    _wanted = [1, 5]  # the date and price pages of the seven
+    _groups = [(_dates[_i : _i + 420].min(), _dates[_i : _i + 420].max()) for _i in range(0, len(_dates), 420)]
+    _from, _to = pd.Timestamp("2026-01-01"), pd.Timestamp("2026-01-31")
+    # The footer can only rule a row group out: its dates end before January, or start after it.
+    _open = [_hi >= _from and _lo <= _to for _lo, _hi in _groups]
+    _wanted = [1, 5]  # the date and price chunks of the seven
+    _query = "SUM(total_price) WHERE sale_date BETWEEN '2026-01-01' AND '2026-01-31'"
 
-    _parts = [box(0, 0, "avg(total_price) WHERE sale_date &gt;= '2026-01-01'", cls="dg-tier")]
     def _rect(x, y, w, h, lit):
-        """A section or a page: tier-coloured when the query opens it, faded when it stays shut."""
+        """A row group or a column chunk: tier-coloured when the query reads it, faded when it stays shut."""
         return f'<rect class="{"dg-tier" if lit else "dg-box"}" x="{x:.1f}" y="{y}" width="{w}" height="{h}" rx="3" opacity="{1 if lit else 0.45}"/>'
 
-    for _s, _lit in enumerate(_open):
-        _x = _s * 78
-        _parts.append(f'<text class="dg-muted" x="{_x + 34}" y="88" text-anchor="middle">section {_s}</text>')
-        _parts.append(_rect(_x, 98, 68, 190, _lit))
-        # seven pages per section; in an opened section only the two the query needs come out
-        _parts += [_rect(_x + 5 + _p * 8.5, 106, 7, 174, _lit and _p in _wanted) for _p in range(7)]
-    # the index card: one line per section, smallest and largest date
-    _parts.append('<rect class="dg-box" x="680" y="60" width="380" height="252" rx="10"/>')
-    _parts.append('<text x="700" y="88" font-weight="700">index card (Parquet: footer)</text>')
-    for _s, (_lo, _hi) in enumerate(_sections):
-        _y = 116 + _s * 24
-        _parts.append(f'<text x="700" y="{_y}" font-family="monospace" font-size="15">{_s}  {_lo:%Y-%m-%d} .. {_hi:%Y-%m-%d}</text>')
+    _parts = [box(0, 0, _query, cls="dg-tier")]
+    _parts.append('<text class="dg-muted" x="0" y="90">row groups of 420 sales, 7 column chunks each</text>')
+    for _g, _lit in enumerate(_open):
+        _x = _g * 78
+        _parts.append(f'<text x="{_x + 34}" y="122" text-anchor="middle" font-weight="700">{_g}</text>')
+        _parts.append(_rect(_x, 132, 68, 170, _lit))
+        _parts += [_rect(_x + 5 + _p * 8.5, 140, 7, 154, _lit and _p in _wanted) for _p in range(7)]
+    # the footer: one line per row group, its smallest and largest date
+    _parts.append('<rect class="dg-box" x="680" y="76" width="380" height="250" rx="10"/>')
+    _parts.append('<text x="700" y="104" font-weight="700">footer: min and max sale_date</text>')
+    for _g, (_lo, _hi) in enumerate(_groups):
+        _y = 132 + _g * 24
+        _parts.append(f'<text x="700" y="{_y}" font-family="monospace" font-size="15">{_g}  {_lo:%Y-%m-%d} .. {_hi:%Y-%m-%d}</text>')
         _parts.append(
-            f'<text class="{"dg-ok" if _open[_s] else "dg-muted"}" x="1044" y="{_y}" text-anchor="end">'
-            f'{"open" if _open[_s] else "skip"}</text>'
+            f'<text class="{"dg-ok" if _open[_g] else "dg-muted"}" x="1044" y="{_y}" text-anchor="end">{"open" if _open[_g] else "skip"}</text>'
         )
     _first_open = _open.index(True)
-    _parts.append('<path class="dg-edge" d="M406 22 H 870 V 54"/>')
-    _parts.append('<text class="dg-muted" x="640" y="14" text-anchor="middle">read the card first</text>')
-    _parts.append(f'<path class="dg-edge dg-ok" d="M676 {110 + _first_open * 24} H {_first_open * 78 + 74}"/>')
-    _parts.append(
-        f'<text class="dg-muted" x="0" y="314">{_open.count(False)} sections stay closed; '
-        f"each opened one gives up 2 of its 7 pages</text>"
-    )
+    _end = label_w(_query)
+    _parts.append(f'<path class="dg-edge" d="M{_end:.0f} 22 H 870 V 70"/>')
+    _parts.append(f'<text class="dg-muted" x="{(_end + 870) / 2:.0f}" y="14" text-anchor="middle">read the footer first</text>')
+    _parts.append(f'<path class="dg-edge dg-ok" d="M676 {126 + _first_open * 24} H {_first_open * 78 + 74}"/>')
     _binder = diagram(
         "".join(_parts),
         width=1060,
-        height=326,
-        label=f"A binder of {len(_sections)} sections of 420 sales, seven pages each. The index card lists each "
-        f"section's first and last date; only sections whose last date reaches 2026 are opened, and only their "
-        f"date and price pages are taken out.",
+        height=330,
+        label=f"The sales in {len(_groups)} row groups of 420, seven column chunks each. The footer lists each row "
+        "group's first and last date; only row groups whose dates can reach January 2026 are opened, and only "
+        "their date and price chunks are read.",
         tier="data",
     )
     _fences = mo.md(
         """
-    - The card can prove a section is **hopeless**. It can never prove a section is **useful**. A
-      section labelled <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened,
-      and may hold no 2026 sale at all. Min and max are a rejection test, not a search.
-    - Sections 0 to 6 are skipped not *probably* but **provably**: their latest date is earlier than
-      your earliest, so no page inside them can hold a 2026 sale.
-    - The order rows were written in is not cosmetic. Drop the sales into the binder in random order
-      and every section's card spans everything, every label is useless, and you open all eight. The
-      mechanism did not fail; you gave it nothing to work with. The next lab measures exactly that.
+    - The footer can prove a row group is **hopeless**, never that it is **useful**. A row group dated
+      <code style="white-space: nowrap">2024-03-01 .. 2026-02-27</code> must be opened, and may hold no
+      January sale at all. Min and max are a rejection test, not a search.
+    - Row groups 0 to 6 are skipped not *probably* but **provably**: their latest date is before
+      1 January 2026, so no sale inside them can be in January.
+    - The order the sales were written in is not cosmetic. Write them in random order and every row
+      group spans the whole two years, every min-max is useless, and all eight are opened. The
+      mechanism did not fail; it was given nothing to work with. The next lab measures exactly that.
         """
     )
+    _closed = _open.count(False)
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>The Binder and the Index Card</h3>
-      <p>The ledger is really a <strong>binder</strong>: sections of 420 sales (Parquet: <strong>row groups</strong>),
-      one page per field in each, and an <strong>index card</strong> at the back with each section's smallest
-      and largest value (Parquet: <strong>column statistics</strong>).</p>
-      {_binder}
-      <p class="vis-caption"><strong>That is how a program skips data it never read: it read the index card.</strong>
-      The card can only say "no match here", so the order the rows were written in decides how much it can skip.</p>
-    </div>
-                """
+            mo.md("### Inside a Parquet File: Row Groups, Column Chunks, a Footer"),
+            in_plain(
+                "Parquet cuts the ledger into sections. A **row group** is a block of sales (here 420, about three "
+                "months). Inside it, each field's values sit together in a **column chunk**. At the end of the file, "
+                "the **footer** keeps each chunk's smallest and largest value, its **min-max statistics**. A reader "
+                "looks at the footer first and skips every row group that cannot hold a match."
             ),
-            mo.accordion({"Two fences: what the card can and cannot prove": _fences}),
+            _binder,
+            mo.md(
+                f"**What to notice:** for Mia's January revenue the footer rules out {_closed} of {len(_groups)} row "
+                f"groups without opening them, and in the one left only the date and price chunks are read: "
+                f"**2 of {len(_groups) * 7} chunks**."
+            ),
+            mo.accordion({"What the footer can and cannot prove": _fences}),
         ],
         gap=0.6,
     )
@@ -2111,11 +2155,11 @@ def _(SALES_SEED, box, diagram, mo, pd):
 
 
 @app.cell
-def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mo, pd, tempfile, tier_chart):
+def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mia_asks, mo, pd, tempfile, tier_chart):
     _df = pd.read_parquet(SALES_SEED)
-    _cut = "2026-01-01"
+    _from, _to = "2026-01-01", "2026-02-01"
     _wanted = ["sale_date", "total_price"]
-    _steps = ["A: all columns", "B: 2 columns", "C: 2 columns, open sections"]
+    _steps = ["every column", "date and price only", "date and price, footer skips"]
 
     with tempfile.TemporaryDirectory() as _td:
         _ordered = Path(_td) / "date_ordered.parquet"
@@ -2126,18 +2170,19 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
         _con = duckdb.connect()
         _rows, _cards = [], {}
         _ordered_size, _shuffled_size = _ordered.stat().st_size, _shuffled.stat().st_size
-        for _label, _path in (("date-ordered", _ordered), ("shuffled", _shuffled)):
+        for _label, _path in (("sorted by date", _ordered), ("shuffled", _shuffled)):
             _md = _con.execute(
                 "SELECT row_group_id, path_in_schema, total_compressed_size, stats_min, stats_max "
                 f"FROM parquet_metadata('{_path.as_posix()}')"
             ).df()
             _two_cols = _md[_md["path_in_schema"].isin(_wanted)]
-            # The index card: a section survives only if its LATEST date reaches the cut-off.
+            # The footer: a row group survives unless its dates end before January or start after it.
             _dates = _md[_md["path_in_schema"] == "sale_date"].sort_values("row_group_id")
-            _live = _dates[_dates["stats_max"] >= _cut]["row_group_id"]
-            _cards[_label] = list(zip(_dates["stats_min"].str[:7], _dates["stats_max"].str[:7], _dates["stats_max"] >= _cut))
+            _maybe = (_dates["stats_max"] >= _from) & (_dates["stats_min"] < _to)
+            _live = _dates[_maybe]["row_group_id"]
+            _cards[_label] = list(zip(_dates["stats_min"].str[:7], _dates["stats_max"].str[:7], _maybe))
             _answer = _con.execute(
-                f"SELECT round(avg(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_cut}'"
+                f"SELECT round(sum(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_from}' AND sale_date < '{_to}'"
             ).fetchone()[0]
             _rows.append(
                 {
@@ -2145,13 +2190,13 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
                     _steps[0]: int(_md["total_compressed_size"].sum()),
                     _steps[1]: int(_two_cols["total_compressed_size"].sum()),
                     _steps[2]: int(_two_cols[_two_cols["row_group_id"].isin(_live)]["total_compressed_size"].sum()),
-                    "opened": f"{len(_live)} of {_md['row_group_id'].nunique()}",
-                    "answer": _answer,
+                    "row groups opened": f"{len(_live)} of {_md['row_group_id'].nunique()}",
+                    "January revenue (CHF)": _answer,
                 }
             )
         _con.close()
 
-    # One strip per file: every section with its date range, opened (tier) or skipped (grey).
+    # One strip per file: every row group with its date range, opened (tier) or skipped (grey).
     _strip = []
     for _r, (_label, _card) in enumerate(_cards.items()):
         _y = _r * 76
@@ -2171,22 +2216,20 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
         "".join(_strip),
         width=1060,
         height=136,
-        label=f"Date-ordered file: sections each span three months and {_rows[0]['opened']} are opened. "
-        f"Shuffled file: every section spans the whole range and {_rows[1]['opened']} are opened.",
+        label=f"File sorted by date: each row group spans three months and {_rows[0]['row groups opened']} are opened. "
+        f"Shuffled file: every row group spans the whole two years and {_rows[1]['row groups opened']} are opened.",
         tier="data",
     )
 
     _bars = pd.DataFrame([{"file": _r["file"], "read": _s, "bytes": _r[_s]} for _r in _rows for _s in _steps])
     _bars["label"] = [format_bytes(_b) for _b in _bars["bytes"]]
-    # red where the index card bought nothing: step C still reads everything step B read
-    _bars["nothing skipped"] = [
-        _s == _steps[2] and _r[_steps[2]] == _r[_steps[1]] for _r in _rows for _s in _steps
-    ]
+    # red where the footer bought nothing: the last step still reads everything the one before it read
+    _bars["nothing skipped"] = [_s == _steps[2] and _r[_steps[2]] == _r[_steps[1]] for _r in _rows for _s in _steps]
     _x = alt.X("bytes:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _bars["bytes"].max() * 1.3]))
     _charts = []
-    for _i, _file in enumerate(["date-ordered", "shuffled"]):
+    for _i, _file in enumerate(_cards):
         _base = alt.Chart(_bars[_bars["file"] == _file]).encode(
-            y=alt.Y("read:N", sort=None, title=None, axis=alt.Axis(labelLimit=260) if _i == 0 else None),
+            y=alt.Y("read:N", sort=None, title=None, axis=alt.Axis(labelLimit=280) if _i == 0 else None),
             x=_x,
             tooltip=["file:N", "read:N", "bytes:Q"],
         )
@@ -2196,36 +2239,34 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
                     color=alt.condition("datum['nothing skipped']", alt.value(TIER["hot"]), alt.value(TIER["data"]))
                 )
                 + _base.mark_text(align="left", dx=6).encode(text="label:N")
-            ).properties(width="container", height=150, title=f"{_file} file: bytes the query must read")
+            ).properties(width="container", height=150, title=f"{_file}: bytes the query must read")
         )
     _sorted, _mixed = _rows
     _notes = mo.md(
         f"""
-    - These are bytes the engine is *entitled to skip*, computed from the file's own footer, not
+    - These are bytes the reader is *allowed to skip*, worked out from each file's own footer, not
       bytes measured leaving the disk.
     - The shuffled file is also {_shuffled_size / _ordered_size - 1:.0%} larger ({_shuffled_size:,} against
-      {_ordered_size:,} bytes) from the very same rows: a preview of chapter 4, where order is itself a
+      {_ordered_size:,} bytes) from the very same sales: a preview of chapter 4, where order is itself a
       form of compression.
         """
     )
     mo.vstack(
         [
+            mo.md("### Try it: Does the Order We Write Sales In Matter?"),
+            mia_asks("What did we sell in January 2026?"),
             mo.md(
-                f"""
-    ### Mini-lab: Which Sections Did We Open?
-
-    The 3,360 real sales written twice in 420-row sections, in date order and shuffled. Each file's own
-    index card says what `avg(total_price) WHERE sale_date >= '{_cut}'` may skip.
-                """
+                "Our 3,360 sales written to Parquet twice, 420 to a row group: once sorted by date, once shuffled "
+                "into random order. Each file's footer decides which row groups the January query may skip."
             ),
             _strip_svg,
-            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _rows, label="Bytes the query must read"),
+            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _rows, label="Bytes the January query must read"),
             mo.md(
-                f"Choosing columns took the date-ordered read from **{_sorted[_steps[0]]:,}** to "
-                f"**{_sorted[_steps[1]]:,}** bytes; the index card took it to **{_sorted[_steps[2]]:,}**, and nobody "
-                f"wrote that in the query. Shuffled, the card buys **nothing**: {_mixed['opened']} opened. "
-                f"Both answer **{_sorted['answer']:,.2f}**."
-            ).callout(kind="info"),
+                f"**What to notice:** sorted by date, reading only two columns took the query from "
+                f"**{format_bytes(_sorted[_steps[0]])}** to **{format_bytes(_sorted[_steps[1]])}**, and the footer took it to "
+                f"**{format_bytes(_sorted[_steps[2]])}**. Shuffled, the footer skips **nothing** ({_mixed['row groups opened']} "
+                f"opened). Both files answer CHF {_sorted['January revenue (CHF)']:,.2f}."
+            ),
             mo.accordion({"Two honesty notes": _notes}),
         ],
         gap=0.6,
@@ -2239,19 +2280,19 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Row vs Column Storage</h3>
       <details>
-        <summary><strong>Q1:</strong> When is a row store the better choice?</summary>
-        <p><strong>Answer:</strong> Point lookups, frequent updates, and transactions on whole records (OLTP,
-        Online Transaction Processing).</p>
+        <summary><strong>Q1:</strong> The sales reps book and correct single orders all day. Row or column layout?</summary>
+        <p><strong>Answer:</strong> Row layout: each booking reads or writes one whole sale. That is OLTP (Online
+        Transaction Processing), and it is what row databases are built for. Mia's dashboard reads column files.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> How does reading only the needed columns help?</summary>
-        <p><strong>Answer:</strong> Unused columns are never read, so scans move less data. This is projection
-        pushdown: the column choice applied as early as possible.</p>
+        <summary><strong>Q2:</strong> Mia's chart shows revenue per region. Which column chunks does it read?</summary>
+        <p><strong>Answer:</strong> Two of seven: <code>total_price</code> and <code>country_id</code> (the country
+        gives the region). Reading only the columns a query names is called projection pushdown.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Why does write order matter for Parquet?</summary>
-        <p><strong>Answer:</strong> Min/max can only exclude a row group whose range misses the filter. Sorted
-        data gives narrow ranges; shuffled data gives every group the full range.</p>
+        <summary><strong>Q3:</strong> Why does the order we write sales in matter for Parquet?</summary>
+        <p><strong>Answer:</strong> The footer can only skip a row group whose min-max range misses the filter.
+        Sorted by date, each row group spans three months; shuffled, every one spans all two years.</p>
       </details>
     </div>
     """)
@@ -2259,30 +2300,41 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(SALES_SEED, mo, pq):
+    _meta = pq.ParquetFile(SALES_SEED).metadata
+    _price = sum(
+        _meta.row_group(_g).column(_c).total_compressed_size
+        for _g in range(_meta.num_row_groups)
+        for _c in range(_meta.num_columns)
+        if _meta.row_group(_g).column(_c).path_in_schema == "total_price"
+    )
+    _file = SALES_SEED.stat().st_size
+    mo.vstack(
+        [
+            mo.md(
+                f"""
     ### Chapter 3 Conclusion
 
-    - Row layouts suit record-level transactions; column layouts suit scans and aggregates.
-    - Reading only the columns you need cuts I/O.
-    - Parquet keeps min/max per row group in its footer: sorted by date, the query skips 7 of 8 row
-      groups; shuffled, none.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - **Mia's answer:** "total revenue" reads the whole file when the file is a row layout (CSV, Avro): the
+      prices sit between the other six fields of every sale. In our Parquet file it reads only the price
+      column: {_price:,} of the file's {_file:,} bytes.
+    - Row layouts suit booking and looking up single sales; column layouts suit totals over many sales.
+    - Parquet's footer keeps min-max per row group: sorted by date, January 2026 opens 1 of 8 row groups;
+      shuffled, all 8.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    A column puts similar values side by side, and similar values compress well. Next: how much
-    smaller does it get, and at what cost?
-            """
-    ).callout(kind="neutral")
+    A column puts similar values side by side: the same 3 categories, 7 products and 8 countries over and
+    over. Repetition is what compression feeds on. Next: how small can the sales history get, without
+    losing a cent?
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=1,
+    )
     return
 
 
