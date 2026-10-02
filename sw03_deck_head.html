@@ -1,0 +1,9 @@
+<!-- Fit to width: the deck is laid out for a 1120 px window and zoomed as a whole to fill any
+     other (projector, 4K screen, laptop), so every screen shows the same page. Below 840 px the
+     zoom stops at 0.75 and marimo's own layout narrows instead. marimo loads this file in run
+     mode only; `marimo edit` shows the deck unzoomed. -->
+<script>
+  const fitDeck = () => document.documentElement.style.setProperty("--deck-zoom", Math.max(0.75, innerWidth / 1120));
+  addEventListener("resize", fitDeck);
+  fitDeck();
+</script>

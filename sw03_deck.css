@@ -5,9 +5,9 @@
    theme, and light-dark() picks the matching value. Names avoid marimo's own
    variables (--accent, --border, --muted, ...), which its UI depends on. */
 :root {
-  /* marimo's layout width, widened for the projector */
-  --content-width: min(80vw, 1150px);
-  --content-width-medium: min(80vw, 1150px);
+  /* marimo's layout width: fixed, because sw03_deck_head.html zooms the whole page to the window */
+  --content-width: 1056px;
+  --content-width-medium: 1056px;
 
   --ink: light-dark(#0b1220, #e8edf4);
   --ink-soft: light-dark(#2b3a55, #c5cfdc);
@@ -22,6 +22,18 @@
   /* short on purpose: each marimo cell paints over the one above it */
   --shadow: 0 1px 2px light-dark(rgb(15 23 42 / 0.06), rgb(0 0 0 / 0.3)),
     0 4px 10px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.2));
+}
+
+/* --deck-zoom: window width / 1120, set by sw03_deck_head.html (marimo run only). The side
+   padding replaces marimo's, which grows with the real window and would eat the zoomed page. */
+#App > div {
+  zoom: var(--deck-zoom, 1);
+  padding-inline: 32px;
+}
+
+/* projector-sized prose: marimo's default is 14.4 px */
+.markdown {
+  font-size: 16px;
 }
 
 .markdown h2 {
@@ -40,6 +52,85 @@
 
 .section-card :is(h2, h3) {
   margin-top: 0;
+}
+
+/* discussion questions: click a question to reveal its answer */
+.section-card details {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.section-card summary {
+  cursor: pointer;
+}
+
+.section-card details[open] summary {
+  margin-bottom: 6px;
+}
+
+/* chapter opener drawn by chapter_intro(): tier badge, the Key Question, one line of context */
+.key-q {
+  padding: 20px 24px;
+  border: 1px solid color-mix(in srgb, var(--tier) 35%, transparent);
+  border-left: 8px solid var(--tier);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tier) 6%, var(--surface));
+}
+
+.key-q-text {
+  margin: 14px 0 6px;
+  color: var(--ink);
+  font-family: var(--heading-font);
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+
+.key-q .markdown p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* a row of tiles, one idea each: a big key (letter, icon, number) over a title and a line */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--tier, var(--brand));
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.tile-key {
+  color: var(--tier, var(--brand));
+  font-family: var(--heading-font);
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tile-title {
+  margin-top: 6px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tile p {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.tile .tile-bad {
+  color: var(--red);
 }
 
 .hero {
