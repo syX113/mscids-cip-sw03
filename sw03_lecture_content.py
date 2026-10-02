@@ -411,27 +411,9 @@ def _(chapter_intro, mo):
             mo.md("## 1. File Locks vs Databases (ACID)"),
             chapter_intro(
                 "data",
-                "When many users update shared data at the same time, does it stay correct?",
-                "The very bottom of the data tier: before a format or a layout, writes have to be correct.",
-            ),
-            mo.md(
-                """
-    **ACID**: what a database promises, and what a plain file gives you instead.
-
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity</div>
-        <p>All or nothing.</p><p class="tile-bad">File: a crash leaves half a change.</p></div>
-      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency</div>
-        <p>Rules hold before and after every change.</p><p class="tile-bad">File: no rules at all.</p></div>
-      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation</div>
-        <p>Concurrent changes act as if run one at a time.</p><p class="tile-bad">File: writers overwrite each other.</p></div>
-      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability</div>
-        <p>Committed data survives a crash.</p><p class="tile-bad">File: only after flush + fsync.</p></div>
-    </div>
-
-    **The signal to watch:** $W$ workers adding $I$ increments each should reach $E = W \\times I$.
-    The shortfall is the number of lost updates, $L = E - A$, with $A$ the value actually reached.
-                """
+                "Two reps booked an order at the same moment. Why is today's order count too low?",
+                "The very bottom of the data tier: before any format or layout, every save has to land. We lose an "
+                "order on purpose, then keep it: first with a lock, then with a database.",
             ),
         ],
         gap=1,
@@ -440,171 +422,378 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
+def _(in_plain, mo, shop_sales):
+    # The story's day: EdgeWorks' busiest day of January 2026, its last two orders booked at the same moment.
+    _per_day = shop_sales[shop_sales["sale_date"].dt.to_period("M") == "2026-01"].groupby("sale_date").size()
+    _day, ch1_day_orders = _per_day.idxmax(), int(_per_day.max())
+    _before = ch1_day_orders - 2
+    mo.vstack(
+        [
+            mo.md("### How an order goes missing from the count"),
+            in_plain(
+                "Mia's dashboard shows **orders booked today**, a number kept in one file. Every booking updates "
+                "it in three steps: **read** the number, **add** one, **save** it back. If two reps both read "
+                "before either one saves, both save the same number, and one order drops out of the count. "
+                "This is called a **lost update**."
+            ),
+            mo.md(
+                f"""
     <div class="section-card flow-card">
-      <h3>Lost Update: Who Does What, When</h3>
       <div class="lost-update-wrap">
         <div class="lost-update-grid">
           <div class="lu-header">Step</div>
-          <div class="lu-header">Worker A</div>
-          <div class="lu-header">Worker B</div>
-          <div class="lu-header">Shared counter</div>
+          <div class="lu-header">Rep A books order {_before + 1}</div>
+          <div class="lu-header">Rep B books order {_before + 2}</div>
+          <div class="lu-header">Orders today (the file)</div>
 
           <div class="lu-step">1</div>
-          <div class="lu-event lu-read">reads 41 into local copy</div>
-          <div class="lu-event lu-read">reads 41 into local copy</div>
-          <div class="lu-state">41</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-event lu-read">reads {_before}</div>
+          <div class="lu-state">{_before}</div>
 
           <div class="lu-step">2</div>
-          <div class="lu-event lu-write">writes 42</div>
-          <div class="lu-event">adds 1 to its stale 41</div>
-          <div class="lu-state">42</div>
+          <div class="lu-event lu-write">saves {_before} + 1 = {_before + 1}</div>
+          <div class="lu-event">adds 1 to the {_before} it read</div>
+          <div class="lu-state">{_before + 1}</div>
 
           <div class="lu-step">3</div>
           <div class="lu-event lu-idle">done</div>
-          <div class="lu-event lu-stale">writes stale 42</div>
-          <div class="lu-state lu-problem">42 (A's +1 overwritten)</div>
+          <div class="lu-event lu-stale">saves {_before} + 1 = {_before + 1}</div>
+          <div class="lu-state lu-problem">{_before + 1} (A's order overwritten)</div>
         </div>
       </div>
-      <div class="flow-note"><strong>Expected after 2 increments: 43.</strong> Observed: 42, so one update was lost.</div>
+      <div class="flow-note"><strong>{_day.day} {_day:%B %Y}, the busiest day that month: {ch1_day_orders} orders
+      booked, {ch1_day_orders - 1} counted.</strong> Both orders are in the order book; only the count lost one.</div>
     </div>
-    """)
+                """
+            ),
+            mo.md(
+                "**What to notice:** nobody saw an error. Each rep did the right thing; the timing did the damage. "
+                "B's save is **stale**: it is based on a number that changed after B read it."
+            ),
+            mo.md(
+                f"**In one line:** lost orders = orders booked − orders counted, here {ch1_day_orders} − "
+                f"{ch1_day_orders - 1} = 1."
+            ),
+        ],
+        gap=0.8,
+    )
+    return (ch1_day_orders,)
+
+
+@app.cell
+def _(mo):
+    ch1_sim_orders = mo.ui.slider(1, 6, value=2, label="Orders each rep books", show_value=True, debounce=True)
+    ch1_sim_timing = mo.ui.slider(1, 999, value=7, label="Timing (try another)", show_value=True, debounce=True)
+    return ch1_sim_orders, ch1_sim_timing
+
+
+@app.cell
+def _(
+    TIER,
+    alt,
+    ch1_day_orders,
+    ch1_sim_orders,
+    ch1_sim_timing,
+    chart_or_table,
+    mo,
+    pd,
+    random,
+    tier_chart,
+):
+    _start = ch1_day_orders - 2  # where the story above left the count
+    _rng = random.Random(ch1_sim_timing.value)
+    _ops = {_rep: ["read", "save"] * ch1_sim_orders.value for _rep in "AB"}
+    _read, _count, _log = {}, _start, []
+    while _ops["A"] or _ops["B"]:
+        _rep = _rng.choice([_r for _r in "AB" if _ops[_r]])
+        _action = _ops[_rep].pop(0)
+        _before = _count
+        if _action == "read":
+            _read[_rep] = _count
+        else:
+            _count = _read[_rep] + 1
+        _log.append(
+            {
+                "step": len(_log) + 1,
+                "rep": f"rep {_rep}",
+                "action": _action,
+                "count before": _before,
+                "number the rep read": _read[_rep],
+                "count after": _count,
+                "note": "stale save" if _action == "save" and _read[_rep] != _before else "",
+            }
+        )
+
+    _booked = _start + 2 * ch1_sim_orders.value
+    _df = pd.DataFrame(_log)
+    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
+    # A read shows the number it got, a save the number it left; short labels once the steps get narrow.
+    _short = len(_df) > 12
+    _df["label"] = [
+        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
+        for _a, _v in zip(_df["action"], _df["count after"], strict=True)
+    ]
+    _df["orders booked"] = _start + (_df["action"] == "save").cumsum()
+    _df["orders counted"] = _df["count after"]
+    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
+    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("rep:N", title=None, axis=alt.Axis(minExtent=60)))
+    _lanes = (
+        _lane.mark_rect(cornerRadius=8).encode(
+            color=alt.Color(
+                "kind:N",
+                title=None,
+                scale=alt.Scale(domain=["read", "save", "stale save"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
+            )
+        )
+        # fixed text colours: the fills above are the same in both themes
+        + _lane.mark_text().encode(
+            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
+        )
+    ).properties(width="container", height=110)
+    _series = ["orders counted", "orders booked"]
+    _counter = (
+        alt.Chart(_df)
+        .transform_fold(_series, as_=["series", "value"])
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=_x,
+            y=alt.Y("value:Q", title="orders today", scale=alt.Scale(zero=False), axis=alt.Axis(minExtent=60)),
+            color=alt.Color("series:N", title=None, scale=alt.Scale(domain=_series, range=[TIER["data"], TIER["muted"]])),
+            strokeDash=alt.StrokeDash("series:N", title=None, scale=alt.Scale(domain=_series, range=[[1, 0], [6, 4]])),
+        )
+        .properties(width="container", height=170)
+    )
+    _stale = int((_df["note"] == "stale save").sum())
+
+    mo.vstack(
+        [
+            mo.md("### Try it: rep A and rep B, step by step"),
+            mo.md(
+                f"Both reps start from the count of {_start} and book their orders. Every booking is two steps, "
+                "**read** the count, then **save** it plus one. The timing slider shuffles who moves when, as on "
+                "a real day: neither rep sees the other's screen."
+            ),
+            mo.hstack([ch1_sim_orders, ch1_sim_timing], widths="equal", gap=2),
+            mo.hstack(
+                [
+                    mo.stat(_booked, label="orders booked", bordered=True),
+                    mo.stat(_count, label="orders counted", bordered=True),
+                    mo.stat(_booked - _count, label="lost from the count", bordered=True),
+                ],
+                widths="equal",
+            ),
+            chart_or_table(
+                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
+                _log,
+                label="Every step, in order",
+            ),
+            mo.md(
+                f"**What to notice:** {_stale} red stale save{'s' if _stale != 1 else ''}. A save turns red when the "
+                "other rep saved between its read and its save, and it erases every order saved in that gap. "
+                "Try other timings: the count is only right when no save is stale."
+            ),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
-def _(box, diagram, mo):
-    # Three flatmates who ask for the key, one script that never does.
-    _workers = "".join(
-        box(0, _y, _label, w=300, cls=_cls)
+def _(box, diagram, in_plain, mo):
+    # Three reps who ask for the pen, one script that never does.
+    _people = "".join(
+        box(0, _y, _label, w=330, cls=_cls)
         for _y, _label, _cls in [
-            (20, "worker 1 · holds the key", "dg-tier"),
-            (92, "worker 2 · waits at the hook", "dg-box"),
-            (164, "worker 3 · waits at the hook", "dg-box"),
-            (240, "script · never asks for the key", "dg-box dg-hot"),
+            (20, "rep 1 · holds the pen, books", "dg-tier"),
+            (92, "rep 2 · waits for the pen", "dg-box"),
+            (164, "rep 3 · waits for the pen", "dg-box"),
+            (240, "import script · never asks", "dg-box dg-hot"),
         ]
     )
     _lock_map = diagram(
-        _workers
-        + box(410, 64, "one key per file", w=250, h=104, cls="dg-tier")
-        + '<text class="dg-muted" x="535" y="194" text-anchor="middle">flock(LOCK_EX): the hook</text>'
-        + box(780, 92, "counter.txt", w=200, h=48)
-        + '<path class="dg-edge dg-ok" d="M300 42 C 360 42, 350 92, 404 92"/>'
-        + '<path class="dg-edge" d="M300 114 H 404"/>'
-        + '<path class="dg-edge" d="M300 186 C 360 186, 350 140, 404 140"/>'
-        + '<path class="dg-edge dg-ok dg-flow" d="M660 116 H 774"/>'
-        + '<path class="dg-edge dg-hot" d="M300 262 H 880 V 146"/>'
-        + '<text class="dg-hot" x="590" y="250" text-anchor="middle">no flock call: walks straight in</text>',
-        width=980,
+        _people
+        + box(440, 64, "one pen per file", w=250, h=104, cls="dg-tier")
+        + '<text class="dg-muted" x="565" y="194" text-anchor="middle">the OS hands it out: flock</text>'
+        + box(820, 92, "orders_today.txt", w=200, h=48)
+        + '<path class="dg-edge dg-ok" d="M330 42 C 390 42, 380 92, 434 92"/>'
+        + '<path class="dg-edge" d="M330 114 H 434"/>'
+        + '<path class="dg-edge" d="M330 186 C 390 186, 380 140, 434 140"/>'
+        + '<path class="dg-edge dg-ok dg-flow" d="M690 116 H 814"/>'
+        + '<path class="dg-edge dg-hot" d="M330 262 H 920 V 146"/>'
+        + '<text class="dg-hot" x="625" y="250" text-anchor="middle">no flock call: saves straight away</text>',
+        width=1020,
         height=290,
-        label="Three workers queue for one key on a hook (the OS file lock); only the key holder writes to "
-        "counter.txt. A fourth script never asks for the key and writes to the file directly.",
+        label="Three reps queue for one pen (the OS file lock); only the rep holding it saves to orders_today.txt. "
+        "An import script never asks for the pen and saves to the file directly.",
         tier="data",
     )
     _more = mo.md(
         """
-    - The OS empties the pockets of anyone who leaves: a program that crashes while holding the
-      key does **not** wedge the file forever.
-    - There is a second kind of key many may hold at once, for looking but not touching
-      (`LOCK_SH`). The lab below asks for the exclusive one, `LOCK_EX`.
-    - The hook is in *one* hallway. Two computers sharing a network drive each get their own hook,
-      which is why file locks are unreliable across a network filesystem.
-    - **Where it breaks:** the rule is only as good as the flatmates. A database does not rely on
-      an agreement: every write goes through its lock, whether the program asked or not.
+    - The OS takes the pen back from a program that crashes, so a crash in the middle of a booking does
+      **not** block the file forever.
+    - There is a second kind of lock that many may hold at once, for reading but not saving (`LOCK_SH`).
+      The lab below asks for the exclusive one, `LOCK_EX`.
+    - The pen lies on *one* desk. Two computers sharing a network drive each have their own desk, which is
+      why file locks are unreliable on a network filesystem.
+    - **Where it breaks:** the rule is only as good as the people. A database does not rely on an
+      agreement: every write goes through its lock, whether the program asked or not.
         """
     )
     mo.vstack(
         [
+            mo.md("### A file lock is one booking pen at the sales desk"),
+            in_plain(
+                "A **file lock** lets one program at a time work on a file. Picture one pen at the sales desk: "
+                "only the rep holding it may update the count, and the others wait for it. The operating system "
+                "(OS) hands out the pen when a program calls `flock`, and only to programs that ask."
+            ),
+            _lock_map,
             mo.md(
-                f"""
-    <div class="section-card">
-      <h3>What a Lock Actually Is</h3>
-      <p>Four flatmates, one bathroom, <strong>no lock on the door</strong>: one key on a hook in the
-      hall, and a house rule to take it before going in.</p>
-      {_lock_map}
-      <p class="vis-caption"><strong>A file lock is an agreement, not a door.</strong> The OS hands out
-      one key per file and makes everyone else wait. A program that never asks walks straight in.</p>
-    </div>
-                """
+                "**What to notice:** the import script at the bottom. A file lock is an agreement, not a door: "
+                "a program that never asks for the pen saves anyway."
             ),
             mo.accordion({"Where the picture holds, and where it breaks": _more}),
         ],
-        gap=0.6,
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### What a database promises: ACID"),
+            in_plain(
+                "A database groups changes into a **transaction**: a few steps it carries out as one unit, then "
+                "**commits** them (keeps them all) or **rolls them back** (undoes them all). ACID names four "
+                "promises a database makes about every transaction. A plain file makes none of them."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-data">
+      <div class="tile"><div class="tile-key">A</div><div class="tile-title">Atomicity: all or nothing</div>
+        <p>Moving a sale from Europe to Africa changes both region totals, or neither.</p>
+        <p class="tile-bad">File: a crash in between drops the sale from total revenue.</p></div>
+      <div class="tile"><div class="tile-key">C</div><div class="tile-title">Consistency: rules always hold</div>
+        <p>A rule such as "units sold is at least 1" is checked on every save.</p>
+        <p class="tile-bad">File: nothing checks; a sale with 0 units is saved.</p></div>
+      <div class="tile"><div class="tile-key">I</div><div class="tile-title">Isolation: one after the other</div>
+        <p>Two reps booking at once both get counted, as if one booked after the other.</p>
+        <p class="tile-bad">File: one save overwrites the other; the count is too low.</p></div>
+      <div class="tile"><div class="tile-key">D</div><div class="tile-title">Durability: saved stays saved</div>
+        <p>A booking the rep saw confirmed survives a power cut a second later.</p>
+        <p class="tile-bad">File: only after flush and fsync, which force the bytes onto the disk.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**What to notice:** the next lab tests **I**, reps booking at once. The one after it tests **A**, "
+                "a crash halfway through a change."
+            ),
+        ],
+        gap=0.8,
     )
     return
 
 
 @app.cell
 def _(mo):
-    # Checkboxes, not a multiselect: the room sees every strategy and whether it is on.
-    STRATEGY_LABELS = {
+    # Checkboxes, not a multiselect: the room sees every way of counting and whether it is on.
+    ch1_strategy_labels = {
         "no_lock": "file, no lock",
-        "thread_lock": "file + Python lock",
-        "file_lock": "file + flock",
-        "sqlite_naive": "SQLite: read, +1, write",
-        "sqlite": "SQLite: one UPDATE",
+        "thread_lock": "file + lock in one program",
+        "file_lock": "file + OS lock (the pen)",
+        "sqlite_naive": "database: read, +1, save",
+        "sqlite": "database: one UPDATE",
     }
-    strategies = mo.ui.dictionary(
-        {key: mo.ui.checkbox(value=key != "thread_lock", label=label) for key, label in STRATEGY_LABELS.items()}
+    ch1_strategies = mo.ui.dictionary(
+        {_key: mo.ui.checkbox(value=_key != "thread_lock", label=_label) for _key, _label in ch1_strategy_labels.items()}
     )
-    workers = mo.ui.slider(2, 8, value=4, label="Workers", show_value=True)
+    ch1_reps = mo.ui.slider(2, 8, value=4, label="Sales reps booking at once", show_value=True, debounce=True)
     # Capped so the slowest setting (8 x 120 x 2 ms, paid in a queue by flock) stays near 3 s in all.
-    iterations = mo.ui.slider(20, 120, step=20, value=60, label="Increments each", show_value=True)
-    jitter = mo.ui.slider(0, 2, value=1, step=1, label="Jitter (ms)", show_value=True)
-    run_race = mo.ui.run_button(label="Run counter experiment", kind="success")
-    _notes = mo.md(
-        """
-    - **file, no lock**: plain file writes; nothing stops two workers from overlapping.
-    - **file + Python lock**: a `threading.Lock`, which only works inside one process.
-    - **file + flock**: the OS key from above, held from the read to the write.
-    - **SQLite: read, +1, write**: a real database, used the way most people first use one.
-    - **SQLite: one UPDATE**: `UPDATE counter SET value = value + 1` inside a transaction.
-
-    **Jitter** is a pause between the read and the write. It widens the gap the race lives in,
-    and a locked strategy pays it one worker at a time.
-        """
+    ch1_orders_per_rep = mo.ui.slider(10, 120, step=5, value=35, label="Orders each rep books", show_value=True, debounce=True)
+    ch1_pause = mo.ui.slider(0, 2, value=1, step=1, label="Pause between reading and saving (ms)", show_value=True, debounce=True)
+    ch1_run_race = mo.ui.run_button(label="Run the bookings", kind="success")
+    return (
+        ch1_orders_per_rep,
+        ch1_pause,
+        ch1_reps,
+        ch1_run_race,
+        ch1_strategies,
+        ch1_strategy_labels,
     )
-
-    mo.vstack(
-        [
-            mo.md("### Concurrency Demo: File vs Locks vs Database"),
-            mo.hstack([workers, iterations, jitter], widths="equal"),
-            strategies.hstack(justify="start", gap=1.5, wrap=True),
-            mo.accordion({"What each strategy does": _notes}),
-            run_race,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return STRATEGY_LABELS, iterations, jitter, run_race, strategies, workers
 
 
 @app.cell
 def _(
     Path,
-    STRATEGY_LABELS,
     TIER,
     alt,
+    ch1_orders_per_rep,
+    ch1_pause,
+    ch1_reps,
+    ch1_run_race,
+    ch1_strategies,
+    ch1_strategy_labels,
     chart_or_table,
-    iterations,
-    jitter,
     mo,
     pd,
-    run_race,
+    shop_sales,
     sqlite3,
-    strategies,
     tempfile,
     threading,
     tier_chart,
     time,
-    workers,
 ):
+    _notes = mo.md(
+        """
+    - **file, no lock**: every rep reads and saves the count file whenever they like.
+    - **file + lock in one program**: a Python `threading.Lock`, a pen only the reps inside this one program
+      can see. A second program would not wait for it.
+    - **file + OS lock (the pen)**: `flock`, held from the read to the save.
+    - **database: read, +1, save**: SQLite, but the rep reads the count, adds one in Python and saves the
+      result: the same gap as the file.
+    - **database: one UPDATE**: `UPDATE counter SET value = value + 1` in a transaction: the database reads
+      and saves in one step.
+
+    The **pause** is the time between reading the count and saving it. It widens the gap the race lives in,
+    and a locked strategy pays it one rep at a time.
+        """
+    )
+    _target = ch1_reps.value * ch1_orders_per_rep.value
+    _january = int((shop_sales["sale_date"].dt.to_period("M") == "2026-01").sum())
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: reps booking at once, five ways to keep the count"),
+            mo.md(
+                "Every rep books their orders as fast as they can, all at the same time, and each booking adds one "
+                f"to the same count. The start setting replays January 2026: 4 reps share its {_january} orders, "
+                "35 each. Tick the ways of keeping the count to compare."
+            ),
+            mo.hstack([ch1_reps, ch1_orders_per_rep, ch1_pause], widths="equal", gap=2),
+            mo.hstack(
+                [ch1_strategies.hstack(justify="start", gap=1.5, wrap=True), ch1_run_race],
+                justify="space-between",
+                align="center",
+            ),
+            mo.accordion({"What each way of keeping the count does": _notes}),
+        ],
+        gap=0.6,
+    )
     mo.stop(
-        not run_race.value,
-        mo.md(
-            "**Predict first:** which strategies will reach the dashed target line? "
-            "Then click **Run counter experiment**."
-        ).callout(kind="neutral"),
+        not ch1_run_race.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    f"**Predict first:** {ch1_reps.value} reps × {ch1_orders_per_rep.value} orders = {_target:,} "
+                    "bookings. Which ways of keeping the count reach that number? Then click **Run the bookings**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
     from concurrent.futures import ThreadPoolExecutor as _Pool
@@ -615,34 +804,34 @@ def _(
     except ImportError:  # Windows has no flock
         _fcntl = None
 
-    _workers, _increments, _jitter_s = workers.value, iterations.value, jitter.value / 1000
+    _reps, _orders, _pause_s = ch1_reps.value, ch1_orders_per_rep.value, ch1_pause.value / 1000
 
-    def _race(worker):
-        """Run `worker` in every thread at once; return the seconds until the last one finished."""
+    def _race(rep):
+        """Run `rep` in every thread at once; return the seconds until the last one finished."""
         start = time.perf_counter()
-        with _Pool(_workers) as pool:
-            for future in [pool.submit(worker) for _ in range(_workers)]:
-                future.result()  # a worker that crashed raises here instead of passing as a lost update
+        with _Pool(_reps) as pool:
+            for future in [pool.submit(rep) for _ in range(_reps)]:
+                future.result()  # a rep that crashed raises here instead of passing as a lost booking
         return time.perf_counter() - start
 
     def _file_counter(path, mode):
         # Fixed width: nobody ever reads an empty or half-written number, so the only race
-        # left is the read-modify-write gap this demo is about.
+        # left is the read-then-save gap this demo is about.
         path.write_text(f"{0:010d}")
         guard = threading.Lock() if mode == "thread_lock" else _nullcontext()
 
-        def worker():
-            for _ in range(_increments):
+        def rep():
+            for _ in range(_orders):
                 with guard, path.open("r+") as f:
                     if mode == "file_lock" and _fcntl:
                         _fcntl.flock(f, _fcntl.LOCK_EX)  # released when the file closes
                     current = int(f.read())
-                    if _jitter_s:
-                        time.sleep(_jitter_s)
+                    if _pause_s:
+                        time.sleep(_pause_s)
                     f.seek(0)
                     f.write(f"{current + 1:010d}")
 
-        return _race(worker), int(path.read_text())
+        return _race(rep), int(path.read_text())
 
     def _sqlite_counter(path, one_statement):
         con = sqlite3.connect(path)
@@ -651,93 +840,99 @@ def _(
         )
         con.close()
 
-        def worker():
+        def rep():
             conn = sqlite3.connect(path, timeout=30, isolation_level=None)
             conn.execute("PRAGMA synchronous=OFF")  # this demo is about isolation, not durability
-            for _ in range(_increments):
+            for _ in range(_orders):
                 if one_statement:
                     conn.execute("BEGIN IMMEDIATE")
                     conn.execute("UPDATE counter SET value = value + 1")
                     conn.execute("COMMIT")
                 else:
                     (current,) = conn.execute("SELECT value FROM counter").fetchone()
-                    if _jitter_s:
-                        time.sleep(_jitter_s)
+                    if _pause_s:
+                        time.sleep(_pause_s)
                     conn.execute("UPDATE counter SET value = ?", (current + 1,))
             conn.close()
 
-        seconds = _race(worker)
+        seconds = _race(rep)
         con = sqlite3.connect(path)
         (value,) = con.execute("SELECT value FROM counter").fetchone()
         con.close()
         return seconds, value
 
-    _labels = dict(STRATEGY_LABELS)
+    _labels = dict(ch1_strategy_labels)
     if not _fcntl:
-        _labels["file_lock"] = "file, no flock on this OS"
-    _expected = _workers * _increments
+        _labels["file_lock"] = "file, no OS lock on Windows"
     _rows = []
     # No mo.status.spinner here: as a slide, a cell whose output blanks while it runs drops into marimo's edit preview.
     with tempfile.TemporaryDirectory() as _tmp:
         for _key, _label in _labels.items():
-            if not strategies.value[_key]:
+            if not ch1_strategies.value[_key]:
                 continue
             if _key.startswith("sqlite"):
-                _seconds, _actual = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
+                _seconds, _counted = _sqlite_counter(Path(_tmp) / f"{_key}.db", one_statement=_key == "sqlite")
             else:
-                _seconds, _actual = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
+                _seconds, _counted = _file_counter(Path(_tmp) / f"{_key}.txt", _key)
             _rows.append(
                 {
-                    "strategy": _label,
-                    "expected": _expected,
-                    "actual": _actual,
-                    "lost updates": _expected - _actual,
-                    "duration (ms)": round(_seconds * 1000, 1),
+                    "way of keeping the count": _label,
+                    "orders booked": _target,
+                    "orders counted": _counted,
+                    "lost from the count": _target - _counted,
+                    "time taken (ms)": round(_seconds * 1000, 1),
                 }
             )
+    mo.stop(not _rows, mo.vstack([_top, mo.md("Tick at least one way of keeping the count.").callout(kind="warn")]))
 
     _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all kept" for _lost in _df["lost updates"]]
-    _y = alt.Y("strategy:N", sort=None, title=None)
-    _reached = alt.Chart(_df).encode(y=_y, x=alt.X("actual:Q", title="counter reached"))
+    _df["verdict"] = [f"{_lost:,} lost" if _lost else "all counted" for _lost in _df["lost from the count"]]
+    _y = alt.Y("way of keeping the count:N", sort=None, title=None)
+    # room to the right of the longest bar for its "all counted" label
+    _x = alt.X("orders counted:Q", title="orders counted", scale=alt.Scale(domain=[0, _target * 1.2], nice=False))
+    _reached = alt.Chart(_df).encode(y=_y, x=_x)
     _counts = (
         _reached.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum['lost updates'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+            color=alt.condition("datum['lost from the count'] > 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
         )
         + _reached.mark_text(align="left", dx=6).encode(text="verdict:N")
-        + alt.Chart(pd.DataFrame({"target": [_expected]}))
+        + alt.Chart(pd.DataFrame({"target": [_target]}))
         .mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"])
         .encode(x="target:Q")
-    ).properties(width="container", height=48 * len(_df), title=f"Counter reached (target {_expected:,})")
+    ).properties(width="container", height=42 * len(_df), title=f"Orders counted (dashed line: {_target:,} booked)")
     _durations = (
         alt.Chart(_df)
-        .encode(y=alt.Y("strategy:N", sort=None, title=None, axis=None), x=alt.X("duration (ms):Q", title=None))
+        .encode(y=alt.Y("way of keeping the count:N", sort=None, title=None, axis=None), x=alt.X("time taken (ms):Q", title=None))
         .mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
-        .properties(width="container", height=48 * len(_df), title="Time taken (ms)")
+        .properties(width="container", height=42 * len(_df), title="Time taken (ms)")
     )
+    _lost = {_r["way of keeping the count"]: _r["lost from the count"] for _r in _rows}
+    _worst = max(_lost, key=_lost.get)
 
     mo.vstack(
         [
+            _top,
             chart_or_table(
                 mo.hstack([tier_chart(_counts, "data"), tier_chart(_durations, "data")], widths=[3, 1], gap=1),
                 _rows,
-                label="Concurrency results",
+                label="Bookings, counted five ways",
             ),
             mo.md(
-                "**Compare the two SQLite bars.** Same database, but only the one-statement transaction keeps "
-                "every increment: a transaction protects the steps you put inside it, and nothing else."
-            ).callout(kind="info"),
+                f"**What to notice:** *{_worst}* lost {_lost[_worst]:,} of {_target:,} orders, without a single error. "
+                "Compare the two database bars: same database, but only the one-statement UPDATE counts every "
+                "order. A transaction protects the steps you put inside it, and nothing else."
+            ),
             mo.accordion(
                 {
-                    "Why the unlocked bars stop near one worker's total": mo.md(
+                    "Why the unlocked bars stop near one rep's total": mo.md(
                         """
-    With jitter, the unlocked workers fall into step: all read the same value, all pause, all write
-    the same +1. So they end near *one* worker's total, as if the others never ran. Set jitter to 0
-    and the file race turns messy: its count changes from run to run.
+    With a pause, the unlocked reps fall into step: all read the same count, all pause, all save the same
+    +1. So they end near *one* rep's total, as if the others never booked. Set the pause to 0 and the file
+    race turns messy: its count changes from run to run.
 
-    The file lock is correct but slow: writers queue, so every millisecond of jitter is paid one
-    worker at a time. The one-statement transaction is quick too: there is no gap for the jitter to
-    widen, and the lock is held for microseconds.
+    The OS lock is correct but slow: reps queue, so every millisecond of pause is paid one rep at a time.
+    The one-statement UPDATE is quick too: there is no gap for the pause to widen, and the lock is held for
+    microseconds.
                         """
                     )
                 }
@@ -750,245 +945,143 @@ def _(
 
 @app.cell
 def _(mo):
-    interleave_steps = mo.ui.slider(1, 6, value=2, label="Increments per worker", show_value=True, debounce=True)
-    interleave_seed = mo.ui.slider(1, 999, value=7, label="Interleaving seed", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Interleaving Simulator: Why Lost Updates Happen
-
-    Each increment is two steps: **read** the shared value, then **write** copy + 1. The seed shuffles
-    the order of A's and B's steps. A write from an out-of-date copy is a **stale write**: it erases
-    every increment made since that copy was read.
-                """
-            ),
-            mo.hstack([interleave_steps, interleave_seed], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return interleave_seed, interleave_steps
+    ch1_crash = mo.ui.switch(value=True, label="Crash between the two saves")
+    return (ch1_crash,)
 
 
 @app.cell
-def _(TIER, alt, chart_or_table, interleave_seed, interleave_steps, mo, pd, random, tier_chart):
-    _rng = random.Random(interleave_seed.value)
-    _ops = {w: ["read", "write"] * interleave_steps.value for w in "AB"}
-    _local, _shared, _log = {}, 0, []
-    while _ops["A"] or _ops["B"]:
-        _worker = _rng.choice([w for w in "AB" if _ops[w]])
-        _action = _ops[_worker].pop(0)
-        _before = _shared
-        if _action == "read":
-            _local[_worker] = _shared
-        else:
-            _shared = _local[_worker] + 1
-        _log.append(
+def _(Path, ch1_crash, chart_or_table, diagram, json, mia_asks, mo, shop_sales, sqlite3, tempfile):
+    # The move: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
+    _sale = shop_sales.loc[shop_sales.loc[shop_sales["country"] == "Germany", "total_price"].idxmax()]
+    # Money in whole cents: an integer never picks up float rounding, so "the total held" is exact.
+    _move = int(round(float(_sale["total_price"]) * 100))
+    _initial = {_r: int(round(_v * 100)) for _r, _v in shop_sales.groupby("region")["total_price"].sum().items()}
+    _expected = sum(_initial.values())
+    _timeline = []
+
+    def _add_timeline(system, step, totals, note):
+        _timeline.append(
             {
-                "step": len(_log) + 1,
-                "worker": _worker,
-                "action": _action,
-                "shared before": _before,
-                "local copy": _local[_worker],
-                "shared after": _shared,
-                "note": "stale write" if _action == "write" and _local[_worker] != _before else "",
+                "system": system,
+                "step": step,
+                "Europe (CHF)": totals["Europe"] / 100,
+                "Africa (CHF)": totals["Africa"] / 100,
+                "total revenue (CHF)": sum(totals.values()) / 100,
+                "note": note,
             }
         )
 
-    _expected = interleave_steps.value * 2
-    _df = pd.DataFrame(_log)
-    _df["kind"] = [_note or _action for _action, _note in zip(_df["action"], _df["note"], strict=True)]
-    # A read shows the value it copied, a write the value it left; short labels once the steps get narrow.
-    _short = len(_df) > 12
-    _df["label"] = [
-        f"{_a[0].upper()}{_v}" if _short else f"{_a} {_v}"
-        for _a, _v in zip(_df["action"], _df["shared after"], strict=True)
-    ]
-    _df["if no update were lost"] = (_df["action"] == "write").cumsum()
-    _df["shared counter"] = _df["shared after"]
-    _x = alt.X("step:O", title="step", axis=alt.Axis(labelAngle=0))
-    _lane = alt.Chart(_df).encode(x=_x, y=alt.Y("worker:N", title=None, axis=alt.Axis(minExtent=40)))
-    _lanes = (
-        _lane.mark_rect(cornerRadius=8).encode(
-            color=alt.Color(
-                "kind:N",
-                title=None,
-                scale=alt.Scale(domain=["read", "write", "stale write"], range=["#cfe0fb", TIER["data"], TIER["hot"]]),
-            )
-        )
-        # fixed text colours: the fills above are the same in both themes
-        + _lane.mark_text().encode(
-            text="label:N", color=alt.condition("datum.kind == 'read'", alt.value("#0b1220"), alt.value("white"))
-        )
-    ).properties(width="container", height=110)
-    _counter = (
-        alt.Chart(_df)
-        .transform_fold(["shared counter", "if no update were lost"], as_=["series", "value"])
-        .mark_line(point=True, strokeWidth=3)
-        .encode(
-            x=_x,
-            y=alt.Y("value:Q", title="counter", axis=alt.Axis(minExtent=40)),
-            color=alt.Color(
-                "series:N",
-                title=None,
-                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[TIER["data"], TIER["muted"]]),
-            ),
-            strokeDash=alt.StrokeDash(
-                "series:N",
-                legend=None,
-                scale=alt.Scale(domain=["shared counter", "if no update were lost"], range=[[1, 0], [6, 4]]),
-            ),
-        )
-        .properties(width="container", height=170)
-    )
-
-    mo.vstack(
-        [
-            mo.hstack(
-                [
-                    mo.stat(_expected, label="expected", bordered=True),
-                    mo.stat(_shared, label="actual", bordered=True),
-                    mo.stat(_expected - _shared, label="lost updates", bordered=True),
-                ],
-                widths="equal",
-            ),
-            chart_or_table(
-                mo.vstack([tier_chart(_lanes, "data"), tier_chart(_counter, "data")]),
-                _log,
-                label="Interleaving trace",
-            ),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    atomic_amount = mo.ui.slider(10, 500, step=10, value=150, label="Transfer amount", show_value=True, debounce=True)
-    atomic_fail = mo.ui.switch(value=True, label="Crash after the debit")
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Atomicity Demo: a Transfer That Crashes
-
-    Atomicity means **all or nothing**. A transfer must keep $B_{\\text{Alice}} + B_{\\text{Bob}}$
-    constant; crash between **debit** and **credit**, and only a transaction puts the money back.
-    One transfer, no concurrent writers: flip the switch and watch both totals.
-                """
-            ),
-            mo.hstack([atomic_amount, atomic_fail], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return atomic_amount, atomic_fail
-
-
-@app.cell
-def _(Path, atomic_amount, atomic_fail, chart_or_table, diagram, json, mo, sqlite3, tempfile):
-    _initial = {"Alice": 1000, "Bob": 500}
-    _expected = sum(_initial.values())
-    _amount = atomic_amount.value
-    _timeline = []
-
-    def _add_timeline(system, step, state, note):
-        _timeline.append({"system": system, "step": step, **state, "total": sum(state.values()), "note": note})
-
     with tempfile.TemporaryDirectory() as _tmp:
-        # File ledger: debit and credit are two separate writes, and nothing ties them together.
-        _file_path = Path(_tmp) / "ledger.json"
-        _ledger = dict(_initial)
-        _file_path.write_text(json.dumps(_ledger))
-        _add_timeline("file (JSON)", "start", _ledger, "initial balances")
-        _ledger["Alice"] -= _amount
-        _file_path.write_text(json.dumps(_ledger))
-        _add_timeline("file (JSON)", "debit", _ledger, "Alice debited")
-        if atomic_fail.value:
-            _add_timeline("file (JSON)", "crash", _ledger, "crash before credit")
+        # File: the region totals in one JSON file; the two saves are separate and nothing ties them together.
+        _file_path = Path(_tmp) / "region_totals.json"
+        _totals = dict(_initial)
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "start", _totals, "region totals before the move")
+        _totals["Europe"] -= _move
+        _file_path.write_text(json.dumps(_totals))
+        _add_timeline("file (JSON)", "take off Europe", _totals, "first save")
+        if ch1_crash.value:
+            _add_timeline("file (JSON)", "crash", _totals, "crash before the second save")
         else:
-            _ledger["Bob"] += _amount
-            _file_path.write_text(json.dumps(_ledger))
-            _add_timeline("file (JSON)", "credit", _ledger, "Bob credited")
+            _totals["Africa"] += _move
+            _file_path.write_text(json.dumps(_totals))
+            _add_timeline("file (JSON)", "add to Africa", _totals, "second save")
         _file_total = sum(json.loads(_file_path.read_text()).values())
 
-        # SQLite ledger: both updates inside one transaction.
-        _con = sqlite3.connect(Path(_tmp) / "ledger.db", isolation_level=None)
-        _con.execute("CREATE TABLE accounts (name TEXT PRIMARY KEY, balance INTEGER)")
-        _con.executemany("INSERT INTO accounts VALUES (?, ?)", _initial.items())
+        # SQLite: both saves inside one transaction.
+        _con = sqlite3.connect(Path(_tmp) / "region_totals.db", isolation_level=None)
+        _con.execute("CREATE TABLE region_totals (region TEXT PRIMARY KEY, cents INTEGER)")
+        _con.executemany("INSERT INTO region_totals VALUES (?, ?)", _initial.items())
 
-        def _balances():
-            return dict(_con.execute("SELECT name, balance FROM accounts ORDER BY name").fetchall())
+        def _db_totals():
+            return dict(_con.execute("SELECT region, cents FROM region_totals").fetchall())
 
-        _add_timeline("sqlite", "start", _balances(), "initial balances")
+        _add_timeline("SQLite", "start", _db_totals(), "region totals before the move")
         _con.execute("BEGIN")
-        _con.execute("UPDATE accounts SET balance = balance - ? WHERE name = 'Alice'", (_amount,))
-        _add_timeline("sqlite", "debit (txn)", _balances(), "uncommitted debit")
+        _con.execute("UPDATE region_totals SET cents = cents - ? WHERE region = 'Europe'", (_move,))
+        _add_timeline("SQLite", "take off Europe", _db_totals(), "inside the transaction, not committed")
         try:
-            if atomic_fail.value:
-                raise RuntimeError("simulated crash after debit")
-            _con.execute("UPDATE accounts SET balance = balance + ? WHERE name = 'Bob'", (_amount,))
+            if ch1_crash.value:
+                raise RuntimeError("simulated crash between the two saves")
+            _con.execute("UPDATE region_totals SET cents = cents + ? WHERE region = 'Africa'", (_move,))
             _con.execute("COMMIT")
-            _add_timeline("sqlite", "commit", _balances(), "transaction committed")
+            _add_timeline("SQLite", "commit", _db_totals(), "both saves kept")
         except RuntimeError:
             _con.execute("ROLLBACK")
-            _add_timeline("sqlite", "rollback", _balances(), "transaction rolled back")
-        _db_total = sum(_balances().values())
+            _add_timeline("SQLite", "roll back", _db_totals(), "first save undone")
+        _db_total = sum(_db_totals().values())
         _con.close()
 
-    # One lane per system, one box per step: the balances after it, and the total at the end.
-    _style = {"crash": "dg-box dg-hot", "credit": "dg-box dg-ok", "commit": "dg-box dg-ok", "rollback": "dg-box dg-ok"}
+    # One lane per system, one box per step: the two region totals after it, and total revenue at the end.
+    _style = {"crash": "dg-box dg-hot", "add to Africa": "dg-box dg-ok", "commit": "dg-box dg-ok", "roll back": "dg-box dg-ok"}
 
     def _lane(y, system, label, total):
         steps = [_row for _row in _timeline if _row["system"] == system]
-        parts = [f'<text x="0" y="{y + 38}" font-weight="700">{label}</text>']
+        parts = [f'<text x="0" y="{y + 50}" font-weight="700">{label}</text>']
         for _i, _row in enumerate(steps):
-            x = 120 + _i * 250
+            x = 110 + _i * 270
             parts.append(
-                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="210" height="72" rx="12"/>'
-                f'<text x="{x + 105}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
-                f'<text class="dg-muted" x="{x + 105}" y="{y + 54}" text-anchor="middle">'
-                f"Alice {_row['Alice']:,} · Bob {_row['Bob']:,}</text>"
+                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
+                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_row["Europe (CHF)"]:,.0f}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_row["Africa (CHF)"]:,.0f}</text>'
             )
             if _i:
-                parts.append(f'<path class="dg-edge" d="M{x - 40} {y + 36} H {x - 6}"/>')
+                parts.append(f'<path class="dg-edge" d="M{x - 36} {y + 48} H {x - 6}"/>')
         _ok = total == _expected
         parts.append(
-            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="870" y="{y + 44}" font-size="22">'
-            f"{'&#10003;' if _ok else '&#10007;'} total {total:,}</text>"
+            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="930" y="{y + 44}" font-size="22">'
+            f"{'&#10003;' if _ok else '&#10007;'} {total / 100:,.0f}</text>"
         )
+        if not _ok:
+            parts.append(f'<text class="dg-hot" x="930" y="{y + 72}">{(_expected - total) / 100:,.2f} missing</text>')
         return "".join(parts)
 
     _picture = diagram(
-        _lane(20, "file (JSON)", "file", _file_total)
-        + '<rect x="356" y="134" width="488" height="92" rx="16" fill="none" stroke="currentColor"'
+        '<text x="930" y="18" font-weight="700">total revenue (CHF)</text>'
+        + _lane(36, "file (JSON)", "file", _file_total)
+        + '<rect x="370" y="176" width="520" height="120" rx="16" fill="none" stroke="currentColor"'
         ' stroke-dasharray="8 6" opacity="0.45"/>'
-        + '<text class="dg-muted" x="593" y="256" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
-        + _lane(144, "sqlite", "SQLite", _db_total),
-        width=1080,
-        height=270,
-        label=f"Transfer of {_amount}: the file keeps a total of {_file_total}, SQLite a total of {_db_total}; "
-        f"both should be {_expected}.",
+        + '<text class="dg-muted" x="630" y="322" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
+        + _lane(188, "SQLite", "SQLite", _db_total),
+        width=1160,
+        height=334,
+        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa: the file ends with total revenue CHF {_file_total / 100:,.2f}, "
+        f"SQLite with CHF {_db_total / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
     )
 
     _file_ok = _file_total == _expected
     _file_callout = mo.md(
-        "**File:** debit and credit are two separate writes. "
+        "**File:** the two saves are separate. "
         + (
             "Both landed, because nothing crashed."
             if _file_ok
-            else f"The crash came between them: {_amount:,} left Alice and never reached Bob."
+            else f"The crash came between them: CHF {_move / 100:,.2f} left Europe and never reached Africa."
         )
     ).callout(kind="success" if _file_ok else "danger")
     _db_callout = mo.md(
-        "**SQLite:** both updates sit in one transaction. "
-        + ("The crash rolled the debit back, so the total holds." if atomic_fail.value else "They committed together.")
+        "**SQLite:** both saves sit in one transaction. "
+        + ("The crash rolled the first one back, so total revenue holds." if ch1_crash.value else "They committed together.")
     ).callout(kind="success" if _db_total == _expected else "danger")
 
     mo.vstack(
         [
-            chart_or_table(_picture, _timeline, label="Step-by-step timeline"),
+            mo.md("### Try it: move a sale between regions, and crash halfway"),
+            mia_asks(
+                f"We moved one sale to the right region, and total revenue dropped by CHF {_move / 100:,.2f}. "
+                "Where did the money go?"
+            ),
+            mo.md(
+                f"Sale #{_sale['sale_id']} ({_sale['product']}, CHF {_sale['total_price']:,.2f}) was booked under "
+                "Germany, but say it belongs to Kenya. Moving it takes two saves to the region totals (in CHF) that "
+                "Mia's dashboard reads: **take it off Europe**, then **add it to Africa**. Moving a sale must never "
+                "change total revenue."
+            ),
+            ch1_crash,
+            chart_or_table(_picture, _timeline, label="Every step, in order"),
             mo.hstack([_file_callout, _db_callout], widths="equal"),
+            mo.md("**What to notice:** the total revenue column. With the crash on, only the transaction keeps it at "
+                  f"CHF {_expected / 100:,.2f}."),
         ],
         gap=0.6,
     )
@@ -999,20 +1092,23 @@ def _(Path, atomic_amount, atomic_fail, chart_or_table, diagram, json, mo, sqlit
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — Atomicity & Concurrency</h3>
+      <h3>Discussion: Atomicity & Concurrency</h3>
       <details>
-        <summary><strong>Q1:</strong> With only files (no database), how can a transfer be made all‑or‑nothing?</summary>
-        <p><strong>Answer:</strong> Write a small log entry first (a write‑ahead log, WAL), or write a temp file and
-        rename it over the old one (an atomic rename). On restart, replay or roll back the log.</p>
+        <summary><strong>Q1:</strong> With only files (no database), how could moving a sale between regions be made all-or-nothing?</summary>
+        <p><strong>Answer:</strong> Write the new totals to a temporary file, then rename it over the old one: a rename is
+        atomic, so a reader sees the old totals or the new ones, never half a move. Or write a small log entry first
+        (a write-ahead log, WAL), and replay or roll it back on restart.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> What must always stay true in this system?</summary>
-        <p><strong>Answer:</strong> The total balance never changes. Check that invariant after crashes and retries.</p>
+        <summary><strong>Q2:</strong> What must always stay true here, and how would we notice it breaking?</summary>
+        <p><strong>Answer:</strong> Orders counted equals orders booked, and moving a sale never changes total revenue.
+        Check both after crashes and retries: counting the order book every night and comparing it with the counter
+        catches a lost update.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Should a system stop on error or allow a temporary mismatch?</summary>
-        <p><strong>Answer:</strong> Finance usually fails fast; analytics may accept a temporary mismatch and repair
-        it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
+        <summary><strong>Q3:</strong> Should a system stop on an error, or allow a short mismatch?</summary>
+        <p><strong>Answer:</strong> Invoices and payments fail fast. Mia's dashboard may show a count a minute behind and
+        repair it later (eventual consistency). Weigh the cost of wrong data against the cost of downtime.</p>
       </details>
     </div>
     """)
@@ -1020,36 +1116,43 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(SALES_SEED, format_bytes, mo, shop_sales):
+    _raw = ["sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"]
+    _csv_bytes = len(shop_sales[_raw].to_csv(index=False).encode())
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 1 Conclusion
 
-    - Unsynchronised writes lose updates; a lock or a transaction stops it.
-    - A database is not magic: read, +1 in Python, write loses updates in SQLite too. Make the read
-      and the write one statement, or one transaction.
-    - A transaction makes a multi-step change all-or-nothing: the crashed transfer rolled back.
-    - Check invariants (expected vs actual, the total balance) to catch these bugs early.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Two reps who both read before either saves lose an order: no error, just a count too low.
+    - A lock (the booking pen) or a database transaction closes the gap between reading and saving.
+    - A database is not magic: read, +1 in Python, save loses orders in SQLite too. Make the read and the
+      save one statement, or one transaction.
+    - A transaction makes a two-step change all or nothing: the crashed move rolled back, and total revenue held.
+    - Check what must stay true (orders counted = orders booked; a move leaves total revenue alone) to catch
+      these bugs early.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                f"""
     ### Bridge to Next Chapter
 
-    Correct data still has to be stored and sent, and every byte of it is waited for:
-
+    The counted sales now have to be saved to files and sent to partners. A partner waits for every byte,
+    then for reading it: EdgeWorks' {len(shop_sales):,} sales take {format_bytes(_csv_bytes)} as CSV and
+    {format_bytes(SALES_SEED.stat().st_size)} as the Parquet file in `data/seed/`.
+                """
+                + """
     $$
     \\text{wait} \\approx \\frac{\\text{bytes}}{\\text{throughput}} + \\text{parse time}
     $$
 
-    Better formats cut the wait by shrinking the bytes or speeding up the parse.
-            """
-    ).callout(kind="neutral")
+    Better formats cut the wait by shrinking the bytes or speeding up the reading.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -1060,8 +1163,9 @@ def _(chapter_intro, mo):
             mo.md("## 2. Serialization & Deserialization Benchmarks"),
             chapter_intro(
                 "data",
-                "Which format gives the best trade-off for this workload: this data, these queries?",
-                "Chapter 1 made the writes correct; now we choose what those bytes look like.",
+                "We send sales files to partners. Which format, and why did the CSV turn store code 007 into 7?",
+                "Chapter 1 made every save land. Now: what the bytes of a sales file look like, and what each format "
+                "costs, keeps and loses on its way to a partner.",
             ),
         ],
         gap=1,
@@ -1070,70 +1174,95 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(diagram, json, mo):
-    _record = {"sale_id": 1, "sale_date": "2024-03-07", "total_price": 4034.91}
-    # The bytes in the middle are the real start of this record's JSON.
-    _hex = json.dumps(_record).encode()[:24].hex(" ").upper()
+def _(diagram, in_plain, json, mo, shop_sales):
+    _sale = shop_sales.iloc[0]
+    _record = {
+        "sale_id": int(_sale["sale_id"]),
+        "sale_date": f"{_sale['sale_date']:%Y-%m-%d}",
+        "product": str(_sale["product"]),
+        "units_sold": int(_sale["units_sold"]),
+        "total_price": float(_sale["total_price"]),
+    }
+    _bytes = json.dumps(_record).encode()
+    _value_bytes = sum(len(json.dumps(_v)) for _v in _record.values())
+    # The bytes in the middle are the real start of this sale's JSON.
+    _hex = _bytes[:24].hex(" ").upper()
 
-    def _object(x, title, cls):
+    def _object(x, title):
         lines = "".join(
-            f'<text x="{x + 125}" y="{104 + _i * 26}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
+            f'<text x="{x + 140}" y="{98 + _i * 25}" text-anchor="middle">{_k} <tspan font-weight="700">{_v}</tspan></text>'
             for _i, (_k, _v) in enumerate(_record.items())
         )
         return (
-            f'<rect class="{cls}" x="{x}" y="30" width="250" height="140" rx="12"/>'
-            f'<text x="{x + 125}" y="64" text-anchor="middle" font-weight="700">{title}</text>{lines}'
+            f'<rect class="dg-tier" x="{x}" y="30" width="280" height="200" rx="12"/>'
+            f'<text x="{x + 140}" y="62" text-anchor="middle" font-weight="700">{title}</text>{lines}'
         )
 
     def _arrow(x, verb, word):
         return (
-            f'<path class="dg-edge dg-flow" d="M{x} 100 H {x + 122}"/>'
-            f'<text x="{x + 60}" y="86" text-anchor="middle" font-weight="700">{verb}</text>'
-            f'<text class="dg-muted" x="{x + 60}" y="126" text-anchor="middle">{word}</text>'
+            f'<path class="dg-edge dg-flow" d="M{x} 130 H {x + 122}"/>'
+            f'<text x="{x + 60}" y="116" text-anchor="middle" font-weight="700">{verb}</text>'
+            f'<text class="dg-muted" x="{x + 60}" y="156" text-anchor="middle">{word}</text>'
         )
 
     _pipeline = diagram(
-        _object(0, "Python object", "dg-tier")
-        + _arrow(258, "serialize", "write")
-        + '<rect class="dg-box" x="390" y="30" width="260" height="140" rx="12"/>'
-        + '<text x="520" y="64" text-anchor="middle" font-weight="700">bytes</text>'
+        _object(0, "a sale in Python")
+        + _arrow(290, "serialize", "write")
+        + '<rect class="dg-box" x="422" y="30" width="276" height="200" rx="12"/>'
+        + '<text x="560" y="62" text-anchor="middle" font-weight="700">bytes</text>'
         + "".join(
-            f'<text x="520" y="{104 + _i * 26}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
+            f'<text x="560" y="{110 + _i * 30}" text-anchor="middle" font-family="monospace">{_hex[_i * 24 : _i * 24 + 23]}</text>'
             for _i in range(3)
         )
-        + _arrow(660, "deserialize", "read")
-        + _object(790, "Python object", "dg-tier")
-        + '<text class="dg-muted" x="520" y="200" text-anchor="middle">'
-        "on disk or on the wire: files, API payloads, queues, caches</text>",
-        width=1040,
-        height=212,
-        label="A Python record is serialized into bytes for a file or the network, and deserialized back into a Python record.",
+        + '<text class="dg-muted" x="560" y="208" text-anchor="middle">... and so on</text>'
+        + _arrow(708, "deserialize", "read")
+        + _object(840, "the sale again")
+        + '<text class="dg-muted" x="560" y="262" text-anchor="middle">'
+        "on disk or on the wire: files for partners, API answers, queues, caches</text>",
+        width=1120,
+        height=276,
+        label="EdgeWorks' first sale is serialized into bytes for a file or the network, and deserialized back into "
+        "the same sale in Python.",
         tier="data",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Serialization = Bytes on Disk (or Wire)</h3>
-      {_pipeline}
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### Serialization: from a sale to bytes, and back"),
+            in_plain(
+                "**Serialization** turns an object in memory, here one EdgeWorks sale, into bytes that can be saved "
+                "to a file or sent to a partner. **Deserialization** turns the bytes back into an object. The "
+                "**format** (JSON, CSV, Parquet, ...) decides what those bytes look like."
+            ),
+            _pipeline,
+            mo.md(
+                f"**What to notice:** as JSON this sale takes {len(_bytes)} bytes, and only {_value_bytes} of them are "
+                "the values. The rest is field names and punctuation, written again for each of the "
+                f"{len(shop_sales):,} sales."
+            ),
+        ],
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(box, diagram, fastavro, html, io, mo):
-    # The pre-printed form refuses an answer that does not fit its box: the real error from the Avro writer.
+def _(box, diagram, fastavro, html, in_plain, io, mo, shop_sales):
+    _first, _second = shop_sales.iloc[0], shop_sales.iloc[1]
+    _typo = f"about {round(_second['total_price'], -3):,.0f}"  # what a hurried rep types instead of the price
+    # The printed form refuses an answer that does not fit its box: the real error from the Avro writer.
     try:
-        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": "about forty"}])
+        fastavro.writer(io.BytesIO(), {"type": "record", "name": "Sale", "fields": [{"name": "total_price", "type": "double"}]}, [{"total_price": _typo}])
         _refusal = "accepted"
     except (TypeError, ValueError) as _exc:
         _refusal = f"{type(_exc).__name__}: {str(_exc).split(': ')[0]}"
 
-    def _sheet(y, sale_id, date, price):
+    def _date(sale):
+        return f"{sale['sale_date']:%Y-%m-%d}"
+
+    def _sheet(y, sale, price):
         return (
             f'<rect class="dg-box" x="0" y="{y}" width="470" height="70" rx="8"/>'
-            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale_id}, "sale_date": "{date}",</text>'
+            f'<text x="18" y="{y + 28}" font-family="monospace">{{"sale_id": {sale["sale_id"]}, "sale_date": "{_date(sale)}",</text>'
             f'<text x="18" y="{y + 54}" font-family="monospace"> "total_price": {price}}}</text>'
         )
 
@@ -1147,16 +1276,16 @@ def _(box, diagram, fastavro, html, io, mo):
         return "".join(parts)
 
     _forms = diagram(
-        '<text x="0" y="22" font-weight="700">JSON: longhand on blank paper</text>'
-        + _sheet(40, 1, "2024-03-07", "4034.91")
-        + _sheet(124, 2, "2024-03-08", '<tspan class="dg-hot">"about forty"</tspan>')
-        + '<text class="dg-muted" x="0" y="222">every sheet writes the labels out again</text>'
-        + '<text class="dg-hot" x="0" y="248">and nothing stops "about forty" in the price box</text>'
-        + '<text x="540" y="22" font-weight="700">Avro: a pre-printed form</text>'
+        '<text x="0" y="22" font-weight="700">JSON: answers on blank paper</text>'
+        + _sheet(40, _first, f"{_first['total_price']}")
+        + _sheet(124, _second, f'<tspan class="dg-hot">"{_typo}"</tspan>')
+        + '<text class="dg-muted" x="0" y="222">every sheet writes the field names out again</text>'
+        + f'<text class="dg-hot" x="0" y="248">and nothing stops "{_typo}" in the price box</text>'
+        + '<text x="540" y="22" font-weight="700">Avro: a printed order form</text>'
         + _form_row(40, [_label for _label, _ in _form_cells], "dg-tier")
-        + _form_row(92, ["1", "2024-03-07", "4034.91"], "dg-box")
-        + _form_row(140, ["2", "2024-03-08", '<tspan class="dg-hot" text-decoration="line-through">about forty</tspan>'], "dg-box")
-        + '<text class="dg-muted" x="540" y="222">labels printed once; sheets hold only answers</text>'
+        + _form_row(92, [f"{_first['sale_id']}", _date(_first), f"{_first['total_price']}"], "dg-box")
+        + _form_row(140, [f"{_second['sale_id']}", _date(_second), f'<tspan class="dg-hot" text-decoration="line-through">{_typo}</tspan>'], "dg-box")
+        + '<text class="dg-muted" x="540" y="222">names printed once; each row holds only answers</text>'
         + f'<text class="dg-hot" x="540" y="248" font-size="15">refused: {html.escape(_refusal, quote=False)}</text>'
         + '<text x="0" y="306" font-weight="700">The form comes back:</text>'
         + '<g class="tier-data"><rect class="dg-tier" x="190" y="282" width="250" height="40" rx="12"/>'
@@ -1167,230 +1296,178 @@ def _(box, diagram, fastavro, html, io, mo):
         '<text x="877" y="307" text-anchor="middle">8 · FastAPI <tspan font-weight="700">publishes</tspan> it</text></g>',
         width=1040,
         height=330,
-        label="Left: JSON sheets repeat every label, and one has 'about forty' in the price box. Right: an Avro form "
-        "prints the labels once, each row holds only the answers, and the writer refuses 'about forty'. "
+        label=f"Left: JSON sheets repeat every field name, and one has '{_typo}' in the price box. Right: an Avro form "
+        f"prints the names once, each row holds only the answers, and the writer refuses '{_typo}'. "
         "The same form returns in chapters 5, 7 and 8.",
         tier="data",
     )
     _breaks = mo.md(
         """
-    - A paper form is inseparable from its answers: true for Avro, which stores the form in the
-      file, and false for JSON and CSV. There the form exists only in the mind of whoever reads the
-      file, which is why two teams can disagree about what the same sheet means. That is the reason
-      chapter 7 exists.
-    - **Schema evolution** is what happens when the office adds a box to the form: do last year's
-      sheets, printed on the old form, still get read? The last lab of this chapter tests exactly that.
+    - A paper form travels with its answers: true for Avro, which stores the form in the file, and false
+      for JSON and CSV. There the form exists only in the head of whoever reads the file, which is why a
+      partner and EdgeWorks can disagree about what the same file means. That is the reason chapter 7 exists.
+    - **Schema evolution** is what happens when EdgeWorks adds a box to the form: do last year's sales,
+      written on the old form, still get read? A slide later in this chapter tests exactly that.
         """
     )
     mo.vstack(
         [
+            mo.md("### The schema is the blank order form"),
+            in_plain(
+                "A **schema** is the blank form, not the answers: which fields a sale has, in what order, and what "
+                "kind of value goes in each box. JSON and CSV send only filled-in sheets. Avro sends the form inside "
+                "the file, and its writer refuses an answer that does not fit the box."
+            ),
+            _forms,
             mo.md(
-                f"""
-    <div class="section-card">
-      <h3>The Schema Is the Blank Form</h3>
-      <p>Not the answers, the printed boxes: which fields, in what order, what kind of thing goes in each.</p>
-      {_forms}
-    </div>
-                """
+                f"**What to notice:** the price of sale #{_second['sale_id']}. A rep typed \"{_typo}\". JSON keeps "
+                "it without a word; Avro refuses it before it ever reaches a partner."
             ),
             mo.accordion({"Where the picture breaks, and what schema evolution means": _breaks}),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(box, diagram, mo):
-    def _envelope(x, y, w, h):
-        return (
-            f'<rect class="dg-box" x="{x}" y="{y}" width="{w}" height="{h}" rx="3"/>'
-            f'<path d="M{x} {y} L{x + w / 2:.0f} {y + h * 0.6:.0f} L{x + w} {y}" fill="none" stroke="currentColor" opacity="0.5"/>'
-        )
-
-    # Letters handed in through the day; the van leaves with all of them at 22:00.
-    _hours = [8, 10, 12, 14, 16, 18, 20]
-
-    def _at(hour):
-        return 60 + (hour - 8) * 60
-
-    _post = diagram(
-        '<text x="0" y="24" font-weight="700">Latency: how long one thing takes</text>'
-        + _envelope(10, 60, 90, 60)
-        + '<path class="dg-edge" d="M112 90 H 330"/>'
-        + '<text x="220" y="78" text-anchor="middle" font-weight="700">2 days</text>'
-        + box(338, 66, "Vienna", w=110, h=48)
-        + '<text x="560" y="24" font-weight="700">Throughput: how much gets through per night</text>'
-        + '<rect class="dg-tier" x="570" y="46" width="230" height="78" rx="10"/>'
-        + '<text x="685" y="91" text-anchor="middle" font-weight="700">40,000 letters</text>'
-        + '<path class="dg-tier" d="M800 72 H 846 L 872 98 V 124 H 800 Z"/>'
-        + '<circle class="dg-box" cx="620" cy="128" r="14"/><circle class="dg-box" cx="836" cy="128" r="14"/>'
-        # the trade: the van waits for the last letter, so the first one waits longest
-        + '<text x="0" y="214" font-weight="700">They trade:</text>'
-        + f'<path d="M{_at(8)} 262 H {_at(22) - 50}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
-        + "".join(
-            _envelope(_at(_h) - 14, 236, 28, 20)
-            + f'<text class="dg-muted" x="{_at(_h)}" y="284" text-anchor="middle">{_h:02d}:00</text>'
-            for _h in _hours
-        )
-        + f'<rect class="dg-tier" x="{_at(22) - 50}" y="226" width="100" height="40" rx="10"/>'
-        + f'<text x="{_at(22)}" y="251" text-anchor="middle">van 22:00</text>'
-        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 304 H {_at(22) - 54}"/>'
-        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="330" text-anchor="middle">'
-        "the first letter waits 14 hours</text>",
-        width=1040,
-        height=344,
-        label="Latency: one letter takes two days to Vienna. Throughput: a van carries 40,000 letters a night. "
-        "Letters handed in from 08:00 all wait for the 22:00 van, so filling the van raises throughput and "
-        "makes the first letter wait 14 hours.",
-        tier="data",
-    )
-    _more = mo.md(
-        """
-    - A container ship has appalling latency and colossal throughput.
-    - In the benchmark, one round trip is a file written and read back, and what gets through is
-      records, counted like letters rather than by the weight of the paper.
-    - *Sometimes you get both*, by making the letters smaller. That is what chapter 4 is for.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Latency vs Throughput</h3>
-      {_post}
-      <p class="vis-caption"><strong>Filling the van raises throughput and hurts the first letter's latency.</strong>
-      Ask which one "fast" means.</p>
-    </div>
-                """
-            ),
-            mo.md(
-                """
-    In the benchmark below:
-    $\\text{Latency} = \\text{write time} + \\text{read time}$ and
-    $\\text{Throughput} = \\text{rows written} / \\text{write time}$.
-                """
-            ),
-            mo.accordion({"Container ships, and how to get both": _more}),
-        ],
-        gap=0.6,
-    )
-    return
-
-
-@app.cell
-def _(mo):
+def _(in_plain, mo):
     _criteria = mo.md(
         """
     - **Speed**: how long writing and reading take
-    - **Size**: how many bytes hit the disk
-    - **Interop**: which languages and tools can read it
-    - **Type fidelity**: do dates and codes come back as dates and codes?
+    - **Size**: how many bytes hit the disk and the network
+    - **Interoperability**: which languages and tools can read it (Excel, R, a partner's script)
+    - **Type fidelity**: do dates and store codes come back as dates and store codes?
     - **Schema evolution**: do old files survive a new field?
     - **Safety**: can loading a file run someone else's code?
         """
     )
     mo.vstack(
         [
+            mo.md("### Five kinds of format, and where EdgeWorks uses each"),
+            in_plain(
+                "Text formats (JSON, CSV) can be read by any tool and by people. Binary formats are smaller and "
+                "faster, but need a library to read. Choose by who reads the file and what they do with it."
+            ),
             mo.md(
                 """
-    ### Format Quick Reference
-
-    **Compare on:** speed · size · interop · type fidelity · schema evolution · safety
-
     <div class="tiles tier-data" style="grid-template-columns: repeat(5, 1fr)">
       <div class="tile"><div class="tile-key">JSON</div><div class="tile-title">Text, row by row</div>
-        <p>JSON and CSV: every tool reads them.</p></div>
+        <p>The sales API answers the dashboard in JSON; a partner opens CSV in Excel.</p></div>
       <div class="tile"><div class="tile-key">Avro</div><div class="tile-title">Rows + a schema</div>
-        <p>Event streams.</p></div>
+        <p>The order event stream: each booking sent as it happens.</p></div>
       <div class="tile"><div class="tile-key">Arrow</div><div class="tile-title">Columns in memory</div>
-        <p>Arrow / Feather: hand-over between tools.</p></div>
+        <p>Arrow / Feather: hands the sales table from DuckDB to pandas without converting it.</p></div>
       <div class="tile"><div class="tile-key">Parquet</div><div class="tile-title">Columns on disk</div>
-        <p>Analytics files.</p></div>
+        <p>EdgeWorks' sales files: <code>data/*.parquet</code>.</p></div>
       <div class="tile"><div class="tile-key">Pickle</div><div class="tile-title">Python objects</div>
-        <p class="tile-bad">Loading it can run code.</p></div>
+        <p>Python only.</p><p class="tile-bad">Loading it can run code: never from a partner.</p></div>
     </div>
                 """
             ),
+            mo.md(
+                "**What to notice:** compare them on speed, size, interoperability, type fidelity, schema evolution "
+                "and safety. The labs in this chapter measure four of the six on EdgeWorks' sales."
+            ),
             mo.accordion({"What each criterion asks": _criteria}),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(mo):
-    format_use_case = mo.ui.dropdown(
-        options=[
-            "Public API payload",
-            "Internal Python checkpoint",
-            "Analytics table",
-            "Streaming event log",
-        ],
-        value="Public API payload",
-        label="Use case",
+def _(box, diagram, in_plain, mo, shop_sales):
+    _files = shop_sales["country"].nunique()
+    _kenya = int((shop_sales["country"] == "Kenya").sum())
+
+    def _doc(x, y, w, h):
+        """A sheet of paper with a folded corner: one sales file."""
+        f = min(w, h) * 0.3
+        return (
+            f'<path class="dg-box" d="M{x} {y} H {x + w - f} L {x + w} {y + f} V {y + h} H {x} Z"/>'
+            f'<path d="M{x + w - f} {y} V {y + f} H {x + w}" fill="none" stroke="currentColor" opacity="0.5"/>'
+        )
+
+    # Sales booked through the day; the nightly export sends them all at 22:00.
+    _hours = [8, 10, 12, 14, 16, 18, 20]
+
+    def _at(hour):
+        return 60 + (hour - 8) * 60
+
+    _picture = diagram(
+        '<text x="0" y="24" font-weight="700">Latency: how long one partner waits</text>'
+        + _doc(10, 50, 70, 84)
+        + f'<text x="45" y="156" text-anchor="middle" class="dg-muted">Kenya: {_kenya} sales</text>'
+        + '<path class="dg-edge" d="M92 92 H 300"/>'
+        + '<text x="196" y="80" text-anchor="middle" font-weight="700">write · send · read</text>'
+        + box(308, 68, "partner in Kenya", w=180, h=48)
+        + '<text x="560" y="24" font-weight="700">Throughput: how much one run gets through</text>'
+        + '<rect class="dg-tier" x="570" y="48" width="300" height="88" rx="10"/>'
+        + '<text x="720" y="84" text-anchor="middle" font-weight="700">nightly export</text>'
+        + f'<text x="720" y="112" text-anchor="middle">{_files} files · {len(shop_sales):,} sales</text>'
+        + '<path class="dg-edge" d="M876 92 H 930"/>'
+        + '<text x="990" y="86" text-anchor="middle" font-weight="700">sales</text>'
+        + '<text x="990" y="108" text-anchor="middle" font-weight="700">per second</text>'
+        # the trade: the export waits for the last sale of the day, so the first one waits longest
+        + '<text x="0" y="214" font-weight="700">They trade:</text>'
+        + f'<path d="M{_at(8)} 262 H {_at(22) - 60}" stroke="currentColor" opacity="0.35" stroke-width="2"/>'
+        + "".join(
+            _doc(_at(_h) - 12, 238, 24, 28)
+            + f'<text class="dg-muted" x="{_at(_h)}" y="290" text-anchor="middle">{_h:02d}:00</text>'
+            for _h in _hours
+        )
+        + f'<rect class="dg-tier" x="{_at(22) - 60}" y="232" width="120" height="40" rx="10"/>'
+        + f'<text x="{_at(22)}" y="257" text-anchor="middle">export 22:00</text>'
+        + f'<path class="dg-edge dg-hot" d="M{_at(8)} 310 H {_at(22) - 64}"/>'
+        + f'<text class="dg-hot" x="{(_at(8) + _at(22)) / 2:.0f}" y="336" text-anchor="middle">'
+        "a sale booked at 08:00 reaches its partner 14 hours later</text>",
+        width=1060,
+        height=350,
+        label=f"Latency: one partner, in Kenya, waits for its file of {_kenya} sales to be written, sent and read. "
+        f"Throughput: the nightly export writes {_files} files with {len(shop_sales):,} sales and is measured in sales "
+        "per second. Sales booked from 08:00 all wait for the 22:00 export, so batching raises throughput and makes "
+        "the first sale wait 14 hours.",
+        tier="data",
     )
-    format_priority = mo.ui.dropdown(
-        options=["Interoperability", "Speed", "Small size", "Safety"],
-        value="Interoperability",
-        label="Priority",
-    )
-    mo.vstack(
-        [mo.md("### Mini-lab: Format Decision Assistant"), mo.hstack([format_use_case, format_priority], justify="start", gap=2)],
-        gap=0.5,
-    ).callout(kind="neutral")
-    return format_priority, format_use_case
-
-
-@app.cell
-def _(format_priority, format_use_case, mo):
-    # one row per use case, one entry per priority in the order of the priority dropdown
-    _recommendations = {
-        "Public API payload": ["JSON", "JSON, or MessagePack if both sides speak it", "Compressed JSON or a binary protocol", "JSON with strict schema validation"],
-        "Internal Python checkpoint": ["Parquet / Arrow", "Pickle (trusted data only)", "Parquet or compressed Pickle", "Parquet / JSON, no untrusted Pickle"],
-        "Analytics table": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
-        "Streaming event log": ["Avro / JSON", "Avro", "Avro with compression", "Avro + schema registry"],
-    }
-    _priorities = list(format_priority.options)
-    _pick = (format_use_case.value, _priorities.index(format_priority.value))
-    def _cell(text, chosen):
-        """A grey grid cell; the chosen use case, priority and recommendation stand out as tiles."""
-        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
-
-    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == format_priority.value) for _p in _priorities]
-    for _use, _row in _recommendations.items():
-        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
-        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
-    mo.md(
-        f"""
-    <div class="section-card tier-data">
-      <div style="display: grid; grid-template-columns: 190px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
-        {"".join(_grid)}
-      </div>
-      <p class="vis-caption">Starting point: <strong>{_recommendations[_pick[0]][_pick[1]]}</strong>.
-      A default to benchmark, not a rule.</p>
-    </div>
+    _more = mo.md(
+        """
+    - A container ship has terrible latency and huge throughput; a bicycle courier is the opposite.
+    - In the benchmark, one round trip is a file written and read back, and throughput counts sales,
+      not bytes.
+    - *Sometimes you get both*, by making the file smaller. That is what chapter 4 is for.
         """
     )
+    mo.vstack(
+        [
+            mo.md("### Latency vs throughput: two meanings of \"fast\""),
+            in_plain(
+                "**Latency** is how long one thing takes: a partner asks for its file, how long until it has it? "
+                "**Throughput** is how much gets through per second: how many sales the nightly export writes. "
+                "Collecting work into one big run raises throughput, and makes each single sale wait longer."
+            ),
+            _picture,
+            mo.md(
+                "**What to notice:** the 08:00 sale. The export sends everything in one efficient run at 22:00, so "
+                "that sale is 14 hours late. When someone asks for \"fast\", ask which one they mean."
+            ),
+            mo.md(
+                "**In one line:** latency = write time + read time of one file; throughput = sales written per second."
+            ),
+            mo.accordion({"Container ships, and how to get both": _more}),
+        ],
+        gap=0.8,
+    )
     return
 
 
 @app.cell
-def _(mo):
-    serial_rows = mo.ui.slider(200, 3000, step=200, value=800, label="Rows", show_value=True)
-    serial_cols = mo.ui.slider(2, 8, value=5, label="Metric columns", show_value=True)
-    run_serial = mo.ui.run_button(label="Run serialization benchmark", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Benchmark: Six Formats, the Same Records"),
-            mo.hstack([serial_rows, serial_cols], widths="equal"),
-            run_serial,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return run_serial, serial_cols, serial_rows
+def _(mo, shop_sales):
+    ch2_rows = mo.ui.slider(
+        140, len(shop_sales), step=140, value=len(shop_sales), label="Sales in the file", show_value=True, debounce=True
+    )
+    ch2_run_bench = mo.ui.run_button(label="Run the format benchmark", kind="success")
+    return ch2_rows, ch2_run_bench
 
 
 @app.cell
@@ -1399,6 +1476,8 @@ def _(
     TIER,
     alt,
     best_seconds,
+    ch2_rows,
+    ch2_run_bench,
     chart_or_table,
     csv,
     fastavro,
@@ -1409,37 +1488,56 @@ def _(
     pd,
     pickle,
     pq,
-    random,
-    run_serial,
-    serial_cols,
-    serial_rows,
+    shop_sales,
     static_table,
     tempfile,
     tier_chart,
 ):
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: six formats, the same EdgeWorks sales"),
+            mo.md(
+                "Each format writes EdgeWorks' first sales to a file and reads them back, the best of 3 tries. The "
+                f"slider sets how many: one month is 140, the whole history {len(shop_sales):,}."
+            ),
+            mo.hstack([ch2_rows, ch2_run_bench], justify="start", align="center", gap=3),
+        ],
+        gap=0.6,
+    )
     mo.stop(
-        not run_serial.value,
-        mo.md(
-            "**Predict first:** is the smallest file also the fastest? Then click **Run serialization benchmark**."
-        ).callout(kind="neutral"),
+        not ch2_run_bench.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** is the smallest file also the fastest? Then click **Run the format benchmark**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
-    _rng = random.Random(42)
+    _cols = ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"]
     _records = [
-        {"id": _i, "city": _rng.choice(["Zurich", "Basel", "Geneva", "Bern", "Lugano"]), "score": round(_rng.random() * 100, 3)}
-        | {f"metric_{_c}": round(_rng.random() * 1000, 5) for _c in range(serial_cols.value)}
-        for _i in range(serial_rows.value)
+        _r | {"sale_date": _r["sale_date"].date()} for _r in shop_sales.head(ch2_rows.value)[_cols].to_dict("records")
     ]
     _avro_schema = {
         "type": "record",
-        "name": "Record",
-        "fields": [{"name": "id", "type": "int"}, {"name": "city", "type": "string"}]
-        + [{"name": _field, "type": "double"} for _field in list(_records[0])[2:]],
+        "name": "Sale",
+        "fields": [
+            {"name": "sale_id", "type": "long"},
+            {"name": "sale_date", "type": {"type": "int", "logicalType": "date"}},
+            {"name": "product", "type": "string"},
+            {"name": "country", "type": "string"},
+            {"name": "units_sold", "type": "long"},
+            {"name": "total_price", "type": "double"},
+            {"name": "customer_rating", "type": "long"},
+        ],
     }
 
     def _csv_write(path):
         with path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=_records[0])
+            writer = csv.DictWriter(f, fieldnames=_cols)
             writer.writeheader()
             writer.writerows(_records)
 
@@ -1457,7 +1555,7 @@ def _(
 
     _formats = {  # label: (write(path), read(path))
         "JSON": (
-            lambda p: p.write_text(json.dumps(_records), encoding="utf-8"),
+            lambda p: p.write_text(json.dumps(_records, default=str), encoding="utf-8"),  # dates as text
             lambda p: json.loads(p.read_text(encoding="utf-8")),
         ),
         "Pickle (unsafe)": (
@@ -1483,7 +1581,7 @@ def _(
                     "read (ms)": round(_read_ms, 2),
                     "latency (ms)": round(_write_ms + _read_ms, 2),
                     "size (KB)": round(_path.stat().st_size / 1024, 1),
-                    "rows/s written": round(len(_records) / _write_ms * 1000),
+                    "sales/s written": round(len(_records) / _write_ms * 1000),
                 }
             )
 
@@ -1513,30 +1611,45 @@ def _(
     _speed = alt.Chart(_df).encode(
         y=alt.Y("format:N", sort="-x", title=None),
         x=alt.X(
-            "rows/s written:Q",
+            "sales/s written:Q",
             axis=None,
-            scale=alt.Scale(domain=[0, _df["rows/s written"].max() * 1.3]),
+            scale=alt.Scale(domain=[0, _df["sales/s written"].max() * 1.3]),
         ),
         tooltip=_tooltip,
     )
     _throughput = (
         _speed.mark_bar(cornerRadiusEnd=4).encode(color=_color)
-        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("rows/s written:Q", format=".2s"))
-    ).properties(width="container", height=300, title="Throughput: rows written per second")
+        + _speed.mark_text(align="left", dx=6).encode(text=alt.Text("sales/s written:Q", format=".2s"))
+    ).properties(width="container", height=300, title="Throughput: sales written per second")
 
+    _by = {_r["format"]: _r for _r in _rows}
+
+    def _name(row):
+        return row["format"].removesuffix(" (unsafe)")
+
+    _smallest = min(_rows, key=lambda _r: _r["size (KB)"])
+    _quickest = min(_rows, key=lambda _r: _r["latency (ms)"])
     mo.vstack(
         [
+            _top,
             chart_or_table(
                 mo.hstack([tier_chart(_scatter, "data"), tier_chart(_throughput, "data")], widths=[3, 2], gap=2),
                 _rows,
-                label="Serialization benchmark (best of 3)",
+                label=f"{len(_records):,} sales, best of 3",
             ),
-            mo.md("**Do latency and throughput rank the formats the same way?**"),
+            mo.md(
+                f"**What to notice:** the smallest file is {_name(_smallest)} ({_smallest['size (KB)']:,} KB, "
+                f"against {_by['JSON']['size (KB)']:,} KB for JSON); the quickest round trip is "
+                f"{_name(_quickest)} ({_quickest['latency (ms)']:,} ms)."
+                + (" Quick, and the one format a partner could never safely open." if _quickest["format"].startswith("Pickle") else "")
+                + " Do latency and throughput rank the formats the same way? "
+                + f"Try {140 if len(_records) > 140 else len(shop_sales):,} sales too: does the ranking hold?"
+            ),
             mo.accordion(
                 {
-                    "The records being saved, and why the reads are not quite like for like": mo.vstack(
+                    "The sales being saved, and why the reads are not quite like for like": mo.vstack(
                         [
-                            static_table(_records[:3], label="Sample records"),
+                            static_table(_records[:3], label="The first three sales, as every format receives them"),
                             mo.md(
                                 "Numbers vary by machine and caching, so compare the formats with each other, not with "
                                 "another laptop. Arrow and Parquet stop at a columnar table without building Python "
@@ -1553,10 +1666,12 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
-    _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "sale_date", "total_price"]).head(500)
-    # Store codes are the classic case: they look like numbers and are not.
-    _src["store_code"] = [f"{n:03d}" for n in ([7, 10, 42] * 167)[: len(_src)]]
+def _(Path, box, diagram, in_plain, mo, pd, shop_sales, tempfile):
+    # Each partner store has a three-digit code. For this demo, the code is the country's number:
+    # South Africa's partner store is 007, the classic case of a code that looks like a number and is not.
+    _src = shop_sales[["sale_id", "sale_date", "total_price"]].copy()
+    _src["store_code"] = [f"{_n:03d}" for _n in shop_sales["country_id"]]
+    _sa_sale = int(shop_sales.loc[shop_sales["country"] == "South Africa", "sale_id"].iloc[0])
 
     with tempfile.TemporaryDirectory() as _td:
         _csv_p = Path(_td) / "sales.csv"
@@ -1583,7 +1698,7 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
     _types = diagram(
         "".join(_parts),
         width=1010,
-        height=270,
+        height=264,
         label="The same four columns written to CSV and to Parquet and read back. Parquet returns every type it was given; "
         "CSV returns sale_date as text and store_code as a whole number.",
     )
@@ -1595,37 +1710,39 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
             return f"TypeError: {_exc}"
 
     def _ask(name, df, kind):
+        _code = df.loc[df["sale_id"] == _sa_sale, "store_code"].tolist()[0]
         return mo.md(
             f"""
     **Ask the {name} copy**
 
     - How long did sales run? `{_span(df)}`
-    - First three store codes: `{df["store_code"].head(3).tolist()}`
+    - South Africa's store code: `{_code!r}`
             """
         ).callout(kind=kind)
 
     _why = mo.md(
         """
     Open the CSV in a text editor and the date is right there: `2024-03-07`. The bytes did not lose the
-    date. They lost **the note saying it was a date**, and that note is what your analysis was standing
+    date. They lost **the note saying it was a date**, and that note is what the analysis was standing
     on. Parquet stores the date as a plain number and keeps the note in its schema, which is why it came
-    back as `datetime64`.
+    back as a date.
         """
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>Same 500 Sales, Written Two Ways and Read Back</h3>
-      {_types}
-    </div>
-                """
+            mo.md("### Why the CSV turned store code 007 into 7"),
+            in_plain(
+                "CSV is plain text with no note of what type each column is, so the reader guesses. "
+                "`2024-03-07` stays text, and `007` looks like a number, so it becomes `7`. Parquet stores the "
+                f"type next to the data. Here all {len(_src):,} sales, with each partner store's code (for this demo, "
+                "the country number: South Africa is 007), go into both files and come back out."
             ),
+            _types,
             mo.hstack([_ask("Parquet", _from_pq, "success"), _ask("CSV", _from_csv, "danger")], widths="equal", gap=1),
             mo.md(
-                "The date failure shouted; the store codes failed silently. **That one ends up in a report.**"
-            ).callout(kind="warn"),
+                "**What to notice:** the date failure shouted (a `TypeError`); the store code failed silently. "
+                "**That one ends up in a partner's report.**"
+            ),
             mo.accordion({"What the CSV actually lost": _why}),
         ],
         gap=0.6,
@@ -1634,22 +1751,21 @@ def _(Path, SALES_SEED, box, diagram, mo, pd, tempfile):
 
 
 @app.cell
-def _(csv, diagram, fastavro, html, io, mo):
-    # It is next March. Your team adds a `channel` field to the sales event.
-    # Two years of old files sit on disk, and one old program nobody redeployed
-    # is still running in production. What happens?
+def _(csv, diagram, fastavro, html, in_plain, io, mo, shop_sales):
+    # Next March, EdgeWorks starts recording each sale's channel: online or partner. Two years of old files sit
+    # on disk, and one old program nobody redeployed is still running. What happens?
     _v1 = {
         "type": "record",
         "name": "Sale",
-        "fields": [{"name": "sale_id", "type": "int"}, {"name": "total_price", "type": "double"}],
+        "fields": [{"name": "sale_id", "type": "long"}, {"name": "total_price", "type": "double"}],
     }
     _v2 = {
         "type": "record",
         "name": "Sale",
         "fields": [
-            {"name": "sale_id", "type": "int"},
+            {"name": "sale_id", "type": "long"},
             {"name": "total_price", "type": "double"},
-            {"name": "channel", "type": "string", "default": "in-store"},
+            {"name": "channel", "type": "string", "default": "unknown"},
         ],
     }
 
@@ -1658,13 +1774,16 @@ def _(csv, diagram, fastavro, html, io, mo):
         fastavro.writer(_buf, _schema, _rows)
         return _buf.getvalue()
 
-    _old_file = _avro_bytes(_v1, [{"sale_id": 1, "total_price": 4034.91}])
-    _new_file = _avro_bytes(_v2, [{"sale_id": 3, "total_price": 99.0, "channel": "online"}])
+    _first, _last = shop_sales.iloc[0], shop_sales.iloc[-1]
+    _old_file = _avro_bytes(_v1, [{"sale_id": int(_first["sale_id"]), "total_price": float(_first["total_price"])}])
+    _new_file = _avro_bytes(
+        _v2, [{"sale_id": int(_last["sale_id"]), "total_price": float(_last["total_price"]), "channel": "online"}]
+    )
 
     _old_by_new = list(fastavro.reader(io.BytesIO(_old_file), reader_schema=_v2))
     _new_by_old = list(fastavro.reader(io.BytesIO(_new_file), reader_schema=_v1))
 
-    _csv_row = next(csv.DictReader(io.StringIO("sale_id,total_price\n1,4034.91\n")))
+    _csv_row = next(csv.DictReader(io.StringIO(f"sale_id,total_price\n{_first['sale_id']},{_first['total_price']}\n")))
     try:
         _csv_row["channel"]
         _csv_result = "no error"
@@ -1711,16 +1830,84 @@ def _(csv, diagram, fastavro, html, io, mo):
         "old program skips the channel. CSV: last year's file read by this year's code raises a KeyError.",
         tier="data",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Schema Evolution: the Office Adds a Box to the Form</h3>
-      <p>A <code>channel</code> box is added (default <code>in-store</code>), while old files and one old
-      program live on.</p>
-      {_lanes_svg}
-      <p class="vis-caption">CSV ships without the form, so the agreement lives only in someone's memory.</p>
+    mo.vstack(
+        [
+            mo.md("### Schema evolution: EdgeWorks adds a channel box to the form"),
+            in_plain(
+                "**Schema evolution** means changing the form while old files and old programs live on. EdgeWorks "
+                "starts recording each sale's `channel`: `online` or `partner`. Old sales have no such box, so the "
+                "new form gives it a **default**, `unknown`, for any sale written without it."
+            ),
+            _lanes_svg,
+            mo.md(
+                "**What to notice:** the bottom row. CSV ships without the form, so the agreement lives only in "
+                "someone's memory, and every reader has to be changed by hand."
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    ch2_use_case = mo.ui.dropdown(
+        options=["Sales files for partners", "Dashboard cache", "Sales history for analysis", "Order event stream"],
+        value="Sales files for partners",
+        label="EdgeWorks job",
+    )
+    ch2_priority = mo.ui.dropdown(
+        options=["Interoperability", "Speed", "Small size", "Safety"],
+        value="Interoperability",
+        label="What matters most",
+    )
+    return ch2_priority, ch2_use_case
+
+
+@app.cell
+def _(ch2_priority, ch2_use_case, mo):
+    # one row per job, one entry per priority in the order of the priority dropdown
+    _recommendations = {
+        "Sales files for partners": ["CSV for spreadsheets, Parquet for data teams", "Parquet", "Parquet, compressed with zstd (chapter 4)", "CSV or Parquet; never Pickle"],
+        "Dashboard cache": ["Parquet / Arrow", "Arrow (Feather), or Pickle we wrote ourselves", "Parquet", "Arrow or Parquet; no Pickle from outside"],
+        "Sales history for analysis": ["Parquet", "Parquet or Arrow", "Parquet + zstd / snappy", "Parquet with schema checks"],
+        "Order event stream": ["Avro / JSON", "Avro", "Avro with compression", "Avro + a schema registry: one shared copy of every form"],
+    }
+    _priorities = list(ch2_priority.options)
+    _pick = (ch2_use_case.value, _priorities.index(ch2_priority.value))
+
+    def _cell(text, chosen):
+        """A grey grid cell; the chosen job, priority and recommendation stand out as tiles."""
+        return f'<div class="tile"><strong>{text}</strong></div>' if chosen else f'<div class="focus-item">{text}</div>'
+
+    _grid = [_cell("", False)] + [_cell(f"<strong>{_p}</strong>", _p == ch2_priority.value) for _p in _priorities]
+    for _use, _row in _recommendations.items():
+        _grid.append(_cell(f"<strong>{_use}</strong>", _use == _pick[0]))
+        _grid += [_cell(_r, (_use, _i) == _pick) for _i, _r in enumerate(_row)]
+    mo.vstack(
+        [
+            mo.md("### Try it: which format for which EdgeWorks job?"),
+            mo.md(
+                "Pick a job and what matters most for it. **Interoperability** means how many tools can read the "
+                "file: Excel, R, a partner's script. A **cache** is a saved copy the dashboard reloads instead of "
+                "asking again."
+            ),
+            mo.hstack([ch2_use_case, ch2_priority], justify="start", gap=2),
+            mo.md(
+                f"""
+    <div class="section-card tier-data">
+      <div style="display: grid; grid-template-columns: 230px repeat(4, 1fr); gap: 6px; font-size: 15px; line-height: 1.3">
+        {"".join(_grid)}
+      </div>
     </div>
-        """
+                """
+            ),
+            mo.md(
+                f"**Starting point: {_recommendations[_pick[0]][_pick[1]]}.** A default to benchmark on EdgeWorks' own "
+                "files, not a rule."
+            ),
+        ],
+        gap=0.6,
     )
     return
 
@@ -1729,20 +1916,21 @@ def _(csv, diagram, fastavro, html, io, mo):
 def _(mo):
     mo.md("""
     <div class="section-card">
-      <h3>Discussion — Serialization Choices</h3>
+      <h3>Discussion: Serialization Choices</h3>
       <details>
-        <summary><strong>Q1:</strong> JSON, Avro or Parquet: how do you choose?</summary>
-        <p><strong>Answer:</strong> JSON for the widest tool support, Avro for event streams whose schema
-        changes, Parquet for analytics.</p>
+        <summary><strong>Q1:</strong> A partner in Japan asks for "the sales as a file". CSV, JSON or Parquet?</summary>
+        <p><strong>Answer:</strong> Ask what they open it with. Excel: CSV, with the column types written down
+        (store codes are text). A data team: Parquet, which carries the types itself. A web app: JSON.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> Who can send this data, and can they be malicious?</summary>
-        <p><strong>Answer:</strong> If so, never unpickle it, and validate it strictly.</p>
+        <summary><strong>Q2:</strong> A partner sends us their sales as a Pickle file. Do we load it?</summary>
+        <p><strong>Answer:</strong> No. Loading Pickle can run any code the sender put in it. Ask for Parquet or
+        CSV, and validate whatever comes in.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> Where should size vs speed trade‑offs be measured?</summary>
-        <p><strong>Answer:</strong> In staging, then on a canary: the new format serving a small share of
-        real traffic.</p>
+        <summary><strong>Q3:</strong> Before switching the nightly export to a new format, where do we measure size and speed?</summary>
+        <p><strong>Answer:</strong> On the real export in a test setup (staging), then on a canary: one partner gets
+        the new format first, while the others keep the old one.</p>
       </details>
     </div>
     """)
@@ -1750,33 +1938,38 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(mo, shop_sales):
+    _fields = 7  # sale_id, sale_date, product_id, country_id, units_sold, total_price, customer_rating
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 2 Conclusion
 
-    - Formats trade speed, size, interop and safety: benchmark on your workload.
-    - CSV keeps values, drops types (`str` dates, `007` as `7`); Parquet and Avro carry the schema.
-    - Avro reader defaults let old files and new code agree.
-    - Never load Pickle from a source you do not trust.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Formats trade speed, size, interoperability and safety: benchmark on EdgeWorks' own sales.
+    - CSV keeps the values and drops the types (dates come back as text, store code `007` as `7`);
+      Parquet and Avro carry the schema with the data.
+    - Avro's reader defaults let old files and new code agree when the form changes.
+    - Never load Pickle from a partner, or from anyone you do not trust.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                f"""
     ### Bridge to Next Chapter
 
-    Next: **lay the bytes out** on disk, by row or by column.
-
+    Next: **lay the bytes out** on disk, by row or by column. Mia's "total revenue" needs one field of
+    the {_fields} in each sale. A file laid out row by row still passes through all {_fields} fields of every
+    sale: {_fields * len(shop_sales):,} values read to use {len(shop_sales):,}.
+                """
+                + """
     $$
     \\text{read work} \\propto \\text{rows read} \\times \\text{columns touched}
     $$
-            """
-    ).callout(kind="neutral")
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
