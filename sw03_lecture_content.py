@@ -3365,31 +3365,21 @@ def _(SALES_SEED, gzip, io, mo, pd):
 
 @app.cell
 def _(chapter_intro, mo):
+    def ch5_card(x, y, title, sub, cls="dg-box", w=235, h=72):
+        """SVG for a two-line box at (x, y): a bold title over a muted line. Used by the diagrams of this chapter."""
+        return (
+            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
+            f'<text x="{x + w / 2:.0f}" y="{y + 29}" text-anchor="middle" font-weight="700">{title}</text>'
+            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 53}" text-anchor="middle">{sub}</text>'
+        )
+
     mo.vstack(
         [
             mo.md("## 5. DuckDB Example (SQL on Files)"),
             chapter_intro(
                 "data",
-                "How can DuckDB answer a query while reading much less data?",
-                "Last stop in the data tier: chapters 1-4 built the files, now something reads them back.",
-            ),
-            mo.md(
-                """
-    **DuckDB**: an embedded analytical database, fast because it reads less.
-
-    <div class="tiles tier-data">
-      <div class="tile"><div class="tile-key">import</div><div class="tile-title">Embedded</div>
-        <p>Runs inside your Python process. No server.</p></div>
-      <div class="tile"><div class="tile-key">GROUP BY</div><div class="tile-title">Analytical</div>
-        <p>Scans, filters, joins and aggregates over many rows, column by column.</p></div>
-      <div class="tile"><div class="tile-key">WHERE</div><div class="tile-title">Predicate pushdown</div>
-        <p>Filters inside the scan; skips blocks whose min/max rule out a match.</p>
-        <p><em>Chapter 3's index card.</em></p></div>
-      <div class="tile"><div class="tile-key">SELECT</div><div class="tile-title">Projection pushdown</div>
-        <p>Only the columns the query names are read.</p>
-        <p><em>Chapter 3's ledger.</em></p></div>
-    </div>
-                """
+                "Can I get revenue per region straight from the files, with no database server?",
+                "Yes: DuckDB runs SQL on the files chapters 1-4 built. This chapter shows how, and why it reads so little of them.",
             ),
             mo.Html(
                 '<div class="disclaimer-red">Databases get their own module later: '
@@ -3398,92 +3388,216 @@ def _(chapter_intro, mo):
         ],
         gap=1,
     )
+    return (ch5_card,)
+
+
+@app.cell
+def _(SEED_DIR, alt, best_seconds, chart_or_table, duckdb, in_plain, mo, tier_chart):
+    from textwrap import dedent as _dedent
+
+    # Exactly what runs: DuckDB finds the three file names in data/seed/.
+    _sql = _dedent(
+        """
+        SELECT r.name AS region, sum(s.total_price) AS revenue
+        FROM 'sales.parquet' s                            -- the 3,360 sales
+        JOIN 'countries.parquet' c USING (country_id)     -- each sale's country
+        JOIN 'sales_regions.parquet' r USING (region_id)  -- each country's region
+        GROUP BY region                                   -- one total per region
+        ORDER BY revenue DESC
+        """
+    ).strip()
+    with duckdb.connect() as _con:
+        _con.execute(f"SET file_search_path = '{SEED_DIR}'")
+        _answer = _con.execute(_sql).df()
+        _ms = best_seconds(lambda: _con.execute(_sql).fetchall()) * 1000
+
+    _answer["label"] = [f"CHF {_v / 1e6:,.1f} M" for _v in _answer["revenue"]]
+    _bars = alt.Chart(_answer).encode(
+        y=alt.Y("region:N", sort=None, title=None),
+        x=alt.X("revenue:Q", axis=None, scale=alt.Scale(domain=[0, _answer["revenue"].max() * 1.3])),
+    )
+    _chart = (_bars.mark_bar(cornerRadiusEnd=4) + _bars.mark_text(align="left", dx=6).encode(text="label:N")).properties(
+        width="container", height=230, title="Revenue per region, March 2024 to February 2026"
+    )
+    mo.vstack(
+        [
+            mo.md("### Mia's answer: revenue per region, straight from the files"),
+            in_plain(
+                "**DuckDB** is a database that runs inside our Python program: `import duckdb`, and there is no "
+                "server to install, start or look after. It reads Parquet and CSV files by their file names and "
+                "answers **SQL**, the question language of databases."
+            ),
+            mo.hstack(
+                [
+                    mo.md(f"`duckdb.sql(query)`, with this query:\n\n```sql\n{_sql}\n```"),
+                    chart_or_table(
+                        tier_chart(_chart, "data"),
+                        [{"region": _r, "revenue (CHF)": f"{_v:,.2f}"} for _r, _v in zip(_answer["region"], _answer["revenue"], strict=True)],
+                        label="Revenue per region",
+                    ),
+                ],
+                widths=[1, 1],
+                gap=2,
+            ),
+            mo.md(
+                f"**What to notice:** three files joined, four totals back in {_ms:.1f} ms, and nothing was loaded or "
+                "imported first. DuckDB is an *analytical* database: built for sums and averages over many rows, "
+                "not for booking one sale at a time (chapter 1's job)."
+            ).callout(kind="info"),
+        ],
+        gap=0.8,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    push_rows = mo.ui.slider(10_000, 5_000_000, step=10_000, value=400_000, label="Rows (N)", show_value=True, debounce=True)
-    push_selectivity = mo.ui.slider(0.001, 1.0, step=0.001, value=0.08, label="Filter selectivity (fraction of rows kept)", show_value=True, debounce=True)
-    push_cols_total = mo.ui.slider(4, 80, value=24, label="Total columns", show_value=True, debounce=True)
-    push_cols_needed = mo.ui.slider(1, 24, value=5, label="Columns used by query", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md(
-                "### Mini-lab: Pushdown Intuition (What Work Gets Skipped?)\n\n"
-                "A toy model: $\\text{cells read} \\approx N \\times \\text{selectivity} \\times C_{\\text{needed}}$"
+    # Mia's questions, each as (what it selects, its filter, its grouping, what to notice).
+    ch5_question = mo.ui.dropdown(
+        options={
+            "Total revenue, all time": (
+                "sum(total_price)",
+                None,
+                None,
+                "one column of seven, every row: the row layout of chapter 3 would read all seven.",
             ),
-            mo.hstack([push_rows, push_selectivity], widths="equal"),
-            mo.hstack([push_cols_total, push_cols_needed], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return push_cols_needed, push_cols_total, push_rows, push_selectivity
+            "Revenue in January 2026": (
+                "sum(total_price)",
+                "sale_date BETWEEN '2026-01-01' AND '2026-01-31'",
+                None,
+                "the date is checked on all 3,360 rows, the price fetched for only the 140 January sales. They sit "
+                "together near the end, because the file is stored month by month.",
+            ),
+            "Revenue per country": (
+                "country_id, sum(total_price)",
+                None,
+                "country_id",
+                "no filter, so every row counts, but only two of the seven columns are read.",
+            ),
+            "Average rating of the Gateway Node Pro (product 2)": (
+                "avg(customer_rating)",
+                "product_id = 2",
+                None,
+                "its 480 sales are spread through the file: thin stripes, not one band. Still only two columns, "
+                "and the rating only where the product matches.",
+            ),
+            "Every field of every sale": (
+                "*",
+                None,
+                None,
+                "nothing to skip: <code>SELECT *</code> reads every cell. Name the columns you need.",
+            ),
+        },
+        value="Revenue in January 2026",
+        label="Mia's question",
+    )
+    return (ch5_question,)
 
 
 @app.cell
-def _(diagram, mo, push_cols_needed, push_cols_total, push_rows, push_selectivity):
-    _n, _kept, _total = push_rows.value, push_selectivity.value, push_cols_total.value
-    _needed = min(push_cols_needed.value, _total)  # a query cannot use more columns than the table has
-    _without, _with = _n * _total, _n * _kept * _needed
-    _tall = 220  # px for all N rows
+def _(SALES_SEED, ch5_question, diagram, duckdb, in_plain, mo, np, pd):
+    _select, _where, _group, _note = ch5_question.value
+    _sql = (
+        f"SELECT {_select}\nFROM 'sales.parquet'"
+        + (f"\nWHERE {_where}" if _where else "")
+        + (f"\nGROUP BY {_group}" if _group else "")
+    )
+    _sales = pd.read_parquet(SALES_SEED)  # in the file's own order: month by month
+    _n, _columns = len(_sales), list(_sales.columns)
+    with duckdb.connect() as _con:
+        _answer = _con.execute(_sql.replace("'sales.parquet'", "read_parquet(?)"), [str(SALES_SEED)]).fetchall()
+        _kept_ids = (
+            [_r[0] for _r in _con.execute(f"SELECT sale_id FROM read_parquet(?) WHERE {_where}", [str(SALES_SEED)]).fetchall()]
+            if _where
+            else list(_sales["sale_id"])
+        )
+    _kept = np.flatnonzero(_sales["sale_id"].isin(_kept_ids))  # positions in the file of the rows that pass
+    _runs = np.split(_kept, np.flatnonzero(np.diff(_kept) > 1) + 1) if len(_kept) else []
 
-    def _grid(x, title, sub, read_height):
-        """The table as one strip per column, N rows tall: cells read in the tier hue, cells skipped grey."""
-        step = 440 / _total
-        width = step - (2 if step > 8 else 1)
-        parts = [f'<text x="{x + 220}" y="22" text-anchor="middle" font-weight="700">{title}</text>']
-        for column in range(_total):
-            cx = x + column * step
-            parts.append(
-                f'<rect x="{cx:.1f}" y="40" width="{width:.1f}" height="{_tall}"'
-                ' style="fill: color-mix(in srgb, var(--ink) 9%, transparent)"/>'
-            )
-            if height := read_height(column):
-                parts.append(f'<rect x="{cx:.1f}" y="40" width="{width:.1f}" height="{height:.1f}" style="fill: var(--tier)"/>')
-        parts.append(f'<text class="dg-muted" x="{x + 220}" y="{_tall + 68}" text-anchor="middle">{sub}</text>')
-        return "".join(parts)
+    # How each column is read: every row ("all"), only the rows that pass ("kept"), or not at all.
+    _filter_cols = {_c for _c in _columns if _where and _c in _where}
+    _used = set(_columns) if _select == "*" else {_c for _c in _columns if _c in _sql}
+    _how = {_c: "all" if _c in _filter_cols or (_c in _used and not _where) else "kept" if _c in _used else "none" for _c in _columns}
+    _read = sum(_n if _h == "all" else len(_kept) if _h == "kept" else 0 for _h in _how.values())
 
+    _top, _tall, _step, _w = 40, 230, 132, 120
+    _parts = [
+        f'<text class="dg-muted" x="0" y="{_top + 14}">row 1</text>',
+        f'<text class="dg-muted" x="0" y="{_top + 34}">Mar 2024</text>',
+        f'<text class="dg-muted" x="0" y="{_top + _tall - 22}">row {_n:,}</text>',
+        f'<text class="dg-muted" x="0" y="{_top + _tall - 2}">Feb 2026</text>',
+    ]
+    for _i, _c in enumerate(_columns):
+        _x = 92 + _i * _step
+        _parts.append(f'<text x="{_x + _w / 2}" y="24" text-anchor="middle" font-size="15">{_c}</text>')
+        _parts.append(
+            f'<rect x="{_x}" y="{_top}" width="{_w}" height="{_tall}" style="fill: color-mix(in srgb, var(--ink) 9%, transparent)"/>'
+        )
+        if _how[_c] == "all":
+            _parts.append(f'<rect x="{_x}" y="{_top}" width="{_w}" height="{_tall}" style="fill: var(--tier)"/>')
+        elif _how[_c] == "kept":
+            # each run of neighbouring rows that pass, at least a sliver so a single row still shows
+            _parts += [
+                f'<rect x="{_x}" y="{_top + _tall * _r[0] / _n:.2f}" width="{_w}" height="{max(_tall * len(_r) / _n, 0.8):.2f}" style="fill: var(--tier)"/>'
+                for _r in _runs
+            ]
+        _says = {"all": f"{_n:,} read", "kept": f"{len(_kept):,} read", "none": "skipped"}[_how[_c]]
+        _parts.append(f'<text class="dg-muted" x="{_x + _w / 2}" y="{_top + _tall + 26}" text-anchor="middle">{_says}</text>')
     _picture = diagram(
-        _grid(0, "without pushdown", f"{_n:,} rows × {_total} columns", lambda _c: _tall)
-        + '<text class="dg-muted" x="490" y="138" text-anchor="middle">pushdown</text>'
-        + '<path class="dg-edge" d="M452 150 H 526"/>'
-        # at least a sliver, so a selectivity of 0.001 still shows where the work is
-        + _grid(
-            540,
-            "with pushdown",
-            f"{_kept:.1%} of the rows × {_needed} of {_total} columns",
-            lambda _c: max(_tall * _kept, 1.5) if _c < _needed else 0,
-        ),
-        width=980,
-        height=300,
-        label=f"The table as {_total} column strips. Without pushdown every cell is read; with pushdown only "
-        f"the {_needed} needed columns of the {_kept:.1%} of rows the filter keeps.",
+        "".join(_parts),
+        width=92 + 7 * _step,
+        height=_top + _tall + 40,
+        label=f"The sales file as seven column strips, row 1 at the top. Blue cells are read: {_read:,} of {_n * len(_columns):,}.",
         tier="data",
     )
+    if len(_answer) > 1 or len(_answer[0]) > 1:
+        _value = f"{len(_answer):,} rows"
+    else:
+        _value = f"CHF {_answer[0][0]:,.2f}" if _select.startswith("sum") else f"{_answer[0][0]:,.2f}"
     mo.vstack(
         [
+            mo.md("### Try it: which parts of the file does Mia's question read?"),
+            in_plain(
+                "**Pushdown**: DuckDB pushes the question down into the reading of the file, and reads only what it "
+                "needs. *Projection pushdown* reads only the columns the query names. *Predicate pushdown* runs the "
+                "filter (the `WHERE` condition) while reading: the filter column is checked on every row, the other "
+                "columns are fetched only for the rows that pass."
+            ),
             mo.hstack(
                 [
-                    mo.stat(f"{_without:,}", label="cells read without pushdown", bordered=True),
-                    mo.stat(f"{round(_with):,}", label="cells read with pushdown", bordered=True),
-                    mo.stat(f"{_without / _with:,.1f}x", label="less work", bordered=True),
+                    mo.vstack(
+                        [
+                            ch5_question,
+                            mo.md(f"```sql\n{_sql}\n```"),
+                            mo.hstack(
+                                [
+                                    mo.stat(f"{_read:,}", label="cells read", caption=f"of {_n * len(_columns):,} in the file", bordered=True),
+                                    mo.stat(f"{_n * len(_columns) / _read:,.1f}x", label="less work", bordered=True),
+                                    mo.stat(_value, label="Mia's answer", bordered=True),
+                                ],
+                                widths="equal",
+                            ),
+                        ],
+                        gap=0.6,
+                    ),
+                    _picture,
                 ],
-                widths="equal",
+                widths=[2, 3],
+                gap=2,
             ),
-            _picture,
-            mo.Html(
-                '<p class="vis-caption"><strong>Blue: cells read. Grey: work skipped.</strong> The kept rows are drawn '
-                "at the top; in a real file they are scattered.</p>"
+            mo.md(f"**What to notice:** {_note}").callout(kind="info"),
+            mo.md(
+                "In one line: cells read = all rows of the filter column + the passing rows of the other columns the query names."
             ),
             mo.accordion(
                 {
-                    "Where the toy model is too kind": mo.md(
+                    "Where this picture is too simple": mo.md(
                         """
-    It counts only the needed columns of the kept rows. The filter column itself is still read
-    for every row, unless whole blocks can be skipped by their min/max, and that needs the data
-    sorted or clustered on that column (chapter 3). It shows what *can* be skipped, not a
-    runtime: the next mini-lab times a real query.
+    It counts cells, not time. Real files are read in blocks of rows (row groups, chapter 3), and
+    DuckDB keeps each block's smallest and largest value: a block whose dates all fall before
+    January is skipped without reading even its dates. Our 3,360 sales fit in a single block, so
+    here that trick has nothing to skip; with millions of sales stored in date order, it skips
+    most of them.
                         """
                     )
                 }
@@ -3496,22 +3610,11 @@ def _(diagram, mo, push_cols_needed, push_cols_total, push_rows, push_selectivit
 
 @app.cell
 def _(mo):
-    duck_rows = mo.ui.slider(2_000, 50_000, step=2_000, value=12_000, label="Rows", show_value=True)
-    duck_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Amount threshold", show_value=True)
-    run_duck = mo.ui.run_button(label="Run DuckDB demo", kind="success")
-    mo.vstack(
-        [
-            mo.md(
-                "### Mini-lab: One Query, Three Sources\n\n"
-                "One `GROUP BY` (orders and average amount per region above the threshold) on three sources. "
-                "DuckDB reads a file by its name: `FROM 'orders.csv'`."
-            ),
-            mo.hstack([duck_rows, duck_threshold], widths="equal"),
-            run_duck,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return duck_rows, duck_threshold, run_duck
+    ch5_copies = mo.ui.slider(
+        1, 30, value=1, label="Copies of the 3,360 sales (more copies stand in for a bigger EdgeWorks)", show_value=True, debounce=True
+    )
+    ch5_run_sources = mo.ui.run_button(label="Run Mia's query on all three", kind="success")
+    return ch5_copies, ch5_run_sources
 
 
 @app.cell
@@ -3520,65 +3623,73 @@ def _(
     TIER,
     alt,
     best_seconds,
+    ch5_copies,
+    ch5_run_sources,
     chart_or_table,
-    duck_rows,
-    duck_threshold,
     duckdb,
     format_bytes,
     format_ms,
+    in_plain,
     mo,
-    np,
     pd,
-    run_duck,
+    shop_sales,
     static_table,
     tempfile,
     tier_chart,
 ):
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: one query, three kinds of file"),
+            in_plain(
+                "We save the same sales three ways: a **CSV** file (plain text), a **Parquet** file (typed columns, "
+                "chapters 3 and 4) and a **DuckDB table** (loaded once into DuckDB's own file). Then we run Mia's "
+                "revenue per region on each and time it. Only the `FROM` changes: `FROM 'sales.csv'`, "
+                "`FROM 'sales.parquet'`, `FROM sales`."
+            ),
+            mo.hstack([ch5_copies, ch5_run_sources], justify="start", align="center", gap=2),
+        ],
+        gap=0.6,
+    )
     mo.stop(
-        not run_duck.value,
-        mo.md(
-            "**Predict first:** which source answers fastest, and which file is the smallest? Then click **Run DuckDB demo**."
-        ).callout(kind="neutral"),
+        not ch5_run_sources.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** which file answers fastest, and which file is the smallest? "
+                    "Then click **Run Mia's query on all three**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
 
-    _n = duck_rows.value
-    _rng = np.random.default_rng(33)
-    _orders = pd.DataFrame(
-        {
-            "order_id": np.arange(_n),
-            "region": _rng.choice(["EU", "US", "APAC"], _n),
-            "segment": _rng.choice(["consumer", "enterprise", "startup"], _n),
-            "amount": _rng.uniform(0, 1000, _n).round(2),
-            "day": _rng.integers(1, 31, _n),
-        }
-    )
-    _sql = (
-        "SELECT region, count(*) AS orders, round(avg(amount), 2) AS avg_amount "
-        "FROM {} WHERE amount > ? GROUP BY region ORDER BY region"
-    )
+    # The sales with their names joined in, as a partner would get them: 8 columns, region among them.
+    _flat = shop_sales[["sale_id", "sale_date", "product", "country", "region", "units_sold", "total_price", "customer_rating"]]
+    _sales = pd.concat([_flat] * ch5_copies.value, ignore_index=True)
+    _sql = "SELECT region, sum(total_price) AS revenue FROM {} GROUP BY region ORDER BY revenue DESC"
     with tempfile.TemporaryDirectory() as _td:
-        _csv, _parquet, _db = (Path(_td) / _name for _name in ("orders.csv", "orders.parquet", "analytics.duckdb"))
-        _orders.to_csv(_csv, index=False)
-        _orders.to_parquet(_parquet, index=False)
+        _csv, _parquet, _db = (Path(_td) / _name for _name in ("sales.csv", "sales.parquet", "sales.duckdb"))
+        _sales.to_csv(_csv, index=False)
+        _sales.to_parquet(_parquet, index=False)
         with duckdb.connect(_db) as _con:
 
-            def _best(sql, params):  # best of 3, so a cold first run does not decide the ranking
+            def _best(sql, params=()):  # best of 3, so a cold first run does not decide the ranking
                 return best_seconds(lambda: _con.execute(sql, params).fetchall())
 
-            _load_csv = _best("CREATE OR REPLACE TABLE orders AS FROM read_csv(?)", [str(_csv)])
-            _load_parquet = _best("CREATE OR REPLACE TABLE orders AS FROM read_parquet(?)", [str(_parquet)])
-            _query_csv = _best(_sql.format("read_csv(?)"), [str(_csv), duck_threshold.value])
-            _query_parquet = _best(_sql.format("read_parquet(?)"), [str(_parquet), duck_threshold.value])
-            _query_table = _best(_sql.format("orders"), [duck_threshold.value])
-            _result = _con.execute(_sql.format("orders"), [duck_threshold.value]).df()
+            _load_csv = _best("CREATE OR REPLACE TABLE sales AS FROM read_csv(?)", [str(_csv)])
+            _query_csv = _best(_sql.format("read_csv(?)"), [str(_csv)])
+            _query_parquet = _best(_sql.format("read_parquet(?)"), [str(_parquet)])
+            _query_table = _best(_sql.format("sales"))
+            _result = _con.execute(_sql.format("sales")).df()
             _block = _con.execute("SELECT block_size FROM pragma_database_size()").fetchone()[0]
         _csv_size, _parquet_size, _db_size = (_p.stat().st_size for _p in (_csv, _parquet, _db))
 
     _sources = [
         # name, file, size, per query, load into a table once
-        ("CSV file", "orders.csv", _csv_size, _query_csv, _load_csv),
-        ("Parquet file", "orders.parquet", _parquet_size, _query_parquet, _load_parquet),
-        ("DuckDB table", "analytics.duckdb", _db_size, _query_table, None),
+        ("CSV file", "sales.csv", _csv_size, _query_csv, _load_csv),
+        ("Parquet file", "sales.parquet", _parquet_size, _query_parquet, None),
+        ("DuckDB table", "sales.duckdb", _db_size, _query_table, None),
     ]
     _rows = [
         {
@@ -3610,7 +3721,7 @@ def _(
             color=alt.Color("cost:N", title=None, sort=_order, scale=alt.Scale(domain=_order, range=[TIER["data"], TIER["muted"]]))
         )
         + _timed.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=250, title="Time (best of 3 runs)")
+    ).properties(width="container", height=230, title="Time (best of 3 runs)")
     _sized = alt.Chart(
         pd.DataFrame({"source": _names, "bytes": [_s[2] for _s in _sources], "label": [format_bytes(_s[2]) for _s in _sources]})
     ).encode(
@@ -3619,33 +3730,44 @@ def _(
     )
     _size = (
         _sized.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _sized.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=250, title="File size")
+    ).properties(width="container", height=230, title="File size")
 
     _size_note = (
-        "Push Rows up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
+        "Push the copies up and the CSV overtakes it." if _db_size > _csv_size else "At this size the CSV is already the bigger file."
     )
     mo.vstack(
         [
-            chart_or_table(mo.hstack([tier_chart(_time, "data"), tier_chart(_size, "data")], widths=[2, 1], gap=2), _rows, label="One query, three sources (best of 3 runs)"),
+            _top,
+            chart_or_table(
+                mo.hstack([tier_chart(_time, "data"), tier_chart(_size, "data")], widths=[2, 1], gap=2),
+                _rows,
+                label=f"Revenue per region on {len(_sales):,} sales, three sources (best of 3 runs)",
+            ),
             mo.md(
-                f"**Here the gap is mostly parsing:** CSV is text, re-converted on every query; Parquet and the "
-                f"table are typed columns. Loading the CSV once cost {_load_csv / _query_csv:.1f} CSV queries' worth."
+                f"**What to notice:** the CSV is {_query_csv / _query_parquet:,.0f}x slower than Parquet. It is text, turned "
+                "back into numbers on every query; Parquet and the table store typed columns. Loading the CSV into a "
+                f"table once cost {_load_csv / _query_csv:.1f} CSV queries' worth."
             ).callout(kind="info"),
             mo.accordion(
                 {
-                    "Why pushdown skips little here, and why the DuckDB file can be the biggest": mo.md(
+                    "Why the CSV is slow, and why the DuckDB file can be the biggest": mo.md(
                         f"""
-    Predicate pushdown has next to nothing to skip: the amounts are random, so every block spans
-    roughly 0 to 1000 and none can be ruled out by its min/max.
+    The query names two of the eight columns. Parquet and the table read just those two
+    (projection pushdown); a CSV has no columns to skip, so every line is read and split to find
+    `region` and `total_price`, on every query.
 
-    DuckDB grows `analytics.duckdb` in {_block // 1024} KiB blocks, so a small table still fills
-    whole blocks. {_size_note}
+    DuckDB grows `sales.duckdb` in {_block // 1024} KiB blocks, so a small table still fills whole
+    blocks. {_size_note} Copies repeat the same values, which Parquet stores once in its
+    dictionary (chapter 4), so the Parquet file grows unusually slowly here.
                         """
                     ),
                     "The query and its answer": mo.vstack(
                         [
-                            mo.md(f"```sql\n{_sql.format('orders')}\n```"),
-                            static_table(_result.to_dict("records"), label=f"Query result (amount > {duck_threshold.value})"),
+                            mo.md(f"```sql\n{_sql.format('sales')}\n```"),
+                            static_table(
+                                [{"region": _r, "revenue (CHF)": f"{_v:,.2f}"} for _r, _v in zip(_result["region"], _result["revenue"], strict=True)],
+                                label=f"Revenue per region, {ch5_copies.value} cop{'y' if ch5_copies.value == 1 else 'ies'} of the sales",
+                            ),
                         ]
                     ),
                 }
@@ -3657,29 +3779,72 @@ def _(
 
 
 @app.cell
-def _(mo):
-    idx_rows = mo.ui.slider(20_000, 200_000, step=20_000, value=80_000, label="Rows", show_value=True)
-    idx_selectivity = mo.ui.slider(0.05, 0.9, step=0.05, value=0.2, label="Share of category = 'C'", show_value=True)
-    idx_threshold = mo.ui.slider(0, 1000, step=50, value=600, label="Value threshold", show_value=True)
-    idx_seed = mo.ui.slider(1, 999, value=17, label="Seed", show_value=True)
-    run_index = mo.ui.run_button(label="Run indexing demo", kind="success")
+def _(ch5_card, diagram, in_plain, mo, shop_sales, static_table):
+    _feb = shop_sales[shop_sales["sale_date"] >= "2026-02-01"].sort_values(["sale_date", "sale_id"])
+    _n = len(shop_sales)
+    _lanes = diagram(
+        '<text x="0" y="24" font-weight="700">without an index: <tspan class="dg-muted" font-weight="400">read the whole book</tspan></text>'
+        + ch5_card(0, 40, "the sales table", f"{_n:,} rows, in booking order", w=290)
+        + ch5_card(350, 40, "check every date", f"{_n:,} rows read", cls="dg-box dg-hot", w=290)
+        + ch5_card(700, 40, f"{len(_feb):,} sales match", f"CHF {_feb['total_price'].sum():,.0f}", w=290)
+        + '<text x="0" y="174" font-weight="700">with an index on sale_date: <tspan class="dg-muted" font-weight="400">look it up at the back</tspan></text>'
+        + ch5_card(0, 190, "index on sale_date", f"{_n:,} dates, sorted, each with its row", cls="dg-tier", w=290)
+        + ch5_card(350, 190, "jump to 2026-02-01", "one look-up in the sorted list", w=290)
+        + ch5_card(700, 190, f"fetch the {len(_feb):,} rows", f"{len(_feb):,} rows read", cls="dg-box dg-ok", w=290)
+        + '<path class="dg-edge" d="M290 76 H 344"/><path class="dg-edge" d="M640 76 H 694"/>'
+        + '<path class="dg-edge" d="M290 226 H 344"/><path class="dg-edge" d="M640 226 H 694"/>',
+        width=990,
+        height=270,
+        label=f"Revenue since 1 February 2026 two ways. Without an index, all {_n:,} rows are read to find {len(_feb)}. "
+        f"With an index on sale_date, one look-up in the sorted dates finds them, and only those {len(_feb)} rows are read.",
+        tier="data",
+    )
     mo.vstack(
         [
-            mo.md(
-                """
-    ### Indexing Demo: Full Scan vs Indexed Search
-
-    An **index** avoids the scan: a sorted copy of some columns, to jump to the matching rows.
-    DuckDB keeps min/max zone maps instead, so this lab uses SQLite.
-                """
+            mo.md("### An index: look it up instead of reading every row"),
+            in_plain(
+                "A book's index lists every topic from A to Z with its page numbers: to find *Kenya* you look it up "
+                "and turn to those pages, instead of reading the whole book. A database **index** is the same: a "
+                "sorted copy of one column, say `sale_date`, each value with the row it sits on."
             ),
-            mo.hstack([idx_rows, idx_selectivity], widths="equal"),
-            mo.hstack([idx_threshold, idx_seed], widths="equal"),
-            run_index,
+            mo.md(f"Mia asks for **revenue since 1 February 2026**: {len(_feb)} of the {_n:,} sales."),
+            mo.hstack(
+                [
+                    _lanes,
+                    static_table(
+                        [{"sale_date": str(_d.date()), "row (sale_id)": f"{_i:,}"} for _d, _i in zip(_feb["sale_date"].head(6), _feb["sale_id"].head(6), strict=True)],
+                        label=f"The index from 2026-02-01 on: the first 6 of {len(_feb)}",
+                    ),
+                ],
+                widths=[3, 1],
+                gap=2,
+                align="center",
+            ),
+            mo.md(
+                "**What to notice:** the index is sorted by date, but its rows point all over the table. Two catches, "
+                "which the next lab measures: every new sale must also be filed in the index, and when Mia wants most "
+                "of the rows, jumping between index and table is slower than reading straight through."
+            ).callout(kind="info"),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return idx_rows, idx_seed, idx_selectivity, idx_threshold, run_index
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    ch5_since = mo.ui.dropdown(
+        options={
+            "1 February 2026 (the last month)": "2026-02-01",
+            "1 January 2026": "2026-01-01",
+            "1 March 2025 (the last 12 months)": "2025-03-01",
+            "the first sale (all time)": "2024-03-01",
+        },
+        value="1 February 2026 (the last month)",
+        label="Mia asks for revenue since",
+    )
+    ch5_run_index = mo.ui.run_button(label="Run the index test", kind="success")
+    return ch5_run_index, ch5_since
 
 
 @app.cell
@@ -3687,53 +3852,71 @@ def _(
     TIER,
     alt,
     best_seconds,
+    ch5_run_index,
+    ch5_since,
     chart_or_table,
-    idx_rows,
-    idx_seed,
-    idx_selectivity,
-    idx_threshold,
     mo,
     pd,
-    random,
-    run_index,
+    shop_sales,
     sqlite3,
     tier_chart,
 ):
-    mo.stop(
-        not run_index.value,
-        mo.md(
-            "**Predict first:** no index, `(category)` or `(category, value)`: which is fastest? "
-            "Then click **Run indexing demo**."
-        ).callout(kind="neutral"),
+    _copies = 30
+    _query = "SELECT count(*), round(sum(total_price), 2) FROM sales WHERE sale_date >= ?"
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: does an index make Mia's question faster?"),
+            mo.md(
+                f"The sales copied {_copies} times ({_copies * len(shop_sales):,} rows, to stand in for a bigger EdgeWorks) "
+                "in **SQLite**, the small database that comes with Python. (DuckDB skips blocks by their min/max "
+                "instead, and rarely needs an index like this.) Mia's question runs with no index, then with an "
+                "index on `sale_date`, then with one on `(sale_date, total_price)`:"
+            ),
+            mo.md(f"`{_query}`"),
+            mo.hstack([ch5_since, ch5_run_index], justify="start", align="center", gap=2),
+        ],
+        gap=0.6,
     )
-
-    _rng = random.Random(idx_seed.value)
-    _con = sqlite3.connect(":memory:")  # in memory, so the timings measure SQLite and not the disk
-    _con.execute("CREATE TABLE events (id INTEGER, category TEXT, value REAL)")
-    _con.executemany(
-        "INSERT INTO events VALUES (?, ?, ?)",
-        (
-            (_i, "C" if _rng.random() < idx_selectivity.value else _rng.choice("ABD"), round(_rng.random() * 1000, 2))
-            for _i in range(idx_rows.value)
+    mo.stop(
+        not ch5_run_index.value,
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** no index, `(sale_date)` or `(sale_date, total_price)`: which is fastest? And does "
+                    "the answer change for *all time*? Then click **Run the index test**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
         ),
     )
-    _query = "SELECT count(*), round(avg(value), 2) FROM events WHERE category = 'C' AND value > ?"
-    _params = [idx_threshold.value]
-    _states, _answers = {}, set()
+
+    _columns = ["sale_id", "sale_date", "product_id", "country_id", "units_sold", "total_price", "customer_rating"]
+    _rows_in = list(
+        shop_sales[_columns].assign(sale_date=shop_sales["sale_date"].dt.strftime("%Y-%m-%d")).itertuples(index=False, name=None)
+    )
+    _con = sqlite3.connect(":memory:")  # in memory, so the timings measure SQLite and not the disk
+    _con.execute(
+        "CREATE TABLE sales (sale_id INTEGER, sale_date TEXT, product_id INTEGER, country_id INTEGER, "
+        "units_sold INTEGER, total_price REAL, customer_rating INTEGER)"
+    )
+    _con.executemany("INSERT INTO sales VALUES (?, ?, ?, ?, ?, ?, ?)", _rows_in * _copies)
+    _params = [ch5_since.value]
+    _count, _total = _con.execute(_query, _params).fetchone()
+    _share = _count / (len(_rows_in) * _copies)
+    _states = {}
     for _state, _ddl in (
         ("no index", None),
-        ("index on (category)", "CREATE INDEX idx_cat ON events(category)"),
-        ("index on (category, value)", "CREATE INDEX idx_cat_val ON events(category, value)"),
+        ("index on (sale_date)", "CREATE INDEX by_date ON sales(sale_date)"),
+        ("index on (sale_date, total_price)", "CREATE INDEX by_date_price ON sales(sale_date, total_price)"),
     ):
         _build = best_seconds(_con.execute, _ddl, repeat=1) if _ddl else 0.0
         _plan = _con.execute(f"EXPLAIN QUERY PLAN {_query}", _params).fetchone()[-1]
         _states[_state] = (_build, best_seconds(lambda: _con.execute(_query, _params).fetchall(), repeat=5), _plan)
-        _answers.add(_con.execute(_query, _params).fetchone())
     _con.close()
-    ((_count, _avg),) = _answers  # one answer, whichever plan SQLite picked
 
     _scan = _states["no index"][1]
-    _narrow = _scan / _states["index on (category)"][1]
+    _narrow = _scan / _states["index on (sale_date)"][1]
     _rows = [
         {
             "state": _state,
@@ -3751,7 +3934,7 @@ def _(
         for _state, _ms, _up in zip(_df["state"], _df["query (ms)"], _df["speed-up"], strict=True)
     ]
     _df["kind"] = ["scan" if _state == "no index" else ("slower" if _up < 1 else "faster") for _state, _up in zip(_df["state"], _df["speed-up"], strict=True)]
-    _y = alt.Y("state:N", sort=None, title=None)
+    _y = alt.Y("state:N", sort=None, title=None, axis=alt.Axis(labelLimit=400))
     _timed = alt.Chart(_df).encode(y=_y, x=alt.X("query (ms):Q", title=None, scale=alt.Scale(domain=[0, _df["query (ms)"].max() * 1.45])))
     _query_chart = (
         _timed.mark_bar(cornerRadiusEnd=4).encode(
@@ -3760,7 +3943,7 @@ def _(
             )
         )
         + _timed.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=180, title="Query time (ms), best of 5")
+    ).properties(width="container", height=170, title="Query time (ms), best of 5")
     _built = alt.Chart(_df).encode(
         y=alt.Y("state:N", sort=None, title=None, axis=None),
         x=alt.X("build (ms):Q", title=None, scale=alt.Scale(domain=[0, max(_df["build (ms)"].max(), 1) * 1.5])),
@@ -3768,46 +3951,48 @@ def _(
     _build_chart = (
         _built.mark_bar(cornerRadiusEnd=4, color=TIER["muted"])
         + _built.mark_text(align="left", dx=6).encode(text=alt.Text("build (ms):Q", format=".1f"))
-    ).properties(width="container", height=180, title="Build, once (ms)")
+    ).properties(width="container", height=170, title="Build, once (ms)")
 
     if round(_narrow, 1) < 1:
-        _planner = f"Here <code>(category)</code> ran at {_narrow:.1f}x, slower than the scan, and still USING INDEX."
-    elif round(idx_selectivity.value, 2) < 0.7:
-        _planner = "Set the share of C to 0.7 or more and run again: <code>(category)</code> drops below 1.0x."
+        _planner = f"Here <code>(sale_date)</code> ran at {_narrow:.1f}x, slower than the scan, and SQLite still chose it."
+    elif _share < 0.5:
+        _planner = "Pick <em>all time</em> and run again: <code>(sale_date)</code> drops below 1.0x."
     else:
-        _planner = f"Here <code>(category)</code> just held on ({_narrow:.1f}x); timings wobble, so run again."
-    _wide_build = _states["index on (category, value)"][0] * 1000
+        _planner = f"Here <code>(sale_date)</code> just held on ({_narrow:.1f}x); timings wobble, so run again."
+    _wide_build = _states["index on (sale_date, total_price)"][0] * 1000
     _tiles = mo.md(
         f"""
     <div class="tiles tier-data">
       <div class="tile"><div class="tile-key">+1</div><div class="tile-title">It is not free</div>
-        <p>Built here in {_wide_build:.0f} ms, then paid again on <strong>every insert, update and delete</strong>.
-        Six indexes: every write does seven pieces of work.</p></div>
+        <p>Built here in {_wide_build:.0f} ms, then paid again on <strong>every new, changed or deleted sale</strong>.
+        Six indexes: every booking does seven pieces of work.</p></div>
       <div class="tile"><div class="tile-key">COVERING</div><div class="tile-title">Width matters</div>
-        <p><code>(category)</code> finds the C rows, then fetches each <code>value</code> from the table.
-        <code>(category, value)</code> holds both: its plan says COVERING INDEX, the table is never touched.</p></div>
+        <p><code>(sale_date)</code> finds the rows, then fetches each <code>total_price</code> from the table.
+        <code>(sale_date, total_price)</code> holds both: its plan says COVERING INDEX, the table is never touched.</p></div>
       <div class="tile"><div class="tile-key">?</div><div class="tile-title">The planner guesses</div>
-        <p>SQLite assumes few rows match and takes the index even when a scan is faster.</p>
+        <p>SQLite assumes few rows match and takes the index even when reading straight through is faster.</p>
         <p>{_planner}</p></div>
     </div>
         """
     )
     mo.vstack(
         [
+            _top,
             chart_or_table(
                 mo.hstack([tier_chart(_query_chart, "data"), tier_chart(_build_chart, "data")], widths=[5, 2], gap=2),
                 _rows,
-                label=f"What the index costs, and what it buys (all three return {_count:,} rows, average {_avg})",
+                label=f"{_count:,} of {len(_rows_in) * _copies:,} rows match ({_share:.0%}), CHF {_total:,.2f}: all three give this answer",
             ),
             _tiles,
             mo.md(
-                "**The honest rule:** an index pays when it holds what the query asks for, and the query asks for **few** rows."
+                f"**What to notice:** {_count:,} rows match, {_share:.0%} of the table. An index pays when it holds "
+                "what the query asks for, and the query asks for **few** rows."
             ).callout(kind="info"),
             mo.accordion(
                 {
                     "The plan SQLite chose for each state": mo.md(
                         "\n".join(f"- **{_state}:** `{_plan}`" for _state, (_b, _q, _plan) in _states.items())
-                        + "\n\nSQLite cannot know how many rows are C: even `ANALYZE` stores only averages."
+                        + "\n\nSQLite cannot know how many sales fall after a date: even `ANALYZE` stores only averages."
                     )
                 }
             ),
@@ -3818,30 +4003,21 @@ def _(
 
 
 @app.cell
-def _(mo):
-    def ch5_card(x, y, title, sub, cls="dg-box", w=235, h=72):
-        """SVG for a two-line box at (x, y): a bold title over a muted line."""
-        return (
-            f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
-            f'<text x="{x + w / 2:.0f}" y="{y + 29}" text-anchor="middle" font-weight="700">{title}</text>'
-            f'<text class="dg-muted" x="{x + w / 2:.0f}" y="{y + 53}" text-anchor="middle">{sub}</text>'
-        )
-
-    mo.md(
-        """
-    ### Schema-on-Read vs Schema-on-Write
-
-    A CSV file has no types. **Schema-on-read** guesses them while reading; **schema-on-write**
-    declares the blank form first and loads into it. What differs is **when the check happens,
-    and who gets told**. The file: 400 real sales, 5% of `total_price` broken like real exports
-    (`n/a`, empty, `1 234,50`, `EUR 900`).
-        """
-    ).callout(kind="neutral")
-    return (ch5_card,)
-
-
-@app.cell
-def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, random, re, static_table, tempfile):
+def _(
+    Path,
+    SALES_SEED,
+    ch5_card,
+    diagram,
+    duckdb,
+    html,
+    in_plain,
+    mo,
+    pd,
+    random,
+    re,
+    static_table,
+    tempfile,
+):
     _src = pd.read_parquet(SALES_SEED).head(400)
     _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype({"total_price": str})
     _bad_rows = random.Random(5).sample(range(len(_export)), 20)
@@ -3924,10 +4100,21 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, random, re, sta
     )
     mo.vstack(
         [
+            mo.md("### Schema-on-read or schema-on-write: when are bad prices caught?"),
+            in_plain(
+                "A **schema** is the blank form a table fills in: each column's name and type (`total_price` is a "
+                "number). A CSV file has none. **Schema-on-read** guesses the types while reading; **schema-on-write** "
+                "declares the form first and loads only what fits. What differs is when a bad value is caught, and "
+                "who is told."
+            ),
+            mo.md(
+                f"The file: {_rows:,} real sales, with {len(_bad_rows)} prices broken on purpose, the way real exports "
+                "break (`n/a`, empty, `1 234,50`, `EUR 900`)."
+            ),
             mo.ui.tabs({"Diagram": _lanes, "Table": _table}),
             mo.md(
-                f"**Same file, same {len(_bad_rows)} bad values.** Read gave a wrong number that looks ordinary. "
-                "Write gave no number: a problem you know about, not an answer you trust by mistake."
+                f"**What to notice:** the same file, the same {len(_bad_rows)} bad values. Read gave a wrong number that "
+                "looks ordinary. Write gave no number: a problem you know about, not an answer you trust by mistake."
             ).callout(kind="warn"),
             mo.accordion(
                 {
@@ -3949,20 +4136,7 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, random, re, sta
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
-    ### Mini-lab: Add One Column, Then Read Last Year's Files
-
-    Chapter 2's changed form, one level up: one file per year. `sales_2024.parquet` predates
-    `customer_rating`; the 2025 and 2026 files have it.
-        """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, static_table, tempfile):
+def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, in_plain, mo, pd, static_table, tempfile):
     _all = pd.read_parquet(SALES_SEED)
     with tempfile.TemporaryDirectory() as _td:
         _dir = Path(_td).as_posix()
@@ -4047,10 +4221,16 @@ def _(Path, SALES_SEED, ch5_card, diagram, duckdb, html, mo, pd, static_table, t
     )
     mo.vstack(
         [
+            mo.md("### Add one column, then read last year's files"),
+            in_plain(
+                "EdgeWorks keeps one sales file per year. Say the order form gained a box in 2025: the customer's "
+                "rating. Then `sales_2024.parquet` has no `customer_rating` column, and the 2025 and 2026 files do. "
+                "(We drop the column from the real 2024 sales to make it so.) Here is the folder, read three ways:"
+            ),
             mo.ui.tabs({"Diagram": _picture, "Table": _table}),
             mo.md(
-                "**Only the third reading is right.** The first is the dangerous one: nothing failed, and "
-                "`customer_rating` quietly vanished. When a folder's files grew columns, say so when you read it."
+                "**What to notice:** only the third reading is right. The first is the dangerous one: nothing failed, "
+                "and `customer_rating` quietly vanished. When a folder's files grew columns, say so when you read it."
             ).callout(kind="warn"),
         ],
         gap=0.6,
@@ -4064,16 +4244,16 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — DuckDB & Schema</h3>
       <details>
-        <summary><strong>Q1:</strong> When is loading data into DuckDB better than scanning files each time?</summary>
-        <p><strong>Answer:</strong> When the same queries or joins run repeatedly: the file is parsed once at load instead of on every query, as the three-sources lab showed (materialisation = storing structured intermediate data for reuse).</p>
+        <summary><strong>Q1:</strong> When is loading the sales into a DuckDB table better than reading the files each time?</summary>
+        <p><strong>Answer:</strong> When the same queries or joins run again and again: the file is parsed once at load instead of on every query, as the three-files lab showed (materialisation = storing structured intermediate data for reuse).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> What risk appears with schema-on-read?</summary>
+        <summary><strong>Q2:</strong> What risk comes with schema-on-read?</summary>
         <p><strong>Answer:</strong> Bad values slip through silently: they turn into <code>NULL</code>s and totals come out wrong without any error.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> How can data drift be detected over time?</summary>
-        <p><strong>Answer:</strong> Track inferred types, null rates, and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
+        <summary><strong>Q3:</strong> How could we notice that partner files change over time?</summary>
+        <p><strong>Answer:</strong> Track inferred types, null rates and value distributions; alert when they change (data drift = statistical change in incoming data over time).</p>
       </details>
     </div>
     """)
@@ -4082,34 +4262,32 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 5 Conclusion
 
-    - DuckDB runs SQL on files; typed columns (Parquet, a table) beat CSV, re-parsed every query.
-    - Pushdown reads only the rows and columns a query needs.
+    - DuckDB runs SQL on files, inside Python: Mia's revenue per region came straight from three Parquet files.
+    - Pushdown reads only the columns a query names, and only the rows its filter keeps.
+    - Typed columns (Parquet, a table) beat CSV, which is parsed again on every query.
     - An index pays when it covers the query and few rows match; every write pays for it.
     - Schema-on-read fails silently later; schema-on-write rejects at the door.
     - A folder whose files grew columns: `union_by_name = true`, or the first file sets the shape.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    So far everything ran locally. Next, other programs ask for the data over an API: a
-    **request** goes out, a **response** comes back.
-
-    $$
-    \\text{API latency} = \\text{network} + \\text{server processing}
-    $$
-            """
-    ).callout(kind="neutral")
+    So far everything ran on our own laptop. Next, the dashboard and the partners' scripts ask for
+    the sales over the network: a **request** goes out, a **response** comes back, and the wait is
+    the network's time plus the server's.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -4120,8 +4298,9 @@ def _(chapter_intro, mo):
             mo.md("## 6. REST API Demo (GET, POST, PUT, DELETE)"),
             chapter_intro(
                 "logic",
-                "Did the client and server agree on the same contract?",
-                "Up to the logic tier: the data tier is finished, now other programs ask for its data.",
+                "The dashboard and the partners' scripts both need the sales. How do they ask for them?",
+                "Up to the logic tier. Both ask our sales API in the same way: a request goes out, an answer comes "
+                "back. This chapter shows what the two look like.",
             ),
         ],
         gap=1,
@@ -4130,119 +4309,173 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(box, diagram, mo):
+def _(box, diagram, html, in_plain, mo, shop_sales):
+    _sale = shop_sales.iloc[0]  # sale 1, as GET /sales/1 sends it back
+    _json = [
+        f'{{"sale_id": {_sale["sale_id"]}, "sale_date": "{_sale["sale_date"]:%Y-%m-%d}",',
+        f' "product_name": "{_sale["product"]}",',
+        f' "country_name": "{_sale["country"]}",',
+        f' "units_sold": {_sale["units_sold"]}, "total_price": {_sale["total_price"]}, ...}}',
+    ]
     _labels = [
         # (x, y, text): the names of the parts, above the request and below the response
-        (225, 56, "verb"),
-        (330, 56, "path"),
-        (600, 56, "payload (JSON)"),
-        (280, 148, "endpoint = verb + path"),
-        (255, 240, "status code"),
-        (575, 240, "the resource, as JSON"),
+        (245, 62, "verb: what to do"),
+        (378, 62, "path: which sale"),
+        (308, 158, "endpoint = verb + path"),
+        (262, 344, "status code: how it went"),
+        (596, 344, "the sale, written as JSON"),
     ]
     _message = diagram(
-        '<rect class="dg-box" x="0" y="40" width="150" height="190" rx="12"/>'
-        '<text x="75" y="130" text-anchor="middle" font-weight="700">client</text>'
-        '<text class="dg-muted" x="75" y="156" text-anchor="middle">script or app</text>'
-        '<rect class="dg-tier" x="850" y="40" width="150" height="190" rx="12"/>'
-        '<text x="925" y="130" text-anchor="middle" font-weight="700">API</text>'
-        '<text class="dg-muted" x="925" y="156" text-anchor="middle">sw03_demo_api</text>'
-        '<path class="dg-edge" d="M150 90 H 844"/><path class="dg-edge" d="M850 190 H 156"/>'
+        '<rect class="dg-box" x="0" y="40" width="170" height="276" rx="12"/>'
+        '<text x="85" y="172" text-anchor="middle" font-weight="700">Mia\'s dashboard</text>'
+        '<text class="dg-muted" x="85" y="198" text-anchor="middle">the client</text>'
+        '<rect class="dg-tier" x="930" y="40" width="170" height="276" rx="12"/>'
+        '<text x="1015" y="172" text-anchor="middle" font-weight="700">sales API</text>'
+        '<text class="dg-muted" x="1015" y="198" text-anchor="middle">sw03_demo_api</text>'
+        '<path class="dg-edge" d="M170 100 H 924"/><path class="dg-edge" d="M930 248 H 176"/>'
         # an opaque strip under each message, so the arrow does not show through its see-through boxes
-        '<rect x="176" y="64" width="638" height="52" style="fill: var(--surface)"/>'
-        '<rect x="176" y="164" width="638" height="52" style="fill: var(--surface)"/>'
-        + box(180, 68, "POST", w=90, cls="dg-tier")
-        + box(280, 68, "/sales", w=100, cls="dg-tier")
-        + box(390, 68, '{"product_id": 1, "units_sold": 2, ...}', w=420)
-        + '<path d="M182 118 V 126 H 378 V 118" fill="none" stroke="currentColor" opacity="0.45"/>'
-        + box(180, 168, "201 Created", w=150, cls="dg-box dg-ok")
-        + box(340, 168, '{"sale_id": 3361, "total_price": 390.0, ...}', w=470)
+        '<rect x="196" y="74" width="460" height="52" style="fill: var(--surface)"/>'
+        '<rect x="196" y="176" width="672" height="144" style="fill: var(--surface)"/>'
+        + box(200, 78, "GET", w=90, cls="dg-tier")
+        + box(310, 78, "/sales/1", w=136, cls="dg-tier")
+        + '<text class="dg-muted" x="466" y="105">no body: a GET only asks</text>'
+        + '<path d="M202 128 V 136 H 444 V 128" fill="none" stroke="currentColor" opacity="0.45"/>'
+        + box(200, 226, "200 OK", w=124, cls="dg-box dg-ok")
+        + '<rect class="dg-box" x="336" y="180" width="520" height="136" rx="12"/>'
+        + "".join(
+            f'<text x="352" y="{208 + 28 * _i}" style="font-family: var(--monospace-font, monospace); font-size: 15px; white-space: pre">'
+            f"{html.escape(_line)}</text>"
+            for _i, _line in enumerate(_json)
+        )
         + "".join(f'<text class="dg-muted" x="{_x}" y="{_y}" text-anchor="middle">{_t}</text>' for _x, _y, _t in _labels),
-        width=1000,
-        height=250,
-        label="A request travels from client to API: the verb POST, the path /sales and a JSON payload. "
-        "The response travels back: the status code 201 Created and the new sale as JSON.",
+        width=1100,
+        height=356,
+        label="Mia's dashboard sends the request GET /sales/1 to the sales API: the verb GET and the path /sales/1, "
+        f"no body. The API answers 200 OK and sale 1 as JSON: {_sale['product']}, {_sale['country']}, "
+        f"{_sale['units_sold']} units, CHF {_sale['total_price']:,.2f}.",
         tier="logic",
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>One Request, One Response</h3>
-      {_message}
-      <p class="vis-caption">An API is a <strong>contract</strong>. Most API bugs break it: a wrong
-      path, a wrong payload shape, or a status code the client did not handle.</p>
-    </div>
-                """
+            mo.md("### The dashboard asks the sales API for sale 1"),
+            in_plain(
+                "An **API** (application programming interface) is a program's front desk for other programs. Mia's "
+                "dashboard never opens the sales files: it sends a **request** to our sales API over **HTTP**, the "
+                "message format of the web, and gets a **response** back."
             ),
+            _message,
+            mo.md(
+                "**What to notice:** the dashboard knows only the address `/sales/1`. Where the sale is kept, and in "
+                "what format, is the API's business: the files could become a database tomorrow and the dashboard "
+                "would not notice."
+            ).callout(kind="info"),
             mo.accordion(
                 {
                     "Resource, path, endpoint, payload: the four words": mo.md(
                         """
-    - A **resource** is one thing the server knows about, like a product or a sale.
-    - A **path** is the address of a resource, like `/products/8`.
-    - An **endpoint** is one path combined with one verb, like `GET /products/8`.
-    - A **payload** is the data sent along with a request, written as JSON. In a JSON API the
-      payload is the resource's *representation*: the same thing, written down to travel.
-    - **HTTP** is the message protocol of the web; **HTTPS** is HTTP with encryption (TLS), the
-      secure default. Same API idea either way.
+    - A **resource** is one thing the server knows about: a sale, a product, a country.
+    - A **path** is the address of a resource, like `/sales/1`.
+    - An **endpoint** is one path combined with one verb, like `GET /sales/1`.
+    - A **payload** is the data sent along with a request, written as JSON: the new sale a sales
+      rep's app sends with `POST /sales`. In a JSON API the payload is the resource's
+      *representation*: the same thing, written down to travel.
+    - **HTTPS** is HTTP with encryption (TLS), the secure default. Same API idea either way.
                         """
                     )
                 }
             ),
         ],
-        gap=1,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(mo):
+def _(in_plain, mo):
     mo.vstack(
         [
+            mo.md("### Four verbs: what the dashboard and the sales reps can ask for"),
+            in_plain(
+                "The **verb** says what to do with the thing the path names. HTTP has four everyday ones, and our "
+                "API answers all four on `/sales`. A verb is **idempotent** when sending the same request twice "
+                "leaves the sales just as sending it once: it matters when a request times out and the app sends "
+                "it again."
+            ),
             mo.md(
                 """
-    ### REST Principles
-
     <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch</div>
-        <p>Idempotent: a lift button.</p></div>
-      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create</div>
-        <p class="tile-bad">Not idempotent: a ticket dispenser.</p></div>
-      <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">replace</div>
-        <p>Idempotent. Ours also takes only the changed fields (the standard's PATCH).</p></div>
-      <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove</div>
-        <p>Idempotent.</p></div>
-    </div>
-
-    **Idempotent**: pressing twice changes nothing more than pressing once. Jab a lift button ten
-    times, one lift comes; press a ticket dispenser ten times, you hold ten tickets. So a POST that
-    timed out is frightening to retry: you cannot tell whether the server acted.
-
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
-        <p>The server forgets the conversation, never the data.</p></div>
-      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
-        <p>The same four verbs on every resource.</p></div>
-      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
-        <p>An answer may say "valid for a while" and be reused.</p></div>
-      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
-        <p>The client talks to the next layer only: the tier map, on the network.</p></div>
+      <div class="tile"><div class="tile-key">GET</div><div class="tile-title">fetch: <code>GET /sales/1</code></div>
+        <p>The dashboard shows sale 1.</p>
+        <p>Sent twice: the same sale, nothing changes.</p></div>
+      <div class="tile"><div class="tile-key">POST</div><div class="tile-title">create: <code>POST /sales</code></div>
+        <p>A sales rep books a new order; the API gives it the next id, 3,361.</p>
+        <p class="tile-bad">Sent twice: two orders booked.</p></div>
+      <div class="tile"><div class="tile-key">PUT</div><div class="tile-title">change: <code>PUT /sales/1</code></div>
+        <p>A correction: the customer's rating was 5, not 3. Ours takes only the changed fields
+        (the standard calls that PATCH).</p>
+        <p>Sent twice: still 5.</p></div>
+      <div class="tile"><div class="tile-key">DELETE</div><div class="tile-title">remove: <code>DELETE /sales/1</code></div>
+        <p>The order was cancelled.</p>
+        <p>Sent twice: gone either way.</p></div>
     </div>
                 """
             ),
+            mo.md(
+                "**What to notice:** only POST is unsafe to resend. A sales rep's app whose POST timed out cannot "
+                "tell whether the order was booked; booking it again counts it twice."
+            ).callout(kind="info"),
             mo.accordion(
                 {
                     "Idempotent does not mean nothing happens": mo.md(
                         """
-    The second press really is sent and really is processed. Idempotent means the **end state**
+    The second request really is sent and really is processed. Idempotent means the **end state**
     is the same, not that the work is skipped, and not even that the answer is the same: DELETE a
     sale twice and you get **204**, then **404**. Still idempotent, because after one press or ten
     the sale is gone. Our partial PUT is idempotent too: setting the rating to 5 twice leaves it at 5.
                         """
                     ),
-                    "Why these four constraints let REST scale": mo.md(
+                }
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(in_plain, mo):
+    mo.vstack(
+        [
+            mo.md("### REST: four habits that make an API predictable"),
+            in_plain(
+                "**REST** (representational state transfer) is a style for web APIs, not a library: a few habits "
+                "that make every endpoint behave the way a caller expects. Our sales API keeps these four."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">&#8709;</div><div class="tile-title">Stateless</div>
+        <p>Every request says everything it needs: <code>GET /sales/1</code> means the same whoever sends it,
+        whenever. The API remembers the sales, not the caller.</p></div>
+      <div class="tile"><div class="tile-key">=</div><div class="tile-title">Uniform interface</div>
+        <p>The same four verbs on every resource: <code>/sales</code>, <code>/products</code>,
+        <code>/countries</code>. Learn one, and you can read them all.</p></div>
+      <div class="tile"><div class="tile-key">&#8635;</div><div class="tile-title">Cacheable</div>
+        <p>The product list hardly changes. An answer may say "valid for an hour", and the dashboard
+        reuses it instead of asking again.</p></div>
+      <div class="tile"><div class="tile-key">&#8801;</div><div class="tile-title">Layered</div>
+        <p>The dashboard talks to the API, never to the files: the tier map from the start of the
+        lecture, over the network.</p></div>
+    </div>
+                """
+            ),
+            mo.md(
+                "**What to notice:** because the API remembers nothing about the caller, EdgeWorks can run a second "
+                "copy of it when the dashboard gets busy: any copy can answer any request."
+            ).callout(kind="info"),
+            mo.accordion(
+                {
+                    "Why these four habits let REST scale": mo.md(
                         """
     - **Stateless**: the server keeps no memory of *you* between requests: not where you are in a
       conversation, what you asked last, or which page you were on. Every request carries
@@ -4257,13 +4490,53 @@ def _(mo):
                 }
             ),
         ],
-        gap=0.6,
+        gap=0.8,
     )
     return
 
 
 @app.cell
-def _(diagram, mo):
+def _(in_plain, mo, static_table):
+    _codes = [
+        ("200 OK", "here it is", "GET /sales/1"),
+        ("201 Created", "booked: the new sale is in the answer", "POST /sales with a valid sale"),
+        ("204 No Content", "done, nothing to send back", "DELETE /sales/1"),
+        ("400 Bad Request", "well formed, but impossible", "a sale of product 99, which does not exist"),
+        ("404 Not Found", "nothing lives at that address", "GET /sales/999999"),
+        ("422 Unprocessable Content", "your sale broke a written rule", "a sale with rating 9"),
+        ("500 Internal Server Error", "our code crashed: not your fault", "a bug on our side"),
+    ]
+    mo.vstack(
+        [
+            mo.md("### Status codes: what the answer tells the caller"),
+            in_plain(
+                "Every response starts with a three-digit **status code**, which the caller's code reads before "
+                "anything else. The first digit says who has to act."
+            ),
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
+        <p>It worked. Nobody has to do anything.</p></div>
+      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
+        <p>The caller must change something: sending the same request again gets the same answer.</p></div>
+      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">Our side broke</div>
+        <p>A retry may work: blindly only for the idempotent verbs.</p></div>
+    </div>
+                """
+            ),
+            static_table(
+                [{"status code": _c, "tells the caller": _t, "our sales API sends it for": _w} for _c, _t, _w in _codes],
+                label="The codes our sales API sends",
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(diagram, in_plain, mo):
     def _stage(x, title, sub, cls):
         return (
             f'<rect class="{cls}" x="{x}" y="10" width="210" height="80" rx="12"/>'
@@ -4280,45 +4553,39 @@ def _(diagram, mo):
         )
 
     _gates = diagram(
-        _stage(0, "request", "you send", "dg-box")
-        + _stage(260, "the door", "the model's rules", "dg-tier")
-        + _stage(520, "endpoint code", "checks the data", "dg-tier")
-        + _stage(780, "201 Created", "a valid sale", "dg-box dg-ok")
+        _stage(0, "request", "a sale someone sends", "dg-box")
+        + _stage(260, "the door", "the sale's written rules", "dg-tier")
+        + _stage(520, "endpoint code", "checks the sales files", "dg-tier")
+        + _stage(780, "201 Created", "the sale is booked", "dg-box dg-ok")
         + '<path class="dg-edge" d="M210 50 H 254"/><path class="dg-edge" d="M470 50 H 514"/>'
         + '<path class="dg-edge" d="M730 50 H 774"/>'
-        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · total_price")
+        + _exit(255, "422 Unprocessable", "broke a written rule", "rating 9 · 0 units")
         + _exit(505, "404 Not Found", "nothing lives there", "GET /sales/999999")
-        + _exit(755, "400 Bad Request", "asks the impossible", "region_id 999")
+        + _exit(755, "400 Bad Request", "asks the impossible", "product 99 does not exist")
         + '<path class="dg-edge dg-hot" d="M365 90 V 184"/>'
         + '<path class="dg-edge dg-hot" d="M615 90 V 184"/>'
         + '<path class="dg-edge dg-hot" d="M700 90 C 700 140, 865 130, 865 184"/>',
         width=1000,
         height=300,
-        label="Where each status code comes from. A request first meets the door, the model's rules: breaking one "
-        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the data: no such sale "
-        "answers 404, a region that does not exist answers 400. A valid sale answers 201 Created.",
+        label="Where each status code comes from. A sale first meets the door, its written rules: breaking one "
+        "answers 422 and the endpoint never runs. Past the door the endpoint code checks the sales files: no such "
+        "sale answers 404, a product that does not exist answers 400. A valid sale answers 201 Created.",
         tier="logic",
     )
-    mo.md(
-        f"""
-    ### Four Real Answers From Our Own API
-
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">2xx</div><div class="tile-title">Done</div>
-        <p>It worked; 201: a new thing now exists.</p></div>
-      <div class="tile"><div class="tile-key">4xx</div><div class="tile-title">Fix your request</div>
-        <p>Resending the same request gets the same answer.</p></div>
-      <div class="tile"><div class="tile-key">5xx</div><div class="tile-title">The server broke</div>
-        <p>A retry may work (blindly only for the lift-button verbs).</p></div>
-    </div>
-
-    <div class="section-card" style="margin-top: 14px">
-      {_gates}
-      <p class="vis-caption"><strong>400 or 422 is where students trip.</strong> 422: turned away at
-      the door (chapter 7), the endpoint's code never ran. 400: passed the door, then broke a rule
-      only the data can check. The mini-lab below sends all four.</p>
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### 422, 404 or 400: where our API turns a request away"),
+            in_plain(
+                "A request meets two checks. First the door: the written rules for a sale, called its **model** "
+                "(chapter 7 builds it). Then the endpoint's own code, the part that reads and writes the sales files."
+            ),
+            _gates,
+            mo.md(
+                "**What to notice:** 422 means our code never ran: the door turned the sale away. 400 means it passed "
+                "the door, and our code found it impossible. The lab on the next slide sends both."
+            ).callout(kind="info"),
+        ],
+        gap=0.8,
     )
     return
 
@@ -4330,31 +4597,57 @@ def _(mo):
     _sale = {"sale_date": "2026-09-01", "product_id": 1, "country_id": 3, "units_sold": 2, "customer_rating": 4}
     ch6_preset = mo.ui.dropdown(
         options={
-            "GET /sales/1": ("GET", "/sales/1", None),
-            "POST /sales with a valid sale": ("POST", "/sales", _sale),
-            "GET /sales/999999": ("GET", "/sales/999999", None),
-            "POST /countries with region_id 999": ("POST", "/countries", {"name": "Atlantis", "region_id": 999}),
-            "POST /sales with customer_rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
-            "POST /sales that sends total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
-            "POST /countries named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
-            "PUT /sales/1 with only a new rating": ("PUT", "/sales/1", {"customer_rating": 5}),
-            "DELETE /sales/1": ("DELETE", "/sales/1", None),
+            "Show sale 1": ("GET", "/sales/1", None),
+            "Book a valid sale": ("POST", "/sales", _sale),
+            "Show a sale that does not exist": ("GET", "/sales/999999", None),
+            "Book a sale of product 99, which does not exist": ("POST", "/sales", _sale | {"product_id": 99}),
+            "Book a sale with rating 9": ("POST", "/sales", _sale | {"customer_rating": 9}),
+            "Book a sale that sends its own total_price": ("POST", "/sales", _sale | {"total_price": 1.0}),
+            "Add a country named three spaces": ("POST", "/countries", {"name": "   ", "region_id": 1}),
+            "Correct sale 1: the rating was 5": ("PUT", "/sales/1", {"customer_rating": 5}),
+            "Delete sale 1 (a cancelled order)": ("DELETE", "/sales/1", None),
         },
-        value="GET /sales/1",
+        value="Show sale 1",
         label="Request",
     )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Mini-lab: Ask Our API
+    return api_base_url, ch6_preset
 
-    Start the API in a terminal first: `uvicorn sw03_demo_api:app`, without `--reload` today.
-    Send the POST, the PUT and the DELETE twice each: which leave the server where the first
-    press left it?
-                """
-            ),
-            mo.hstack([ch6_preset, api_base_url], widths="equal", align="end"),
+
+@app.cell
+def _(ch6_preset, json, mo):
+    _method, _path, _body = ch6_preset.value
+    ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Verb")
+    ch6_path = mo.ui.text(value=_path, label="Path")
+    ch6_body = mo.ui.text_area(
+        value=json.dumps(_body) if _body else "", rows=3, label="JSON body (sent with POST and PUT)", full_width=True
+    )
+    ch6_send = mo.ui.run_button(label="Send request", kind="success")
+    return ch6_body, ch6_method, ch6_path, ch6_send
+
+
+@app.cell
+def _(
+    api_base_url,
+    call_api,
+    ch6_body,
+    ch6_method,
+    ch6_path,
+    ch6_preset,
+    ch6_send,
+    html,
+    json,
+    mo,
+    requests,
+):
+    from http.client import responses as _phrases
+
+    _controls = mo.vstack(
+        [
+            ch6_preset,
+            api_base_url,
+            mo.hstack([ch6_method, ch6_path], justify="start", gap=2),
+            ch6_body,
+            ch6_send,
             mo.accordion(
                 {
                     "What uvicorn is, and why no --reload": mo.md(
@@ -4370,52 +4663,40 @@ def _(mo):
             ),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return api_base_url, ch6_preset
-
-
-@app.cell
-def _(ch6_preset, json, mo):
-    _method, _path, _body = ch6_preset.value
-    ch6_method = mo.ui.dropdown(["GET", "POST", "PUT", "DELETE"], value=_method, label="Method")
-    ch6_path = mo.ui.text(value=_path, label="Path")
-    ch6_body = mo.ui.text_area(
-        value=json.dumps(_body) if _body else "", rows=3, label="JSON body (sent with POST and PUT)", full_width=True
     )
-    ch6_send = mo.ui.run_button(label="Send request", kind="success")
-    mo.vstack([mo.hstack([ch6_method, ch6_path], justify="start", gap=2), ch6_body, ch6_send], gap=0.6).callout(kind="neutral")
-    return ch6_body, ch6_method, ch6_path, ch6_send
 
-
-@app.cell
-def _(
-    api_base_url,
-    call_api,
-    ch6_body,
-    ch6_method,
-    ch6_path,
-    ch6_send,
-    html,
-    json,
-    mo,
-    requests,
-):
-    from http.client import responses as _phrases
+    def _show(result):
+        """The whole lab slide: heading, the controls on the left, `result` on the right."""
+        return mo.vstack(
+            [
+                mo.md("### Try it: ask our sales API"),
+                mo.md(
+                    "Pick a request, or edit it, and send it. Then send the POST, the PUT and the DELETE twice each: "
+                    "which leave the sales where the first press left them? Start the API in a terminal first: "
+                    "`uvicorn sw03_demo_api:app`, without `--reload` today."
+                ),
+                mo.hstack([_controls, result], widths=[2, 3], gap=2, align="start"),
+            ],
+            gap=0.6,
+        )
 
     mo.stop(
         not ch6_send.value,
-        mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral"),
+        _show(mo.md("**Predict first:** which status code comes back? Then click **Send request**.").callout(kind="neutral")),
     )
 
     _url = api_base_url.value.rstrip("/") + "/" + ch6_path.value.lstrip("/")
     try:
         _body = json.loads(ch6_body.value) if ch6_method.value in {"POST", "PUT"} else None
     except json.JSONDecodeError as _exc:
-        mo.stop(True, mo.md(f"The body is not valid JSON: {_exc}").callout(kind="danger"))
+        mo.stop(True, _show(mo.md(f"The body is not valid JSON: {_exc}").callout(kind="danger")))
     try:
         _status, _answer = call_api(ch6_method.value, _url, _body)
     except requests.RequestException:
-        mo.stop(True, mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger"))
+        mo.stop(
+            True,
+            _show(mo.md(f"No answer from `{_url}`. Start the API in a terminal, then send again: `uvicorn sw03_demo_api:app`").callout(kind="danger")),
+        )
 
     # JSON as a code block, not mo.json: its tree view squeezes a name of three spaces to one
     if isinstance(_answer, list):  # GET /sales is thousands of rows: show a taste, not a wall
@@ -4437,7 +4718,7 @@ def _(
         f'<span style="color: var(--ink-soft); font-size: 1.1rem">{_meaning}</span></div>'
         f"<p><code>{html.escape(ch6_method.value)} {html.escape(_url)}</code></p>"
     )
-    mo.vstack([_badge, _shown], gap=0.5).callout(kind=_kind)
+    _show(mo.vstack([_badge, _shown], gap=0.5).callout(kind=_kind))
     return
 
 
@@ -4447,13 +4728,13 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — APIs</h3>
       <details>
-        <summary><strong>Q1:</strong> When is a POST safe to retry?</summary>
+        <summary><strong>Q1:</strong> A sales rep's app timed out on <code>POST /sales</code>. When is it safe to send it again?</summary>
         <p><strong>Answer:</strong> Only when the server can recognise the repeat: the client sends a unique key
         (an idempotency key, or an id it chose) and the server refuses to create a second record with that key.
-        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the mini-lab above and chapter 8 show it).</p>
+        Our API picks <code>sale_id</code> itself, so a retried POST books a second sale (the lab above and chapter 8 show it).</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> How can an API evolve without breaking clients?</summary>
+        <summary><strong>Q2:</strong> How can our API change without breaking the partners' scripts?</summary>
         <p><strong>Answer:</strong> Add optional fields, version endpoints when needed, and deprecate slowly with clear timelines (backward compatibility).</p>
       </details>
     </div>
@@ -4463,33 +4744,31 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 6 Conclusion
 
-    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx the server broke.
+    - The dashboard and the partners ask the same way: a verb and a path go out, a status code and JSON come back.
+    - The first digit says who must act: 2xx done, 4xx fix your request, 5xx our side broke.
     - 422: broke a written rule at the door. 404: nothing lives there. 400: asks the impossible.
     - GET, PUT and DELETE are idempotent; POST is not, so a timed-out POST cannot be blindly retried.
-    - Stateless: the server forgets the conversation, never the data.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Stateless: the API forgets the caller, never the sales.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    Every 422 above was the request's *shape* failing a check before any endpoint code ran.
-    Pydantic is that door. Chapter 7 shows why the second arrow fails:
-
-    $$
-    \\text{valid request} \\Rightarrow \\text{schema checks pass} \\quad\\text{but}\\quad \\text{schema checks pass} \\nRightarrow \\text{valid request}
-    $$
-            """
-    ).callout(kind="neutral")
+    Every 422 above was a sale turned away at the door, before any of our code ran. Chapter 7
+    builds that door with Pydantic, and shows its limit: a valid sale always passes the checks,
+    but passing the checks does not make a sale valid.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -4500,8 +4779,9 @@ def _(chapter_intro, mo):
             mo.md("## 7. Pydantic Models"),
             chapter_intro(
                 "logic",
-                "Which inputs are allowed into the trusted system boundary?",
-                "Chapter 6 wrote the contract; now we enforce it.",
+                "Someone sent a sale with rating 9 and 0 units. How do we stop it at the door?",
+                "Chapter 6 wrote the contract; now we enforce it. We write a sale's rules down once, as a Pydantic "
+                "model, and every request is checked against them before our code runs.",
             ),
         ],
         gap=1,
@@ -4510,7 +4790,42 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(diagram, mo):
+def _(pydantic):
+    from datetime import date as _date
+    from inspect import cleandoc as _cleandoc
+
+    # Two models for a new sale, run from this text: the lab slide shows exactly the code that runs.
+    ch7_code = _cleandoc(
+        """
+        class SaleIn(BaseModel):                       # types, and two rules
+            product_id: int
+            country_id: int
+            units_sold: int = Field(ge=1)              # at least 1
+            customer_rating: int = Field(ge=1, le=5)   # 1 to 5
+            sale_date: date
+
+        class StrictSaleIn(SaleIn):                    # plus the rules we forgot
+            model_config = ConfigDict(strict=True)     # "42" is not 42
+            product_id: int = Field(ge=1)
+            units_sold: int = Field(ge=1, le=100_000)
+            sale_date: date = Field(ge=date(2000, 1, 1))
+        """
+    )
+    _names = {"BaseModel": pydantic.BaseModel, "ConfigDict": pydantic.ConfigDict, "Field": pydantic.Field, "date": _date}
+    exec(ch7_code, _names)
+    ch7_models = {"SaleIn": _names["SaleIn"], "StrictSaleIn": _names["StrictSaleIn"]}
+    return ch7_code, ch7_models
+
+
+@app.cell
+def _(ch7_models, diagram, html, in_plain, json, mo, pydantic):
+    _sent = {"product_id": 1, "country_id": 3, "units_sold": 0, "customer_rating": 9, "sale_date": "2026-01-15"}
+    try:
+        ch7_models["SaleIn"].model_validate_json(json.dumps(_sent))
+        _errors = []
+    except pydantic.ValidationError as _exc:
+        _errors = [f"{_e['loc'][0]}: {_e['msg']}" for _e in _exc.errors()]
+
     def _card(x, y, title, sub, cls, w=280, h=130):
         return (
             f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="{h}" rx="12"/>'
@@ -4518,110 +4833,90 @@ def _(diagram, mo):
             f'<text class="dg-muted" x="{x + w / 2}" y="{y + h / 2 + 20}" text-anchor="middle">{sub}</text>'
         )
 
-    _boundary = diagram(
+    _door = diagram(
         '<path d="M680 0 V 200" fill="none" stroke="currentColor" stroke-dasharray="6 6" opacity="0.45"/>'
         '<text class="dg-muted" x="668" y="20" text-anchor="end">untrusted</text>'
         '<text class="dg-muted" x="692" y="20">trusted</text>'
-        + _card(0, 50, "JSON from outside", "request body, form, CSV row", "dg-box", w=250)
-        + _card(330, 50, "Pydantic model", "the door: types and rules", "dg-tier")
-        + _card(720, 50, "typed Python object", "nothing behind it re-checks", "dg-box dg-ok")
-        + _card(330, 230, "422: a list of errors", "one entry per broken rule", "dg-box dg-hot", h=70)
+        + _card(0, 50, "the sale someone sent", f"{_sent['units_sold']} units · rating {_sent['customer_rating']}", "dg-box dg-hot", w=250)
+        + _card(330, 50, "SaleIn, a Pydantic model", "the door: types and rules", "dg-tier")
+        + _card(720, 50, "a checked sale", "our code trusts it, re-checks nothing", "dg-box dg-ok")
+        + f'<rect class="dg-box dg-hot" x="190" y="232" width="560" height="{50 + 26 * len(_errors)}" rx="12"/>'
+        + f'<text x="470" y="264" text-anchor="middle" font-weight="700">422: turned away, {len(_errors)} errors in one answer</text>'
+        + "".join(
+            f'<text class="dg-muted" x="470" y="{294 + 26 * _i}" text-anchor="middle">{html.escape(_line)}</text>'
+            for _i, _line in enumerate(_errors)
+        )
         + '<path class="dg-edge" d="M250 115 H 324"/><path class="dg-edge dg-ok" d="M610 115 H 714"/>'
-        + '<path class="dg-edge dg-hot" d="M470 180 V 224"/>',
+        + '<path class="dg-edge dg-hot" d="M470 180 V 226"/>',
         width=1000,
-        height=300,
-        label="Untrusted JSON enters a Pydantic model, the door. What passes becomes a typed Python object on the "
-        "trusted side; what breaks a rule is turned away as a 422 with one error per broken rule.",
+        height=300 + 26 * len(_errors),
+        label=f"Mia's sale, {_sent['units_sold']} units and rating {_sent['customer_rating']}, meets the SaleIn model, "
+        f"the door. A sale that passes becomes a checked Python object on the trusted side; this one is turned away "
+        f"as a 422 that lists every broken rule: {'; '.join(_errors)}.",
         tier="logic",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Pydantic: Check Once, at the Door</h3>
-      {_boundary}
-      <p class="vis-caption">A <strong>type hint</strong> (<code>name: str</code>) is only documentation
-      to plain Python; Pydantic <em>enforces</em> it.</p>
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### Pydantic: check every sale once, at the door"),
+            in_plain(
+                "**Pydantic** is a Python library that checks data against a **model**: a class that lists each "
+                "field of a sale, its type and its rules. What passes becomes a Python object our code can trust; "
+                "what breaks a rule is turned away with a list of everything that is wrong."
+            ),
+            _door,
+            mo.md(
+                "**What to notice:** both broken rules come back in one answer, and our endpoint's code never ran: "
+                "this list is the 422 our API sent in chapter 6. A **type hint** (`units_sold: int`) is only a note "
+                "to plain Python; Pydantic enforces it."
+            ).callout(kind="info"),
+        ],
+        gap=0.8,
     )
     return
 
 
 @app.cell
 def _(mo):
+    _sale = {"product_id": 1, "country_id": 3, "units_sold": 2, "customer_rating": 4, "sale_date": "2026-01-15"}
     ch7_preset = mo.ui.dropdown(
         options={
-            "valid → should pass": {"id": 1, "name": "Ada", "gpa": 3.8, "email": "ada@example.com"},
-            "missing_email → should fail": {"id": 2, "name": "Lin", "gpa": 3.4},
-            "gpa_out_of_range → should fail": {"id": 3, "name": "Mira", "gpa": 5.2, "email": "mira@example.com"},
-            "wrong_type → should fail": {"id": "not-an-int", "name": "Sam", "gpa": "high", "email": "sam@example.com"},
+            "A valid sale → should pass": _sale,
+            "A sale with no date → should fail": {_k: _v for _k, _v in _sale.items() if _k != "sale_date"},
+            "Mia's sale: 0 units, rating 9 → should fail": _sale | {"units_sold": 0, "customer_rating": 9},
+            'Wrong types: units "many", date "yesterday" → should fail': _sale | {"units_sold": "many", "sale_date": "yesterday"},
             # Every field is the declared type and inside its declared range. Every field is also nonsense.
-            "garbage_that_passes → ???": {"id": -7, "name": "   ", "gpa": 0.0, "email": "definitely not an email"},
+            "Nonsense with the right types → ???": {
+                "product_id": -7,
+                "country_id": 999,
+                "units_sold": 5_000_000,
+                "customer_rating": 1,
+                "sale_date": "1900-01-01",
+            },
             # Two numbers arrive as text, and nothing is rejected either.
-            "silently_coerced → ???": {"id": "42", "name": "Ada", "gpa": "3.5", "email": "ada@example.com"},
+            'Numbers sent as text: "42" units → ???': _sale | {"units_sold": "42", "customer_rating": "4"},
         },
-        value="valid → should pass",
-        label="Preset payload",
+        value="A valid sale → should pass",
+        label="The sale sent",
     )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Mini-lab: Interactive Payload Validation
-
-    ```python
-    class Student(BaseModel):            # types and one range
-        id: int
-        name: str
-        gpa: float = Field(ge=0.0, le=4.0)
-        email: str
-
-    class StrictStudent(Student):        # the same, plus the rules written down
-        model_config = ConfigDict(str_strip_whitespace=True, strict=True)
-        id: int = Field(gt=0)
-        name: str = Field(min_length=1)  # counted after the strip
-        email: str = Field(pattern=".+@.+")
-    ```
-
-    Pick a preset, or edit the JSON. Guess both verdicts first: **the last two presets are the point.**
-                """
-            ),
-            ch7_preset,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
     return (ch7_preset,)
 
 
 @app.cell
 def _(ch7_preset, json, mo):
-    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=6, label="Student JSON", full_width=True)
-    ch7_json
+    ch7_json = mo.ui.text_area(value=json.dumps(ch7_preset.value, indent=2), rows=7, label="as JSON (edit it)", full_width=True)
     return (ch7_json,)
 
 
 @app.cell
-def _(ch7_json, html, json, mo, pydantic):
-    class _Student(pydantic.BaseModel):
-        id: int
-        name: str
-        gpa: float = pydantic.Field(ge=0.0, le=4.0)
-        email: str
-
-    class _StrictStudent(_Student):
-        model_config = pydantic.ConfigDict(str_strip_whitespace=True, strict=True)
-        id: int = pydantic.Field(gt=0)
-        name: str = pydantic.Field(min_length=1)
-        email: str = pydantic.Field(pattern=".+@.+")
-
+def _(ch7_code, ch7_json, ch7_models, ch7_preset, html, json, mo, pydantic):
     try:
         _sent = json.loads(ch7_json.value)
     except json.JSONDecodeError:
         _sent = None  # Pydantic reports it too, as one error on the whole input
 
     def _code(value):
-        # no-break spaces, so a name of three spaces does not collapse to one
-        return f"<code>{html.escape(repr(value)).replace(' ', '&nbsp;')}</code>"
+        # as JSON writes it; no-break spaces, so a run of spaces does not collapse to one
+        return f"<code>{html.escape(json.dumps(value)).replace(' ', '&nbsp;')}</code>"
 
     def _row(colour, field, sent, verdict):
         return (
@@ -4632,10 +4927,12 @@ def _(ch7_json, html, json, mo, pydantic):
     def _column(title, model):
         """One model's verdict: a tile with one row per field, ok in teal and broken in red; and the raw output."""
         try:
-            student = model.model_validate_json(ch7_json.value)  # parse + validate in one step
-            errors, raw = {}, student.model_dump_json(indent=2)
+            sale = model.model_validate_json(ch7_json.value)  # parse + validate in one step
+            errors, raw, kept = {}, sale.model_dump_json(), sale.model_dump(mode="json")
         except pydantic.ValidationError as exc:
-            student, errors, raw = None, {}, exc.json(indent=2, include_url=False)
+            # one line per error, and without "ctx" (its msg already says it), so both answers fit on the slide
+            issues = [{_k: _v for _k, _v in _i.items() if _k != "ctx"} for _i in json.loads(exc.json(include_url=False))]
+            sale, kept, errors, raw = None, {}, {}, "[\n" + ",\n".join(f"  {json.dumps(_i)}" for _i in issues) + "\n]"
             for _e in exc.errors():
                 errors.setdefault(".".join(map(str, _e["loc"])) or "JSON", []).append(_e["msg"])
         fields = [*model.model_fields, *(_f for _f in errors if _f not in model.model_fields)] if isinstance(_sent, dict) else list(errors)
@@ -4644,13 +4941,12 @@ def _(ch7_json, html, json, mo, pydantic):
             sent = _code(_sent[field]) if isinstance(_sent, dict) and field in _sent else "<em>(missing)</em>"
             if field in errors:
                 rows.append(_row("var(--red)", field, sent, "&#10007; " + html.escape("; ".join(errors[field]))))
-            elif student is None:
+            elif sale is None:
                 rows.append(_row("var(--teal)", field, sent, "&#10003;"))
             else:
-                kept = getattr(student, field)
-                changed = isinstance(_sent, dict) and repr(kept) != repr(_sent.get(field))
-                rows.append(_row("var(--teal)", field, sent, "&#10003;" + (f" became {_code(kept)}" if changed else "")))
-        ok = student is not None
+                changed = isinstance(_sent, dict) and kept[field] != _sent.get(field)
+                rows.append(_row("var(--teal)", field, sent, "&#10003;" + (f" became {_code(kept[field])}" if changed else "")))
+        ok = sale is not None
         verdict = "accepted" if ok else f"rejected, {sum(map(len, errors.values()))} error(s)"
         tile = (
             f'<div class="tile" style="--tier: var({"--teal" if ok else "--red"})">'
@@ -4659,43 +4955,26 @@ def _(ch7_json, html, json, mo, pydantic):
         )
         return tile, mo.md(f"**{title}**\n\n```json\n{raw}\n```")
 
-    _loose, _loose_raw = _column("Student", _Student)
-    _strict, _strict_raw = _column("StrictStudent", _StrictStudent)
-    mo.ui.tabs(
-        {
-            "Per field": mo.Html(f'<div class="grid-2" style="font-size: 16px">{_loose}{_strict}</div>'),
-            "Raw output": mo.vstack([_loose_raw, _strict_raw]),  # stacked: a long error line would push a twin off screen
-        }
-    )
-    return
-
-
-@app.cell
-def _(mo):
+    _verdicts = [_column(_name, _model) for _name, _model in ch7_models.items()]
     mo.vstack(
         [
-            mo.md("### What the Two Verdicts Teach"),
+            mo.md("### Try it: which sales get through the door?"),
             mo.md(
-                """
-    <div class="tiles tier-logic">
-      <div class="tile"><div class="tile-key">&ne;</div><div class="tile-title">Shape, not truth</div>
-        <p>A negative id, a blank name, no real email: right types, in range, so <code>Student</code>
-        accepts it.</p></div>
-      <div class="tile"><div class="tile-key">"&nbsp;&nbsp;&nbsp;"</div><div class="tile-title">Strip, then count</div>
-        <p><code>min_length=1</code> alone lets three spaces through; <code>str_strip_whitespace</code>
-        trims first. Our API's <code>Input</code> base does both, plus <code>extra="forbid"</code>.</p></div>
-      <div class="tile"><div class="tile-key">"42"</div><div class="tile-title">Lax or strict</div>
-        <p>Lax, the default, turns <code>"42"</code> into 42; <code>strict=True</code> refuses it.
-        Our API stays lax.</p></div>
-    </div>
-                """
+                "Two models for the same sale. `SaleIn` writes the types and two ranges; `StrictSaleIn` adds the "
+                "rules we forgot, and refuses text where a number belongs. Pick a sale or edit its JSON, and guess "
+                "both verdicts first: **the last two sales are the point.**"
             ),
-            mo.md("**Validation is only as good as the rules you wrote.**").callout(kind="info"),
-            mo.accordion(
+            mo.hstack(
+                [mo.md(f"```python\n{ch7_code}\n```"), mo.vstack([ch7_preset, ch7_json], gap=0.4)],
+                widths=[1, 1],
+                gap=2,
+                align="start",
+            ),
+            mo.ui.tabs(
                 {
-                    "A real email check": mo.md(
-                        'The `pattern` above is a cheap check. `EmailStr` is the real one, after `pip install "pydantic[email]"`.'
-                    )
+                    "Per field": mo.Html(f'<div class="grid-2" style="font-size: 16px">{"".join(_t for _t, _r in _verdicts)}</div>'),
+                    # stacked: side by side, a long error line would push a twin off screen
+                    "Raw output": mo.vstack([_r for _t, _r in _verdicts]),
                 }
             ),
         ],
@@ -4706,18 +4985,56 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    mo.vstack(
+        [
+            mo.md("### The door checks only the rules we wrote"),
+            mo.md(
+                """
+    <div class="tiles tier-logic">
+      <div class="tile"><div class="tile-key">&ne;</div><div class="tile-title">Shape, not truth</div>
+        <p>Product &minus;7, 5,000,000 units, a sale in 1900: the right types and no rule against them, so
+        <code>SaleIn</code> accepts it. Country 999 passes both models: whether it exists, only the data can
+        tell (chapter 6's 400).</p></div>
+      <div class="tile"><div class="tile-key">"&nbsp;&nbsp;&nbsp;"</div><div class="tile-title">Strip, then count</div>
+        <p>A name of three spaces passes <code>min_length=1</code>; <code>str_strip_whitespace</code> trims
+        first. Our API's <code>Input</code> base does both, plus <code>extra="forbid"</code>: chapter 6's
+        country of three spaces got a 422.</p></div>
+      <div class="tile"><div class="tile-key">"42"</div><div class="tile-title">Lax or strict</div>
+        <p>Lax, the default, turns <code>"42"</code> into 42; <code>strict=True</code> refuses it.
+        Our API stays lax: forms and CSV files send every number as text.</p></div>
+    </div>
+                """
+            ),
+            mo.md("**What to notice:** validation is only as good as the rules you wrote.").callout(kind="info"),
+            mo.accordion(
+                {
+                    "Ready-made rules": mo.md(
+                        "Pydantic ships types for common rules, so you need not write them yourself: `PositiveInt` "
+                        "(at least 1), `PastDate` (no sales from the future), and `EmailStr` for e-mail addresses, "
+                        'after `pip install "pydantic[email]"` (a `pattern` such as `.+@.+` is only a cheap check).'
+                    )
+                }
+            ),
+        ],
+        gap=0.8,
+    )
+    return
+
+
+@app.cell
+def _(mo):
     mo.md("""
     <div class="section-card">
       <h3>Discussion — Validation</h3>
       <details>
-        <summary><strong>Q1:</strong> Where should validation happen: client, server, or both?</summary>
+        <summary><strong>Q1:</strong> Where should a sale be validated: in the dashboard, in the API, or both?</summary>
         <p><strong>Answer:</strong> Both. The client gives fast feedback; the server must enforce the rules (server-side validation),
         because anyone can skip your client and call the API directly, as chapter 6 just did.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> Should <code>"42"</code> count as a valid <code>int</code>?</summary>
+        <summary><strong>Q2:</strong> Should <code>"42"</code> count as 42 units sold?</summary>
         <p><strong>Answer:</strong> It depends on who sends it. Lax mode (the default) is kind to forms and CSV files, where
-        everything arrives as text; strict mode catches a client that sends the wrong type by mistake. Choose deliberately.</p>
+        everything arrives as text; strict mode catches a partner's script that sends the wrong type by mistake. Choose deliberately.</p>
       </details>
     </div>
     """)
@@ -4726,31 +5043,30 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 7 Conclusion
 
-    - A model checks shape, not truth.
+    - A Pydantic model writes a sale's rules once; every request is checked at the door, before our code runs.
+    - A rejection lists every broken rule at once: FastAPI's 422.
+    - A model checks shape, not truth: nonsense with the right types gets in, unless a rule says no.
     - Lax by default: `"42"` becomes 42 and three spaces pass as a name, unless a rule says no.
-    - A rejection lists every broken rule: FastAPI's 422.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    FastAPI turns these models into validation, endpoints and docs:
-
-    $$
-    \\text{Python types + models} \\rightarrow \\text{OpenAPI schema} \\rightarrow \\text{interactive docs}
-    $$
-            """
-    ).callout(kind="neutral")
+    FastAPI reads these same models to check every request, to write down the API's contract and
+    to draw the documentation partners read. In one line: Python types and models &rarr; an
+    OpenAPI schema &rarr; interactive docs.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=0.8,
+    )
     return
 
 
