@@ -6818,14 +6818,14 @@ def _(ch10_fit, mo, shop_sales):
          "the reader guessed a number."),
         ("data", "Layout", "Because the file stores sales row by row. Stored by column, as Parquet does, the total reads "
          "only <code>total_price</code>."),
-        ("data", "Compression", "Yes: lossless compression gives back every cent. It feeds on repetition, and sales "
-         "columns repeat a lot."),
+        ("data", "Compression", "Yes: gzip keeps 35% of the sales CSV's bytes and unpacks it to the exact cent. "
+         "Rounding the prices would shrink it more, and lose cents."),
         ("data", "DuckDB", "Yes: DuckDB runs SQL straight on the Parquet files and reads only the columns and rows the "
          "query needs."),
         ("logic", "REST", "Over HTTP: a verb and a path (<code>GET /sales</code>), and a status code that says who "
          "must act."),
-        ("logic", "Pydantic", "A model at the door (<code>SaleCreate</code>): rating 9 and 0 units come back as one 422 "
-         "that lists both."),
+        ("logic", "Pydantic", "A Pydantic model at the door: rating 9 and 0 units come back as one 422 that lists "
+         "both, before our code runs."),
         ("logic", "FastAPI", "They open <code>/docs</code>: FastAPI writes it from the same models that check every "
          "request."),
         ("presentation", "Frontends", "Streamlit: our Python team ships it fast, and the API keeps every rule."),
