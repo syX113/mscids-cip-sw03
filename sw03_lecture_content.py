@@ -5,9 +5,8 @@
 import marimo
 
 __generated_with = "0.25.0"
-# The deck is shown as slides: layouts/ holds one entry per cell, in cell order ({} starts a new slide,
-# "fragment" appears on the same slide at the next arrow press). marimo edit keeps it in step; when
-# adding or removing a cell any other way, add or remove its entry there too.
+# The deck is shown as slides (layouts/): every cell with an output is one slide, shown whole; a cell
+# without output (definitions, a lab's controls) is skipped. So a slide is built as one cell's output.
 app = marimo.App(
     width="medium",
     css_file="sw03_deck.css",
@@ -103,9 +102,9 @@ def _(mo):
       <div class="eyebrow">CIP - SW03 Lecture Studio</div>
       <div class="hero-title">Storage, Serialization, APIs & Apps</div>
       <div class="hero-subtitle">
-        One data product, built in <strong>three tiers</strong>: where the data rests,
-        what serves it, and what people look at. We build them from the bottom up,
-        one chapter per decision.
+        <strong>EdgeWorks</strong> sells sensors, software and services in eight countries. Its head of
+        sales, Mia, wants a sales dashboard she can trust. Today we are EdgeWorks' data team, and we
+        build it from the bottom up: where the data rests, what serves it, and what people look at.
       </div>
       <div class="hero-pills">
         <span class="pill">Locks & ACID</span>
@@ -121,6 +120,39 @@ def _(mo):
       </div>
     </div>
     """)
+    return
+
+
+@app.cell
+def _(in_plain, mia_asks, mo, shop_sales, static_table):
+    _months = shop_sales["sale_date"].dt.to_period("M").nunique()
+    _sample = shop_sales.sort_values("sale_id").head(4)[
+        ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"]
+    ]
+    mo.vstack(
+        [
+            mo.md("## Meet EdgeWorks"),
+            mia_asks("I want one dashboard for our sales. Numbers I can trust, fast, and on my laptop."),
+            mo.hstack(
+                [
+                    mo.stat(f"{len(shop_sales):,}", label="sales", caption=f"over {_months} months", bordered=True),
+                    mo.stat(f"CHF {shop_sales['total_price'].sum() / 1e6:,.1f} M", label="revenue", bordered=True),
+                    mo.stat(shop_sales["product"].nunique(), label="products sold", caption="hardware, software, services", bordered=True),
+                    mo.stat(shop_sales["country"].nunique(), label="countries", caption="in 4 regions", bordered=True),
+                ],
+                widths="equal",
+            ),
+            static_table(
+                _sample.assign(sale_date=_sample["sale_date"].dt.date).to_dict("records"),
+                label="Every sale is one row like these (data/seed/sales.parquet)",
+            ),
+            in_plain(
+                "Every example today uses these real rows. When something goes wrong in a lab, it goes wrong "
+                "on EdgeWorks' sales, in numbers Mia would see."
+            ),
+        ],
+        gap=0.8,
+    )
     return
 
 
@@ -144,9 +176,9 @@ def _(box, diagram, label_w, mo):
     tier_map = diagram(
         '<text x="920" y="22" text-anchor="middle" font-weight="700">request</text>'
         '<text x="1000" y="22" text-anchor="middle" font-weight="700">answer</text>'
-        + _tier(40, "presentation", "Presentation tier", "what a person sees", [("9", "frontend"), ("10", "honest charts")])
-        + _tier(172, "logic", "Logic tier", "rules and the API", [("6", "contract"), ("7", "validate input"), ("8", "serve over HTTP")])
-        + _tier(304, "data", "Data tier", "where bytes rest", [("1", "correct writes"), ("2", "format"), ("3", "layout"), ("4", "compression"), ("5", "query")])
+        + _tier(40, "presentation", "Presentation tier", "Mia's dashboard", [("9", "frontend"), ("10", "honest charts")])
+        + _tier(172, "logic", "Logic tier", "the sales API", [("6", "contract"), ("7", "validate input"), ("8", "serve over HTTP")])
+        + _tier(304, "data", "Data tier", "the sales files", [("1", "correct writes"), ("2", "format"), ("3", "layout"), ("4", "compression"), ("5", "query")])
         # one hop per neighbour: down for the request, up for the answer
         + '<path class="dg-edge" d="M920 88 V 166"/><path class="dg-edge" d="M920 220 V 298"/>'
         + '<path class="dg-edge" d="M1000 352 V 274"/><path class="dg-edge" d="M1000 220 V 142"/>'
@@ -156,33 +188,40 @@ def _(box, diagram, label_w, mo):
         label="Three tiers, stacked: presentation (chapters 9 and 10) on logic (6 to 8) on data (1 to 5). "
         "A request travels down one tier at a time and the answer comes back up the same way.",
     )
-    _chapters = mo.md("""
-    1. **File locks vs databases**: lost updates, locks, ACID, an atomic transfer
-    2. **Serialization**: JSON, CSV, Pickle, Arrow, Parquet, Avro
-    3. **Row vs column storage**
-    4. **Compression & encoding**: lossless vs lossy, Parquet codecs, dictionaries
-    5. **DuckDB**: SQL on files, indexes & query plans, schema-on-read vs -write
-    6. **REST**: the API contract, four verbs, status codes
-    7. **Pydantic**: validation at the trust boundary
-    8. **FastAPI live**: the demo API and its automatic `/docs`
-    9. **Frontends**: Streamlit, Dash, Flask, React, Marimo
-    10. **Honest charts**: a regression lab, one question asked three ways
-    """)
-    mo.vstack(
-        [
-            mo.md(f"""
+    mo.md(f"""
     <div class="section-card">
-      <h3>The Map: One Product, Three Tiers</h3>
+      <h3>The Map: Mia's Dashboard Is Three Tiers</h3>
       {tier_map}
-      <p class="vis-caption">Almost every data application has these three tiers. Each talks only to its
-      neighbour, so any one can be replaced without rewriting the others.</p>
+      <p class="vis-caption">The <strong>data tier</strong> keeps the sales files
+      (<code>data/*.parquet</code>), the <strong>logic tier</strong> is the sales API
+      (<code>sw03_demo_api.py</code>), the <strong>presentation tier</strong> is the dashboard Mia
+      opens (<code>sw03_demo_streamlit.py</code>). Each talks only to its neighbour, so any one can be
+      replaced without rewriting the others.</p>
     </div>
-    """),
-            mo.accordion({"Every chapter in one line": _chapters}),
-        ],
-        gap=0.6,
-    )
+    """)
     return (tier_map,)
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Ten Questions Mia Will Ask Today</h3>
+      <ol class="mia-list">
+        <li class="tier-data"><strong>Locks</strong>: two reps booked an order at the same moment. Why is today's order count too low?</li>
+        <li class="tier-data"><strong>Formats</strong>: we send sales files to partners. Which format, and why did the CSV turn store code 007 into 7?</li>
+        <li class="tier-data"><strong>Layout</strong>: "total revenue" reads one column. Why does it read the whole file?</li>
+        <li class="tier-data"><strong>Compression</strong>: the sales history fills the disk. Can we shrink it without losing a cent?</li>
+        <li class="tier-data"><strong>DuckDB</strong>: can I get revenue per region straight from the files, with no database server?</li>
+        <li class="tier-logic"><strong>REST</strong>: the dashboard and the partners' scripts both need the sales. How do they ask for them?</li>
+        <li class="tier-logic"><strong>Pydantic</strong>: someone sent a sale with rating 9 and 0 units. How do we stop it at the door?</li>
+        <li class="tier-logic"><strong>FastAPI</strong>: how do partners learn what our API accepts, without emailing us?</li>
+        <li class="tier-presentation"><strong>Frontends</strong>: what should we build the dashboard with?</li>
+        <li class="tier-presentation"><strong>Honest charts</strong>: does spending more make customers happier? Mia wants a chart for the board.</li>
+      </ol>
+    </div>
+    """)
+    return
 
 
 @app.cell
@@ -191,12 +230,12 @@ def _(mo):
     <div class="section-card">
       <h3>How to Read This Notebook</h3>
       <div class="tiles">
-        <div class="tile"><div class="tile-key">?</div><div class="tile-title">Key Question</div>
-          <p>Every chapter opens with one, and the tier it lives in.</p></div>
-        <div class="tile"><div class="tile-key">&sum;</div><div class="tile-title">Formula</div>
-          <p>A quick model of the idea.</p></div>
-        <div class="tile"><div class="tile-key">&#9654;</div><div class="tile-title">Mini-lab</div>
-          <p>Controls to test the model. Heavy ones wait for their Run button.</p></div>
+        <div class="tile"><div class="tile-key">?</div><div class="tile-title">Mia asks</div>
+          <p>Every chapter starts with a real question from EdgeWorks' head of sales.</p></div>
+        <div class="tile"><div class="tile-key">=</div><div class="tile-title">In plain words</div>
+          <p>Every idea in one or two everyday sentences, before any formula.</p></div>
+        <div class="tile"><div class="tile-key">&#9654;</div><div class="tile-title">Try it</div>
+          <p>A lab on EdgeWorks' sales. Slow ones wait for their Run button: guess first, then run.</p></div>
         <div class="tile"><div class="tile-key">&#8230;</div><div class="tile-title">Discussion</div>
           <p>Questions for the room: click one to reveal the answer.</p></div>
       </div>
@@ -249,6 +288,24 @@ def _(Path, mo):
     SEED_DIR = Path(mo.notebook_dir()) / "data" / "seed"
     SALES_SEED = SEED_DIR / "sales.parquet"
     return SALES_SEED, SEED_DIR
+
+
+@app.cell
+def _(SEED_DIR, pd):
+    def _table(file, **renames):
+        return pd.read_parquet(SEED_DIR / f"{file}.parquet").rename(columns=renames)
+
+    # EdgeWorks' sales with the names joined in: every example in the deck is about these rows.
+    # Shared by many cells, so a cell that changes it works on a copy: shop_sales.copy().
+    shop_sales = (
+        _table("sales")
+        .merge(_table("products", name="product", price="list_price")[["product_id", "product", "list_price", "category_id"]], on="product_id")
+        .merge(_table("categories", name="category")[["category_id", "category"]], on="category_id")
+        .merge(_table("countries", name="country")[["country_id", "country", "region_id"]], on="country_id")
+        .merge(_table("sales_regions", name="region")[["region_id", "region"]], on="region_id")
+        .sort_values("sale_id", ignore_index=True)
+    )
+    return (shop_sales,)
 
 
 @app.cell
@@ -316,14 +373,35 @@ def _(mo, requests, timeit):
         """A lab result: the chart that shows the finding, and the exact numbers one click away."""
         return mo.ui.tabs({"Chart": chart, "Table": static_table(rows, label=label)})
 
+    def mia_asks(question: str):
+        """Mia, EdgeWorks' head of sales, asking the question a chapter or a lab answers (markdown)."""
+        return mo.Html(f'<div class="mia-asks"><span class="mia-who">Mia, head of sales</span>{mo.md(question).text}</div>')
+
+    def in_plain(text: str):
+        """The idea in one or two everyday sentences (markdown), shown before any formula."""
+        return mo.Html(f'<div class="in-plain"><span class="in-plain-label">In plain words</span>{mo.md(text).text}</div>')
+
     def chapter_intro(tier: str, question: str, context: str):
-        """A chapter's opening card: the tier badge, the Key Question in large type, one line of markdown context."""
+        """A chapter's opening card: the tier badge, Mia's question in large type, one line of markdown context."""
         return mo.Html(
             f'<div class="key-q tier-{tier}"><span class="tier-badge">{tier} tier</span>'
+            f'<span class="mia-who key-q-who">Mia asks</span>'
             f'<p class="key-q-text">{question}</p>{mo.md(context).text}</div>'
         )
 
-    return TIER, best_seconds, call_api, chapter_intro, chart_or_table, format_bytes, format_ms, static_table, tier_chart
+    return (
+        TIER,
+        best_seconds,
+        call_api,
+        chapter_intro,
+        chart_or_table,
+        format_bytes,
+        format_ms,
+        in_plain,
+        mia_asks,
+        static_table,
+        tier_chart,
+    )
 
 
 @app.cell
