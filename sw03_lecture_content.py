@@ -5419,8 +5419,9 @@ def _(chapter_intro, mo):
             mo.md("## 9. Frontend Framework Comparison"),
             chapter_intro(
                 "presentation",
-                "What does the frontend need to know about everything behind it?",
-                "The API from chapter 8 has the data; something has to show it.",
+                "What should we build the dashboard with?",
+                "The sales API from chapter 8 serves the data. Now the part Mia actually opens: what a frontend "
+                "must do, what it must not, and which tool fits our team.",
             ),
         ],
         gap=1,
@@ -5429,74 +5430,69 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(box, diagram, mo):
-    def _room(x, tier, name, note, file, rule=None, why=None):
-        """One room of the restaurant: its tier colour, what it holds, and the units rule if it states one."""
-        parts = [
-            f'<g class="tier-{tier}"><rect class="dg-tier" x="{x}" y="110" width="280" height="220" rx="16"/></g>',
-            f'<text x="{x + 20}" y="144" font-size="20" font-weight="700">{name}</text>',
-            f'<text class="dg-muted" x="{x + 20}" y="170">{note}</text>',
-            box(x + 20, 188, file, w=240, h=44),
-        ]
-        if rule:
-            parts.append(
-                f'<rect class="dg-box" x="{x + 20}" y="250" width="240" height="62" rx="12"/>'
-                f'<text x="{x + 140}" y="276" text-anchor="middle" font-family="monospace" font-size="15">{rule}</text>'
-                f'<text class="dg-muted" x="{x + 140}" y="300" text-anchor="middle">{why}</text>'
-            )
-        return "".join(parts)
+def _(box, diagram, in_plain, mo):
+    def _tier(x, tier, name, note, file, rule, why):
+        """One tier of Mia's stack: its colour, what it holds, and how it states the units rule."""
+        return (
+            f'<g class="tier-{tier}"><rect class="dg-tier" x="{x}" y="110" width="280" height="220" rx="16"/></g>'
+            f'<text x="{x + 20}" y="144" font-size="20" font-weight="700">{name}</text>'
+            f'<text class="dg-muted" x="{x + 20}" y="170">{note}</text>'
+            + box(x + 20, 188, file, w=240, h=44)
+            + f'<rect class="dg-box" x="{x + 20}" y="250" width="240" height="62" rx="12"/>'
+            f'<text x="{x + 140}" y="276" text-anchor="middle" font-family="monospace" font-size="15">{rule}</text>'
+            f'<text class="dg-muted" x="{x + 140}" y="300" text-anchor="middle">{why}</text>'
+        )
 
-    _restaurant = diagram(
-        _room(2, "presentation", "dining room", "ch. 9-10: what the guest sees", "sw03_demo_streamlit.py",
-              "min_value=1", "repeated for politeness")
-        + _room(360, "logic", "kitchen", "ch. 6-8: recipes and rules", "sw03_demo_api.py",
-                "ge=1, le=100_000", "the rule")
-        + _room(718, "data", "cold store", "ch. 1-5: ingredients", "data/*.parquet", "sales, products, ...", "five tables, ids only")
-        # the hatches: a request goes right, the answer comes back left
+    _stack = diagram(
+        _tier(2, "presentation", "Mia's dashboard", "ch. 9-10: what Mia sees", "sw03_demo_streamlit.py",
+              "min_value=1", "repeated for convenience")
+        + _tier(360, "logic", "the sales API", "ch. 6-8: the rules", "sw03_demo_api.py", "ge=1, le=100_000", "the rule")
+        + _tier(718, "data", "the sales files", "ch. 1-5: the facts", "data/*.parquet", "sales, products, ...",
+                "five tables, ids only")
+        # a request goes right, the answer comes back left
         + '<path class="dg-edge" d="M284 206 H 354"/><path class="dg-edge" d="M358 250 H 288"/>'
         + '<path class="dg-edge" d="M642 206 H 712"/><path class="dg-edge" d="M716 250 H 646"/>'
         + '<text class="dg-muted" x="321" y="196" text-anchor="middle">request</text>'
         + '<text class="dg-muted" x="321" y="274" text-anchor="middle">answer</text>'
         + '<text class="dg-muted" x="679" y="196" text-anchor="middle">query</text>'
         + '<text class="dg-muted" x="679" y="274" text-anchor="middle">rows</text>'
-        # the phone line: anyone can call the kitchen without passing the dining room
-        + box(340, 10, "curl · a script · another team's app", w=320, h=48, cls="dg-box dg-hot")
+        # the side door: a partner's script calls the API without passing the dashboard
+        + box(340, 10, "a partner's script · curl", w=320, h=48, cls="dg-box dg-hot")
         + '<path class="dg-edge dg-hot" d="M500 58 V 104"/>'
-        + '<text class="dg-hot" x="512" y="88">no dining room in between</text>',
+        + '<text class="dg-hot" x="512" y="88">no dashboard in between</text>',
         width=1000,
         height=340,
-        label="Three rooms: the dining room (Streamlit, chapters 9 and 10) sends requests to the kitchen (the API, "
-        "chapters 6 to 8), which queries the cold store (Parquet files, chapters 1 to 5). The units rule sits in the "
-        "kitchen; the form repeats only its lower bound. curl, a script or another app can call the kitchen directly.",
+        label="Three tiers: Mia's dashboard (Streamlit, chapters 9 and 10) sends requests to the sales API "
+        "(chapters 6 to 8), which queries the sales files (Parquet, chapters 1 to 5). The units rule sits in the "
+        "API; the dashboard's form repeats only its lower bound. A partner's script or curl calls the API directly.",
     )
     _more = mo.md(
         """
-    - **The payoff for splitting the tiers.** Change supplier, Parquet for DuckDB, and no guest
-      notices. Rebuild the whole dining room, Streamlit for React, and the kitchen does not change one line.
-    - **What a frontend does.** It writes an order slip, an HTTP request to a path, hands it through
-      the hatch, and arranges whatever comes back so a human can decide something.
-    - **Where the picture breaks.** A waiter cannot cook, but a frontend *does* compute: it sorts,
-      formats, aggregates and draws every chart in the dashboard. So do not read this as "the frontend
-      is dumb". Read it as **the frontend owns no rules**.
+    - **The payoff for splitting the tiers.** Move the sales files from Parquet to DuckDB and Mia
+      notices nothing. Rebuild the whole dashboard, Streamlit for React, and the API does not change one line.
+    - **What a frontend does.** It sends a request to a path, like `GET /sales?region=Europe`, and
+      arranges whatever comes back so Mia can decide something.
+    - **It still computes.** The dashboard sorts, formats, adds up and draws every chart. So do not
+      read this as "the frontend is dumb". Read it as **the frontend owns no rules**.
     - **The same rule, twice, on purpose.** The Streamlit form sets `min_value=1` for units sold; the API
       states `Units = Annotated[int, Field(ge=1, le=100_000)]`. The form does not even repeat the upper
-      limit: only the kitchen knows it.
+      limit: only the API knows it.
         """
     )
     mo.vstack(
         [
-            mo.md(
-                f"""
-    <div class="section-card">
-      <h3>A Frontend Is the Dining Room</h3>
-      {_restaurant}
-      <p class="vis-caption"><strong>The frontend owns no rules.</strong> Anyone can phone the kitchen directly,
-      so a rule that lives only in the dining room is not a rule at all. The dining room may repeat a rule for
-      politeness. Never instead.</p>
-    </div>
-                """
+            mo.md("### The Dashboard Shows, the API Decides"),
+            in_plain(
+                "A **frontend** is the part people see and click. Mia's dashboard sends requests to the sales API "
+                "and draws the answers. It owns no rules: a partner's script calls the API directly and never sees "
+                "the dashboard, so every rule has to live in the API."
             ),
-            mo.accordion({"Where the restaurant picture holds, and where it breaks": _more}),
+            _stack,
+            mo.md(
+                "**What to notice:** the dashboard's *Units sold* box starts at 1 (`min_value=1`), a convenience "
+                "for Mia. The rule itself, 1 to 100,000 units, lives in the API, where the partner's script meets it too."
+            ),
+            mo.accordion({"Why split the tiers, and what a frontend still computes": _more}),
         ],
         gap=0.6,
     )
@@ -5504,92 +5500,87 @@ def _(box, diagram, mo):
 
 
 @app.cell
-def _(diagram, mo):
+def _(diagram, in_plain, mo):
     # Ordered by the fit assistant's iteration-speed weight, fastest first.
     _frameworks = [
-        ("Streamlit", "Py", "Dashboards, internal tools", "Fastest prototyping, simple widgets", "Less layout and state control in big apps"),
-        ("Marimo", "Py", "Labs, teaching, analysis apps", "Reactive notebooks, data + UI in one loop", "Notebook-first, not for big web apps"),
-        ("Dash", "Py", "Interactive analytics", "Plotly charts, component ecosystem", "Callbacks get tangled in big apps"),
-        ("Flask", "Py+JS", "Custom web apps + APIs", "Full control, templates + APIs", "More setup, no built-in UI"),
-        ("React", "JS", "Production web apps", "Flexible, modern UI patterns", "Needs a JS/TS stack and tooling"),
+        ("Streamlit", "Python", "our data team, in Python", "fastest: the whole dashboard is one Python script",
+         "little: Streamlit lays out the page", "Every click reruns the script; big apps get hard to steer"),
+        ("Marimo", "Python", "our data team, in Python", "fast: a notebook becomes the app (this deck is one)",
+         "some: cells, tabs, slides", "Notebook-first, not for a big public website"),
+        ("Dash", "Python", "our data team, in Python", "medium: a callback wires each widget to its charts",
+         "more: Plotly charts, many components", "The callbacks tangle as the dashboard grows"),
+        ("Flask", "Python + JavaScript", "our team plus some HTML and JavaScript", "slow: we build every page and widget",
+         "full: every pixel is ours", "More setup, no ready-made widgets"),
+        ("React", "JavaScript", "a web developer, in JavaScript", "slowest to start: a second language and its tools",
+         "full: any layout Mia asks for", "Needs a JS/TS stack, a build step and someone to maintain it"),
     ]
     _tiles = "".join(
-        f'<div class="tile"><div class="tile-key">{_lang}</div><div class="tile-title">{_name}</div>'
-        f"<p><strong>{_use}</strong></p><p>{_good}</p><p class=\"tile-bad\">{_bad}</p></div>"
-        for _name, _lang, _use, _good, _bad in _frameworks
+        f'<div class="tile"><div class="tile-key">{_name}</div><div class="tile-title">{_lang}</div>'
+        f"<p><strong>Who builds it:</strong> {_who}</p><p><strong>First version:</strong> {_speed}</p>"
+        f'<p><strong>Layout control:</strong> {_control}</p><p class="tile-bad">{_bad}</p></div>'
+        for _name, _lang, _who, _speed, _control, _bad in _frameworks
     )
     _tradeoff = diagram(
-        '<text x="0" y="26" font-weight="700">faster iteration</text>'
-        '<path class="dg-edge" d="M400 20 H 150"/>'
+        '<text x="0" y="26" font-weight="700">faster first version</text>'
+        '<path class="dg-edge" d="M400 20 H 190"/>'
         '<text class="dg-muted" x="500" y="26" text-anchor="middle">the usual trade-off</text>'
-        '<path class="dg-edge" d="M600 20 H 850"/>'
-        '<text x="1000" y="26" text-anchor="end" font-weight="700">more UI control</text>',
+        '<path class="dg-edge" d="M600 20 H 810"/>'
+        '<text x="1000" y="26" text-anchor="end" font-weight="700">more layout control</text>',
         width=1000,
         height=40,
-        label="The usual trade-off: the further left, the faster you iterate; the further right, the more UI control you get.",
+        label="The usual trade-off: the further left, the faster the first version; the further right, the more layout control.",
     )
-    mo.md(
-        f"""
-    <div class="section-card">
-      <h3>Choosing a Frontend Stack</h3>
-      {_tradeoff}
-      <div class="tiles tier-presentation" style="grid-template-columns: repeat(5, 1fr); margin-top: 12px">{_tiles}</div>
-      <p class="vis-caption">Py: Python only. JS: JavaScript, the language browsers run.
-      Showcases: <a href="https://marimo.io/gallery">Marimo gallery</a> ·
-      <a href="https://dash.gallery/Portal/">Dash gallery</a> ·
-      <a href="https://react.dev/community">React community</a> ·
-      <a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask patterns</a></p>
-    </div>
-        """
+    mo.vstack(
+        [
+            mo.md("### Five Ways to Build Mia's Dashboard"),
+            in_plain(
+                "All five tools can draw Mia's dashboard. They differ in **who on our team can build it**, **how "
+                "soon Mia sees a first version**, and **how much say we have over the layout**. Faster usually "
+                "means less control."
+            ),
+            _tradeoff,
+            mo.Html(f'<div class="tiles tier-presentation" style="grid-template-columns: repeat(5, 1fr)">{_tiles}</div>'),
+            mo.md(
+                "**What to notice:** the three Python tools need nobody new on the team; Flask and React need "
+                "JavaScript, the language browsers run, and buy full control with it.\n\n"
+                '<p class="vis-caption">A rough guide, not a measurement. Showcases: '
+                '<a href="https://marimo.io/gallery">Marimo gallery</a> · '
+                '<a href="https://dash.gallery/Portal/">Dash gallery</a> · '
+                '<a href="https://react.dev/community">React community</a> · '
+                '<a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask patterns</a></p>'
+            ),
+        ],
+        gap=0.6,
     )
     return
 
 
 @app.cell
 def _(mo):
-    fw_speed = mo.ui.slider(1, 5, value=5, label="Need fast iteration", show_value=True, debounce=True)
-    fw_control = mo.ui.slider(1, 5, value=3, label="Need fine UI control", show_value=True, debounce=True)
-    fw_js = mo.ui.slider(1, 5, value=2, label="Team JavaScript strength", show_value=True, debounce=True)
-    _more = mo.md(
-        """
-    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let you stay
-    in Python; React is written in JavaScript, and a Flask app needs some as soon as a page has to
-    react. So a low score here is not a weakness, it just points at different tools.
-
-    Each framework scores the three inputs with its own weights, and every weight row adds up to the
-    same total (3.0), so no framework wins just by carrying more weight. For the three Python-native
-    tools $j_f = 6 - j$: they get *more* attractive when the team knows *less* JavaScript. For Flask
-    and React $j_f = j$. Heuristic only: validate it against real team constraints.
-        """
-    )
-    mo.vstack(
-        [
-            mo.md(
-                """
-    ### Mini-lab: Framework Fit Assistant
-
-    Set three numbers about **your team**, not about the frameworks.
-
-    $$
-    \\text{fit}_f = w^f_s \\cdot s + w^f_c \\cdot c + w^f_j \\cdot j_f
-    \\qquad \\text{with} \\quad w^f_s + w^f_c + w^f_j = 3
-    $$
-                """
-            ),
-            mo.vstack([fw_speed, fw_control, fw_js], gap=0.4),
-            mo.accordion({"How the score works": _more}),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
+    # The fit assistant's three questions, about EdgeWorks, not about the tools. Shown by the slide below.
+    fw_speed = mo.ui.slider(1, 5, value=5, label="Mia needs changes fast", show_value=True, debounce=True)
+    fw_control = mo.ui.slider(1, 5, value=3, label="Mia needs a custom layout", show_value=True, debounce=True)
+    fw_js = mo.ui.slider(1, 5, value=2, label="Our team knows JavaScript", show_value=True, debounce=True)
     return fw_control, fw_js, fw_speed
 
 
 @app.cell
-def _(TIER, alt, chart_or_table, fw_control, fw_js, fw_speed, pd, tier_chart):
+def _(
+    TIER,
+    alt,
+    chart_or_table,
+    fw_control,
+    fw_js,
+    fw_speed,
+    in_plain,
+    mo,
+    pd,
+    tier_chart,
+):
     # Teaching heuristic, not a recommendation engine. Every weight row sums to 3.0,
     # so no framework wins just by carrying more weight than the others.
     _weights = {
-        # framework:   (fast iteration, fine UI control, JavaScript), python_native
+        # framework:   (fast changes, custom layout, JavaScript), python_native
         "Marimo":      ((1.3, 0.5, 1.2), True),
         "Streamlit":   ((1.6, 0.4, 1.0), True),
         "Dash":        ((1.0, 1.0, 1.0), True),
@@ -5605,15 +5596,15 @@ def _(TIER, alt, chart_or_table, fw_control, fw_js, fw_speed, pd, tier_chart):
     _ranked = sorted(_scores.items(), key=lambda item: item[1], reverse=True)
     _top = [name for name, score in _ranked if score == _ranked[0][1]]
     _rows = [
-        {"framework": name, "score": score, "weights (speed / control / JS)": " / ".join(map(str, _weights[name][0]))}
+        {"framework": name, "score": score, "weights (speed / layout / JS)": " / ".join(map(str, _weights[name][0]))}
         for name, score in _ranked
     ]
     _df = pd.DataFrame(_rows)
     _df["best"] = _df["framework"].isin(_top)
     _bars = alt.Chart(_df).encode(
         y=alt.Y("framework:N", sort=None, title=None),
-        x=alt.X("score:Q", title="teaching score (higher = better fit)", scale=alt.Scale(domain=[0, 15])),
-        tooltip=["framework:N", "score:Q", "weights (speed / control / JS):N"],
+        x=alt.X("score:Q", title="fit score (higher = better fit)", scale=alt.Scale(domain=[0, 15])),
+        tooltip=["framework:N", "score:Q", "weights (speed / layout / JS):N"],
     )
     _chart = (
         _bars.mark_bar(cornerRadiusEnd=4, size=28).encode(
@@ -5625,7 +5616,39 @@ def _(TIER, alt, chart_or_table, fw_control, fw_js, fw_speed, pd, tier_chart):
         height=46 * len(_df),
         title=f"Best fit: {' / '.join(_top)}" + (" (a tie)" if len(_top) > 1 else ""),
     )
-    chart_or_table(tier_chart(_chart, "presentation"), _rows, label="Teaching score (higher = better fit)")
+    _more = mo.md(
+        """
+    **JavaScript** is the programming language browsers run. Marimo, Streamlit and Dash let our team
+    stay in Python; React is written in JavaScript, and a Flask app needs some as soon as a page has to
+    react. So a low score on that slider is not a weakness, it just points at different tools.
+
+    Each framework scores the three answers with its own weights, and every weight row adds up to the
+    same total (3.0), so no framework wins just by carrying more weight. For the three Python-native
+    tools the JavaScript answer counts as $6 - j$: they get *more* attractive when the team knows *less*
+    JavaScript. For Flask and React it counts as $j$. Heuristic only: check it against the real team.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md("### Try it: Which Tool Fits Our Team?"),
+            in_plain(
+                "Answer three questions about EdgeWorks, from 1 (not at all) to 5 (very much), not about the tools. "
+                "Each tool weighs the answers differently: Streamlit cares most about speed, Flask about layout, and "
+                "the three Python tools score higher the less JavaScript the team knows."
+            ),
+            mo.hstack([fw_speed, fw_control, fw_js], widths="equal", gap=2),
+            chart_or_table(tier_chart(_chart, "presentation"), _rows, label="Fit score (higher = better fit)"),
+            mo.md(
+                "**What to notice:** at the start (changes fast, little JavaScript) Streamlit wins, which is why "
+                "Mia's dashboard is `sw03_demo_streamlit.py`. Set speed to 2 and layout and JavaScript to 5: React "
+                "takes over.\n\n"
+                "**In one line:** $\\text{score} = w_s \\cdot \\text{speed} + w_c \\cdot \\text{layout} + w_j \\cdot "
+                "\\text{JS}$, and each tool's three weights add up to 3."
+            ),
+            mo.accordion({"How the score works": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -5635,15 +5658,15 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Frontends</h3>
       <details>
-        <summary><strong>Q1:</strong> The Streamlit form already refuses 0 units. Why does the API check again?</summary>
-        <p><strong>Answer:</strong> Anyone can phone the kitchen directly, with <code>curl</code>, a script or
-        another team's app. A rule that lives only in the dining room is not a rule. The form repeats it for
-        politeness: instant feedback, no round trip.</p>
+        <summary><strong>Q1:</strong> The dashboard's form already refuses 0 units. Why does the API check again?</summary>
+        <p><strong>Answer:</strong> A partner's script calls the API directly, with <code>curl</code> or its own
+        code, and never sees the form. A rule that lives only in the dashboard is not a rule. The form repeats it
+        for convenience: instant feedback for Mia, no round trip.</p>
       </details>
       <details>
         <summary><strong>Q2:</strong> The fit assistant says Streamlit. Is that the decision?</summary>
         <p><strong>Answer:</strong> No, it is a teaching heuristic with hand-picked weights. Check it against
-        real constraints: how much layout and state control the product needs, who will maintain it, and
+        real constraints: how much layout and state control the dashboard needs, who will maintain it, and
         what the team already knows.</p>
       </details>
     </div>
@@ -5653,32 +5676,33 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Chapter 9 Conclusion
 
     - A frontend sends requests and arranges the answers. It owns no rules, so the API enforces
       every rule again.
-    - Choose by your team's skills and how much UI control the product needs: fast iteration
-      usually costs control.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - Choose by who will build it, how soon Mia needs it and how much layout control she needs:
+      a faster first version usually costs control. For our Python team, Streamlit.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    Charts show patterns faster than tables, including patterns that are not there.
+    The dashboard can draw any chart. The last question is which chart tells the truth: Mia wants
+    one for the board, and a chart can show a pattern that is not there.
 
     $$
     \\text{what you plot} = \\text{signal} + \\text{noise}
     $$
-    """
-    ).callout(kind="neutral")
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=1,
+    )
     return
 
 
