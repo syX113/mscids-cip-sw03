@@ -2345,8 +2345,9 @@ def _(chapter_intro, mo):
             mo.md("## 4. Compression & Encoding (Parquet, Gzip)"),
             chapter_intro(
                 "data",
-                "Will compression cut total query time, not only file size?",
-                "Chapter 3 put similar values side by side, which is exactly what makes them squeeze well.",
+                "The sales history fills the disk. Can we shrink it without losing a cent?",
+                "Lossless compression shrinks a file and gives back every byte. This chapter measures how much it "
+                "saves on our sales, and what unpacking costs.",
             ),
         ],
         gap=1,
@@ -2355,8 +2356,10 @@ def _(chapter_intro, mo):
 
 
 @app.cell
-def _(diagram, mo):
-    # A sketch of the timing model, not a measurement: segment lengths only show which term grows.
+def _(SALES_SEED, diagram, gzip, in_plain, mo, pd):
+    _csv = pd.read_parquet(SALES_SEED).to_csv(index=False).encode()
+    _gz = gzip.compress(_csv, 6)
+    # A sketch of the timing model, not a measurement: segment lengths only show which step grows.
     _amber = ' style="fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.5"'
     _kinds = {"read": ' class="dg-tier"', "unpack": _amber, "compute": ' class="dg-box"'}
 
@@ -2372,38 +2375,35 @@ def _(diagram, mo):
     _faster = '<text class="dg-ok" x="{x}" y="{y}">&#10003; faster</text>'
     _slower = '<text class="dg-hot" x="{x}" y="{y}">&#10007; slower</text>'
     _sketch = diagram(
-        '<text x="0" y="20" font-weight="700">slow disk or network: reading bytes dominates</text>'
-        + _bar(36, "plain", [("read", 520), ("compute", 120)])
-        + _bar(82, "compressed", [("read", 190), ("unpack", 110), ("compute", 120)], _faster)
-        + '<text x="0" y="160" font-weight="700">file already in memory, or the CPU already busy</text>'
-        + _bar(176, "plain", [("read", 40), ("compute", 120)])
-        + _bar(222, "compressed", [("read", 16), ("unpack", 110), ("compute", 120)], _slower),
+        '<text x="0" y="20" font-weight="700">Sent to the analyst in Berlin, over the network: moving bytes dominates</text>'
+        + _bar(36, "plain CSV", [("read", 520), ("compute", 120)])
+        + _bar(82, "gzipped CSV", [("read", 190), ("unpack", 110), ("compute", 120)], _faster)
+        + '<text x="0" y="160" font-weight="700">Read by the dashboard, file already in memory: unpacking dominates</text>'
+        + _bar(176, "plain CSV", [("read", 40), ("compute", 120)])
+        + _bar(222, "gzipped CSV", [("read", 16), ("unpack", 110), ("compute", 120)], _slower),
         width=1000,
         height=270,
-        label="A sketch: with a slow disk or network, compression shrinks the read time more than unpacking adds, so the "
-        "total shrinks. With the file already in memory there is little read time to save, and unpacking makes it slower.",
+        label="A sketch: sent over the network, the gzipped file saves more read time than unpacking adds, so the total "
+        "shrinks. Already in memory, there is little read time to save, and unpacking makes it slower.",
         tier="data",
     )
     mo.vstack(
         [
+            mo.md("### What Compression Trades: Fewer Bytes, More Unpacking"),
+            in_plain(
+                "Compression writes the same sales in fewer bytes by spotting repetition. The catch: every reader "
+                "has to unpack the file before using it. So it pays when moving bytes is slow, as on the way to "
+                "our analyst in Berlin, and costs time when the bytes are already in memory."
+            ),
+            _sketch,
             mo.md(
-                f"""
-    <div class="section-card">
-      <h3>What Compression Trades</h3>
-      {_sketch}
-      <p class="vis-caption">A sketch, not a measurement: <strong>compression trades CPU for I/O</strong>,
-      and pays only when moving bytes is expensive.</p>
-    </div>
-                """
+                f"**What to notice:** our sales as CSV are {len(_csv):,} bytes, gzipped {len(_gz):,} "
+                f"({len(_gz) / len(_csv):.0%}). Unpacking costs the same in both pictures; only the read shrinks, so "
+                "only a slow read makes it worth it. *A sketch, not a measurement: bar lengths show which step grows.*"
             ),
             mo.md(
-                """
-    $T_{\\text{total}} \\approx T_{\\text{io}} + T_{\\text{decompress}} + T_{\\text{compute}}$, and the
-    compression ratio $r = \\text{compressed size} / \\text{original size}$ (savings $= 1 - r$).
-
-    **gzip levels:** 1 is fast and saves less, 9 slow and saves most. The `gzip` tool and zlib default
-    to 6, Python's `gzip.compress` to 9.
-                """
+                "**In short:** total time ≈ read + unpack + compute. The compression ratio "
+                f"$r$ = compressed size / original size, here {len(_gz) / len(_csv):.2f}; it saves $1 - r$."
             ),
         ],
         gap=0.6,
@@ -2413,52 +2413,64 @@ def _(diagram, mo):
 
 @app.cell
 def _(mo):
-    budget_size_gb = mo.ui.slider(1, 500, value=120, label="Raw dataset size (GB)", show_value=True, debounce=True)
-    budget_ratio = mo.ui.slider(0.1, 1.0, step=0.05, value=0.35, label="Compression ratio r", show_value=True, debounce=True)
-    budget_scans_day = mo.ui.slider(1, 80, value=18, label="Full scans/day", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: Compression Cost Impact (an Estimate)"),
-            mo.hstack([budget_size_gb, budget_ratio, budget_scans_day], widths="equal"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return budget_ratio, budget_scans_day, budget_size_gb
+    ch4_sales_per_month = mo.ui.radio(
+        options={"140 (today)": 140, "1,400": 1_400, "14,000": 14_000, "140,000": 140_000, "1.4 million": 1_400_000},
+        value="140 (today)",
+        label="Sales per month:",
+        inline=True,
+    )
+    ch4_years_kept = mo.ui.slider(1, 10, value=2, label="Years of sales kept (today: 2)", show_value=True, debounce=True)
+    budget_scans_day = mo.ui.slider(1, 80, value=20, label="Dashboard reads of the whole history per day", show_value=True, debounce=True)
+    return budget_scans_day, ch4_sales_per_month, ch4_years_kept
 
 
 @app.cell
-def _(TIER, alt, budget_ratio, budget_scans_day, budget_size_gb, mo, pd, tier_chart):
-    _on_disk = budget_size_gb.value * budget_ratio.value
-    _saved = budget_size_gb.value - _on_disk
-    _day = pd.DataFrame(
-        {
-            "stored": ["plain", "compressed"],
-            "GB read per day": [budget_size_gb.value * budget_scans_day.value, _on_disk * budget_scans_day.value],
-        }
-    )
-    _day["label"] = [f"{_gb:,.0f} GB" for _gb in _day["GB read per day"]]
+def _(SALES_SEED, TIER, alt, budget_scans_day, ch4_sales_per_month, ch4_years_kept, format_bytes, gzip, mo, pd, tier_chart):
+    _sales = pd.read_parquet(SALES_SEED)
+    _csv = _sales.to_csv(index=False).encode()
+    _per_sale = len(_csv) / len(_sales)  # bytes of CSV per sale, measured on today's file
+    _r = len(gzip.compress(_csv, 6)) / len(_csv)  # the compression ratio gzip reaches on it
+    _history = ch4_sales_per_month.value * 12 * ch4_years_kept.value * _per_sale
+    _reads = budget_scans_day.value
+    _day = pd.DataFrame({"stored": ["plain CSV", "gzipped CSV"], "bytes read per day": [_history * _reads, _history * _r * _reads]})
+    _day["label"] = [format_bytes(_b) for _b in _day["bytes read per day"]]
     _base = alt.Chart(_day).encode(
         y=alt.Y("stored:N", sort=None, title=None),
-        x=alt.X("GB read per day:Q", title="GB read per day", scale=alt.Scale(domain=[0, _day["GB read per day"].max() * 1.2])),
-        tooltip=["stored:N", "GB read per day:Q"],
+        x=alt.X("bytes read per day:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _day["bytes read per day"].max() * 1.2])),
+        tooltip=["stored:N", "bytes read per day:Q"],
     )
     _bars = (
         _base.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.Color("stored:N", legend=None, scale=alt.Scale(domain=["plain", "compressed"], range=[TIER["muted"], TIER["data"]]))
+            color=alt.Color("stored:N", legend=None, scale=alt.Scale(domain=["plain CSV", "gzipped CSV"], range=[TIER["muted"], TIER["data"]]))
         )
         + _base.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=110)
+    ).properties(width="container", height=110, title="Bytes the dashboard reads per day")
     mo.vstack(
         [
+            mo.md("### Try it: How Big Does the Sales History Get?"),
+            mo.md(
+                f"Today the history is {len(_sales):,} sales, {format_bytes(len(_csv))} as CSV. Pick how fast EdgeWorks "
+                f"grows and how long it keeps its sales. Assumed: every new sale takes as many bytes as today's "
+                f"({_per_sale:.0f} as CSV), gzip keeps today's ratio ({_r:.2f}), and every dashboard read scans the "
+                "whole history."
+            ),
+            ch4_sales_per_month,
+            mo.hstack([ch4_years_kept, budget_scans_day], widths="equal", gap=2),
             mo.hstack(
                 [
-                    mo.stat(f"{_on_disk:,.1f} GB", label="On disk after compression", bordered=True),
-                    mo.stat(f"{_saved:,.1f} GB", label="Less to read per full scan", bordered=True),
-                    mo.stat(f"{_saved * budget_scans_day.value:,.1f} GB", label="Less I/O per day", bordered=True),
+                    mo.stat(format_bytes(_history), label="History as plain CSV", bordered=True),
+                    mo.stat(format_bytes(_history * _r), label=f"Gzipped (r = {_r:.2f})", bordered=True),
+                    mo.stat(format_bytes(_history * (1 - _r) * _reads), label="Less to read per day", bordered=True),
                 ],
                 widths="equal",
             ),
             tier_chart(_bars, "data"),
+            mo.md(
+                f"**What to notice:** gzip keeps every sale and saves {1 - _r:.0%} of the disk and of every read: here "
+                f"**{format_bytes(_history * (1 - _r))}** on disk and **{format_bytes(_history * (1 - _r) * _reads)}** of "
+                "reading a day."
+            ),
+            mo.md("**In short:** on disk = sales × bytes per sale × $r$; read per day = on disk × reads per day."),
         ],
         gap=0.6,
     )
@@ -2468,20 +2480,8 @@ def _(TIER, alt, budget_ratio, budget_scans_day, budget_size_gb, mo, pd, tier_ch
 @app.cell
 def _(mo):
     ch4_k_range = (4, 90, 2)  # first, last, step: the slider below and the curve the lab draws
-    image_demo_rank = mo.ui.slider(*ch4_k_range, value=26, label="Components kept (rank k)", show_value=True, debounce=True)
-    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Image width (px)", show_value=True, debounce=True)
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: Visual Compression with PCA (Cat Image)"),
-            mo.hstack([image_demo_rank, image_demo_width], widths="equal"),
-            mo.md(
-                "Rebuilt from the top `k` singular vectors per colour channel: rank-k SVD, the maths behind "
-                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis). *PCA itself is covered in "
-                "Machine Learning 2; here it only illustrates compression.*"
-            ),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
+    image_demo_rank = mo.ui.slider(*ch4_k_range, value=26, label="Patterns kept (k)", show_value=True, debounce=True)
+    image_demo_width = mo.ui.slider(200, 360, value=280, step=20, label="Picture width (px)", show_value=True, debounce=True)
     return ch4_k_range, image_demo_rank, image_demo_width
 
 
@@ -2559,7 +2559,7 @@ def _(Image, ImageDraw, ch4_k_range, image_demo_width, io, np):
 
 
 @app.cell
-def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagram, gzip, image_demo_rank, mo, np, pd, tier_chart):
+def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagram, gzip, image_demo_rank, image_demo_width, in_plain, label_w, mo, np, pd, tier_chart):
     _k = image_demo_rank.value
     _u, _s, _vt = ch4_cat_svd
     _rebuilt = np.rint(np.clip((_u[:, :, :_k] * _s[:, None, :_k]) @ _vt[:, :_k], 0, 1) * 255).astype(np.uint8).transpose(1, 2, 0)
@@ -2582,7 +2582,7 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
     ]
 
     _curve = pd.DataFrame(ch4_cat_curve)
-    _x = alt.X("k:Q", title="components kept (k)")
+    _x = alt.X("k:Q", title="patterns kept (k)")
     _here = _curve[_curve["k"] == _k]
 
     def _panel(field, title, dy, *extra):
@@ -2605,15 +2605,18 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
         gap=2,
     )
 
+    _flow, _at = "", 0
+    for _i, _step in enumerate(["picture: 3 grids of numbers (R, G, B)", f"keep the strongest k = {_k} patterns", "rebuilt picture"]):
+        _flow += box(_at, 8, _step, cls="dg-tier" if _i == 1 else "dg-box")
+        _at += label_w(_step)
+        if _i < 2:  # an arrow to the next box
+            _flow += f'<path class="dg-edge" d="M{_at + 6:.0f} 30 H {_at + 50:.0f}"/>'
+            _at += 56
     _pipeline = diagram(
-        box(0, 8, "image: 3 matrices (R, G, B)")
-        + '<path class="dg-edge" d="M262 30 H 318"/>'
-        + box(324, 8, f"keep the top k = {_k} components", cls="dg-tier")
-        + f'<path class="dg-edge" d="M{324 + 300} 30 H {324 + 356}"/>'
-        + box(686, 8, "rebuilt image"),
-        width=860,
+        _flow,
+        width=940,
         height=60,
-        label=f"The image as three colour matrices, of which only the top {_k} components are kept, then rebuilt.",
+        label=f"The picture as three grids of colour values, of which only the strongest {_k} patterns are kept, then rebuilt.",
         tier="data",
     )
     _pca_wins = _pca_bytes < len(_gz)
@@ -2631,28 +2634,42 @@ def _(TIER, alt, box, ch4_cat, ch4_cat_curve, ch4_cat_svd, chart_or_table, diagr
     </div>
                 """
             ),
-            chart_or_table(_charts, _rows, label=f"Same {ch4_cat.nbytes:,}-byte image, two kinds of compression"),
+            image_demo_rank,
+            chart_or_table(_charts, _rows, label=f"Same {ch4_cat.nbytes:,}-byte picture, two kinds of compression"),
             mo.md(
-                f"**At k = {_k} the {'PCA' if _pca_wins else 'gzip'} file is smaller**"
+                f"**What to notice:** at k = {_k} the {'PCA' if _pca_wins else 'gzip'} file is smaller"
                 + (
-                    ", but only gzip gives back the exact image."
+                    ", but only gzip gives back the exact picture."
                     if _pca_wins
                     else ": a smooth drawing repeats itself, and lossless compression removes repetition."
                 )
+                + " Fewer patterns, fewer bytes, more error."
             ),
         ],
         gap=0.6,
     )
     mo.vstack(
         [
+            mo.md("### Try it: Shrink a Picture by Keeping Its Strongest Patterns"),
+            in_plain(
+                "The one example today that is not about sales, because lossy compression is easiest to see. A "
+                "picture is a grid of numbers. **PCA** keeps only its k strongest patterns and throws the rest away: "
+                "fewer patterns, fewer bytes, a blurrier cat, and no way back to the original."
+            ),
+            mo.hstack([image_demo_rank, image_demo_width], widths="equal", gap=2),
             _pipeline,
             mo.hstack(
                 [
-                    mo.image(ch4_cat, width="100%", caption="Original"),
-                    mo.image(_rebuilt, width="100%", caption=f"Rebuilt from k={_k} components"),
+                    mo.image(ch4_cat, width=420, caption="Original"),
+                    mo.image(_rebuilt, width=420, caption=f"Rebuilt from k = {_k} patterns"),
                 ],
-                widths="equal",
-                gap=0.8,
+                justify="center",
+                gap=3,
+            ),
+            mo.md(
+                "Rebuilt from the top `k` singular vectors per colour channel: rank-k SVD, the maths behind "
+                "[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis). *PCA itself is covered in "
+                "Machine Learning 2; here it only illustrates compression.*"
             ),
         ],
         gap=0.6,
@@ -2667,7 +2684,7 @@ def _(ch4_pca_result):
 
 
 @app.cell
-def _(SALES_SEED, TIER, alt, chart_or_table, io, mo, pd, tier_chart):
+def _(SALES_SEED, TIER, alt, chart_or_table, in_plain, io, mo, pd, tier_chart):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
     _truth = round(float(_src["total_price"].sum()), 2)
     _rows = []
@@ -2689,10 +2706,10 @@ def _(SALES_SEED, TIER, alt, chart_or_table, io, mo, pd, tier_chart):
                 "off by": round(_total - _truth, 2),
             }
         )
-    _exact, _exact_gz, *_, _hundred = (_row["bytes"] for _row in _rows)
+    _exact, _exact_gz, *_, _hundred = _rows
 
     _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"total off by {_off:+,.2f}" if _off else "exact total" for _off in _df["off by"]]
+    _df["verdict"] = [f"total off by CHF {_off:+,.2f}" if _off else "exact total" for _off in _df["off by"]]
     _base = alt.Chart(_df).encode(
         y=alt.Y("how the prices are stored:N", sort=None, title=None, axis=alt.Axis(labelLimit=280)),
         x=alt.X("bytes:Q", title="file size (bytes)", scale=alt.Scale(domain=[0, _df["bytes"].max() * 1.6])),
@@ -2708,23 +2725,26 @@ def _(SALES_SEED, TIER, alt, chart_or_table, io, mo, pd, tier_chart):
     _more = mo.md(
         f"""
     **The lossy files really are smaller.** Rounding to the nearest 100 francs cuts another
-    {1 - _hundred / _exact_gz:.0%} off the gzipped file, a bigger win than gzip itself managed on the exact
-    data ({1 - _exact_gz / _exact:.0%}). The true total is `{_truth:,.2f}`; every lossy row reports a
-    different number, the file loads cleanly, the column is still a decimal, and every tool downstream is
-    perfectly happy. Nobody minds a cat whose pixels are a few shades off; every accountant sees a total
-    that is off by hundreds of francs, and by then the original is gone.
+    {1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} off the gzipped file, a bigger win than gzip itself managed on
+    the exact prices ({1 - _exact_gz['bytes'] / _exact['bytes']:.0%}). Every lossy file loads cleanly, the column is
+    still a decimal, and every tool downstream is perfectly happy. Nobody minds a cat whose pixels are a few
+    shades off; every accountant minds a total that is off by hundreds of francs, and by then the exact
+    prices are gone.
         """
     )
     mo.vstack(
         [
-            mo.md(
-                """
-    ### Mini-lab: The Cat Trick, Applied to Sales Prices
-
-    Store the real prices less precisely. **Which file is smallest, and which still adds up?**
-                """
+            mo.md("### Rounded Prices: Smaller File, Wrong Revenue"),
+            in_plain(
+                "Rounding is the cat trick for numbers: fewer different digits, so compression finds more "
+                "repetition and the file shrinks. Here are EdgeWorks' 3,360 real prices, stored exactly and rounded."
             ),
             chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Same {len(_src):,} prices, stored five ways"),
+            mo.md(
+                f"**What to notice:** the true revenue is CHF {_truth:,.2f}. Rounded to 100 francs, the file is "
+                f"{1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} smaller than the exact gzipped one, and the total is "
+                f"off by CHF {_hundred['off by']:+,.2f}."
+            ),
             mo.md(
                 "**Same trick, different meaning.** Is an approximation of *this* value still the truth you need? "
                 "For a photo, usually. For money, an identifier or a date, never."
@@ -2738,43 +2758,36 @@ def _(SALES_SEED, TIER, alt, chart_or_table, io, mo, pd, tier_chart):
 
 @app.cell
 def _(mo):
-    compress_rows = mo.ui.slider(500, 10_000, step=500, value=2_000, label="Rows", show_value=True, debounce=True)
-    compress_cols = mo.ui.slider(3, 10, value=6, label="Numeric columns", show_value=True, debounce=True)
-    ch4_compress_repeat = mo.ui.switch(label="Only 5 distinct values per column")
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: Which Format Is Smallest?"),
-            mo.md(
-                "**Predict first:** JSON, CSV, gzip or Parquet? And if every column held only five values? Flip the switch."
-            ),
-            mo.hstack([compress_rows, compress_cols, ch4_compress_repeat], widths="equal", align="center"),
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
-    return ch4_compress_repeat, compress_cols, compress_rows
+    compress_rows = mo.ui.slider(steps=[500, 1_000, 2_000, 3_360], value=3_360, label="Sales in the file", show_value=True, debounce=True)
+    ch4_columns = mo.ui.radio(
+        options=["the whole sale (7 fields)", "prices only", "category only"],
+        value="the whole sale (7 fields)",
+        label="What we store:",
+        inline=True,
+    )
+    return ch4_columns, compress_rows
 
 
 @app.cell
-def _(TIER, alt, ch4_compress_repeat, chart_or_table, compress_cols, compress_rows, csv, gzip, io, json, mo, pa, pd, pq, random, tier_chart):
-    _rng = random.Random(11)  # fixed seed: the same settings always give the same table
-    _pool = [round(_rng.random() * 1000, 5) for _ in range(5)]
-
-    def _measurement():
-        return _rng.choice(_pool) if ch4_compress_repeat.value else round(_rng.random() * 1000, 5)
-
-    _records = [
-        {"id": _i, "category": _rng.choice("ABCD"), **{f"metric_{_c}": _measurement() for _c in range(compress_cols.value)}}
-        for _i in range(compress_rows.value)
-    ]
+def _(TIER, alt, ch4_columns, chart_or_table, compress_rows, csv, gzip, io, json, mo, pa, pd, pq, shop_sales, tier_chart):
+    _fields = {
+        "the whole sale (7 fields)": ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"],
+        "prices only": ["total_price"],
+        "category only": ["category"],
+    }[ch4_columns.value]
+    _sales = shop_sales.head(compress_rows.value)[_fields]
+    if "sale_date" in _fields:  # a date as a partner's file writes it
+        _sales = _sales.assign(sale_date=_sales["sale_date"].dt.strftime("%Y-%m-%d"))
+    _records = _sales.to_dict("records")
     _csv = io.StringIO()
-    _writer = csv.DictWriter(_csv, fieldnames=_records[0])
+    _writer = csv.DictWriter(_csv, fieldnames=_fields)
     _writer.writeheader()
     _writer.writerows(_records)
 
     # Sizes measured in memory: the bytes a file would hold, without writing one.
     _texts = {"JSON": json.dumps(_records).encode(), "CSV": _csv.getvalue().encode()}
     _sizes = {_name: len(_blob) for _name, _blob in _texts.items()}
-    # Level 1 is fastest, 9 squeezes hardest (Python's default), 6 is zlib's default.
+    # Level 1 is fastest, 9 squeezes hardest (Python's default), 6 is the gzip tool's default.
     _sizes |= {f"{_name}+gzip (level {_lvl})": len(gzip.compress(_blob, _lvl)) for _name, _blob in _texts.items() for _lvl in (1, 6, 9)}
     _table = pa.Table.from_pylist(_records)
     for _codec in ("snappy", "gzip", "zstd", "brotli"):
@@ -2796,24 +2809,42 @@ def _(TIER, alt, ch4_compress_repeat, chart_or_table, compress_cols, compress_ro
     _chart = (
         _base.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.smallest", alt.value(TIER["data"]), alt.value(TIER["muted"])))
         + _base.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=30 * len(_df), title="Same records, twelve ways")
+    ).properties(width="container", height=26 * len(_df), title=f"The first {len(_sales):,} sales, twelve ways")
 
+    _distinct = _sales[_fields[0]].nunique()  # used for the one-column choices
+    _reason = {
+        "the whole sale (7 fields)": "Parquet keeps each field apart, so the fields with few values (product, country, "
+        "rating) are encoded on their own, while gzip sees all seven mixed together.",
+        "prices only": f"{_distinct:,} different prices in {len(_sales):,} sales: little repetition. Parquet stores each "
+        "as an 8-byte number; gzipped text pays only for the digits written.",
+        "category only": f"{_distinct} different values, over and over: every compressed format shrinks it to a sliver "
+        "of the CSV. What is left is mostly fixed overhead, such as Parquet's footer.",
+    }[ch4_columns.value]
     _why = mo.md(
         """
-    Distinct 5-decimal measurements hold almost no repetition: Parquet stores each one as 8 bytes of
-    float64, while gzipped text pays only for the digits you wrote. Five repeated values per column are
-    exactly what Parquet's dictionary encoding lives on. At the default 2,000 rows x 6 columns, flipping
-    the switch moves the win from gzipped CSV to Parquet. Nothing about Parquet changed.
+    - **Prices only:** nearly every price is different. Parquet stores each one as an 8-byte number,
+      while gzipped text pays only for the six to nine digits written, so text plus gzip comes out smallest.
+    - **Category only:** three values over and over. Every compressed format turns tens of kilobytes into
+      a few hundred bytes; the gaps left are fixed costs, such as Parquet's footer.
+    - **The whole sale:** Parquet stores each field apart, so product, country and rating, each with a
+      handful of values, are encoded on their own; gzip sees all seven fields interleaved. From about
+      1,000 sales up that puts Parquet ahead; with 500 its fixed footer still costs too much.
         """
     )
     mo.vstack(
         [
-            chart_or_table(tier_chart(_chart, "data"), _rows, label="Compression ratios (baseline: JSON size)"),
+            mo.md("### Try it: Which Format Is Smallest for Our Sales?"),
             mo.md(
-                f"**Smallest here: {_best}**, at {_smallest / _sizes['JSON']:.0%} of the JSON bytes. Compression removes "
-                "**repetition**: the winner depends on your columns, not the format's reputation."
-            ).callout(kind="info"),
-            mo.accordion({"Why the ranking flips": _why}),
+                "**Predict first:** JSON, CSV, gzip or Parquet? Does the answer change when we store only the prices, "
+                "or only the category?"
+            ),
+            mo.hstack([ch4_columns, compress_rows], justify="start", align="center", gap=3),
+            chart_or_table(tier_chart(_chart, "data"), _rows, label="Sizes (baseline: JSON)"),
+            mo.md(
+                f"**What to notice:** smallest here is **{_best}**, at {_smallest / _sizes['JSON']:.1%} of the JSON and "
+                f"{_smallest / _sizes['CSV']:.0%} of the CSV. {_reason}"
+            ),
+            mo.accordion({"Why the winner changes with the columns": _why}),
         ],
         gap=0.6,
     )
@@ -2823,30 +2854,38 @@ def _(TIER, alt, ch4_compress_repeat, chart_or_table, compress_cols, compress_ro
 @app.cell
 def _(mo):
     run_ctime = mo.ui.run_button(label="Run compression timing", kind="success")
-    mo.vstack(
-        [
-            mo.md("### Mini-lab: Does Compression Make the Query *Faster*?"),
-            mo.md(
-                "Unpack, parse and sum one column of the sales file, already in memory. Best of 5 bursts."
-            ),
-            run_ctime,
-        ],
-        gap=0.6,
-    ).callout(kind="neutral")
     return (run_ctime,)
 
 
 @app.cell
-def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run_ctime, tier_chart):
+def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, io, mia_asks, mo, pd, run_ctime, tier_chart):
+    _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
+    _top = mo.vstack(
+        [
+            mo.md("### Try it: Is the Gzipped Sales File Faster to Query?"),
+            mia_asks("If the gzipped file is a third of the size, is my total revenue three times faster?"),
+            mo.md(
+                f"The sales as CSV ({format_bytes(len(_raw))}), already in memory: unpack it if gzipped, parse it, add up "
+                "the prices. Four files: plain, and gzip at level 1 (fastest), 6 (the gzip tool's default) and 9 "
+                "(smallest, Python's default). Best of 5 bursts."
+            ),
+            run_ctime,
+        ],
+        gap=0.6,
+    )
     mo.stop(
         not run_ctime.value,
-        mo.md(
-            "**Predict first:** the gzipped file is far smaller. Is the query on it faster or slower? "
-            "Then click **Run compression timing**."
-        ).callout(kind="neutral"),
+        mo.vstack(
+            [
+                _top,
+                mo.md(
+                    "**Predict first:** the gzipped file is far smaller. Is the total on it faster or slower? "
+                    "Then click **Run compression timing**."
+                ).callout(kind="neutral"),
+            ],
+            gap=0.6,
+        ),
     )
-
-    _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
 
     def _ms(_fn, _calls=20):
         """Milliseconds per call, fastest of 5 bursts. A burst averages out sub-millisecond noise."""
@@ -2873,8 +2912,8 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
     _plain_row, _l1, _l6, _l9 = _rows
     if min(_row["read + parse + sum (ms)"] for _row in (_l1, _l6, _l9)) > _plain_row["read + parse + sum (ms)"]:
         _verdict = (
-            f"**The answer is no, not here.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size "
-            "and still takes *longer* to answer the same question."
+            f"**No, not here.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size and still takes "
+            "*longer* to answer the same question."
         )
     else:
         _verdict = "**Here it is a wash:** unpacking costs about as much as the smaller file saves."
@@ -2890,7 +2929,7 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
         _query.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.slower", alt.value(TIER["hot"]), alt.value(TIER["data"])))
         + _query.mark_text(align="left", dx=6).encode(text="vs plain:N")
         + alt.Chart(pd.DataFrame({"ms": [_plain]})).mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x="ms:Q")
-    ).properties(width="container", height=200, title="Time to answer (vs plain CSV)")
+    ).properties(width="container", height=200, title="Time to answer total revenue (vs plain CSV)")
     _levels = pd.DataFrame(_rows[1:])
     _write = alt.Chart(_levels).encode(
         y=alt.Y("variant:N", sort=None, title=None),
@@ -2904,17 +2943,19 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
     _note = mo.md(
         f"""
     Here the file already sits in memory, so there is no I/O to save: the extra bytes cost nothing to
-    read, while unpacking them costs CPU on every query. Send the same file across a network and the
-    trade flips, which is why compression is normal for transfer and a judgement call on a local disk.
+    read, while unpacking them costs CPU on every query. Send the same file to the analyst in Berlin and
+    the trade flips, which is why compression is normal for transfer and a judgement call on a local disk.
     Levels 6 and 9 land {abs(_l6['bytes'] - _l9['bytes']):,} bytes apart, and level 9 spent
     {_l9['compress (ms)'] / _l6['compress (ms)']:.1f}x the CPU to find them.
         """
     )
     mo.vstack(
         [
+            _top,
             chart_or_table(mo.hstack([tier_chart(_answer_chart, "data"), tier_chart(_write_chart, "data")], widths=[3, 2], gap=2), _rows, label="Same question, four files"),
             mo.md(
-                f"{_verdict} Unpacking costs about the same at every level: **the level is a decision about writing, not reading.**"
+                f"**What to notice:** {_verdict} Unpacking costs about the same at every level: **the level is a "
+                "decision about writing, not reading.**"
             ).callout(kind="warn"),
             mo.accordion({"Why: CPU for I/O, and the price of level 9": _note}),
         ],
@@ -2924,54 +2965,91 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, gzip, io, mo, pd, run
 
 
 @app.cell
-def _(box, diagram, mo):
-    dict_rows = mo.ui.slider(1000, 200000, step=1000, value=20000, label="Rows", show_value=True, debounce=True)
-    dict_unique = mo.ui.slider(2, 1000, step=1, value=20, label="Unique values", show_value=True, debounce=True)
-    dict_value_bytes = mo.ui.slider(1, 40, step=1, value=10, label="Bytes per value", show_value=True, debounce=True)
-    # One small column, encoded: each distinct value once, then a short code per row.
-    _column = ["Zurich", "Basel", "Zurich", "Geneva", "Zurich", "Basel"]
-    _codes = {_v: _i for _i, _v in enumerate(dict.fromkeys(_column))}
+def _(box, diagram, in_plain, math, mo, shop_sales):
+    _first = shop_sales["product"].head(8).tolist()  # the first eight real sales
+    _codes = {_v: _i for _i, _v in enumerate(dict.fromkeys(_first))}
+    _bits = max(1, math.ceil(math.log2(len(_codes))))
+    _parts = [
+        '<text x="0" y="20" font-weight="700">product, as written</text>',
+        '<text x="300" y="20" font-weight="700">code</text>',
+        '<text x="460" y="20" font-weight="700">dictionary, written once</text>',
+    ]
+    for _i, _name in enumerate(_first):
+        _y = 34 + _i * 36
+        _parts.append(box(0, _y, _name, w=200, h=30))
+        _parts.append(f'<text class="dg-muted" x="212" y="{_y + 20}">{len(_name)} bytes</text>')
+        _parts.append(box(300, _y, str(_codes[_name]), w=44, h=30, cls="dg-tier"))
+    for _name, _c in _codes.items():
+        _parts.append(box(460, 34 + _c * 36, f"{_c} = {_name}", w=250, h=30, cls="dg-tier"))
+    _parts.append(
+        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 30}">{sum(map(len, _first))} bytes of names become</text>'
+        f'<text class="dg-muted" x="460" y="{34 + len(_codes) * 36 + 54}">{sum(map(len, _codes))} bytes of dictionary + 8 codes of {_bits} bits</text>'
+    )
     _drawing = diagram(
-        '<text x="0" y="30">as written</text>'
-        + "".join(box(150 + _i * 118, 8, _v, w=110) for _i, _v in enumerate(_column))
-        + '<path class="dg-edge" d="M480 60 V 92"/>'
-        + '<text x="0" y="122">dictionary</text>'
-        + "".join(box(150 + _c * 150, 100, f"{_c} = {_v}", w=140, cls="dg-tier") for _v, _c in _codes.items())
-        + '<text x="0" y="192">codes</text>'
-        + "".join(box(150 + _i * 58, 170, str(_codes[_v]), w=50, cls="dg-tier") for _i, _v in enumerate(_column))
-        + '<text class="dg-muted" x="510" y="197">2 bits each instead of 5 or 6 bytes</text>',
-        width=1000,
-        height=226,
-        label="The column Zurich, Basel, Zurich, Geneva, Zurich, Basel becomes a dictionary of three values "
-        "and the codes 0, 1, 0, 2, 0, 1.",
+        "".join(_parts),
+        width=760,
+        height=34 + len(_first) * 36,
+        label=f"The product names of the first eight sales become a dictionary of {len(_codes)} names and the codes "
+        + ", ".join(str(_codes[_n]) for _n in _first)
+        + ".",
         tier="data",
     )
+    # The same on the whole product column.
+    _names = shop_sales["product"]
+    _raw = sum(len(_v.encode()) for _v in _names)
+    _dictionary = sum(len(_v.encode()) for _v in _names.unique())
+    _code_bits = math.ceil(math.log2(_names.nunique()))
+    _total = _dictionary + len(_names) * _code_bits / 8
     mo.vstack(
         [
-            mo.md("### Dictionary Encoding (Toy Model)"),
+            mo.md("### Dictionary Encoding: Each Product Name Written Once"),
+            in_plain(
+                "A column with few different values is stored as a short list of those values, the **dictionary**, "
+                "plus one small number per sale, its **code**, that points into the list. Parquet does this by default."
+            ),
             _drawing,
-            mo.hstack([dict_rows, dict_unique, dict_value_bytes], widths="equal"),
+            mo.md(
+                f"**What to notice:** on all {len(_names):,} sales, {_names.nunique()} products with "
+                f"{_names.value_counts().iloc[0]:,} sales each, {_raw:,} bytes of names become {_dictionary} bytes of "
+                f"dictionary plus {len(_names):,} codes of {_code_bits} bits: {_total:,.0f} bytes, "
+                f"**{_total / _raw:.1%}** of the names written in full."
+            ),
+            mo.md("**In short:** size ≈ dictionary + sales × ⌈log₂(different values)⌉ bits."),
         ],
         gap=0.6,
-    ).callout(kind="neutral")
-    return dict_rows, dict_unique, dict_value_bytes
+    )
+    return
 
 
 @app.cell
-def _(TIER, alt, chart_or_table, dict_rows, dict_unique, dict_value_bytes, format_bytes, math, mo, pd, tier_chart):
-    _code_bits = math.ceil(math.log2(dict_unique.value))
-    _raw_bytes = dict_rows.value * dict_value_bytes.value
-    _dictionary_bytes = dict_unique.value * dict_value_bytes.value
-    _index_bytes = dict_rows.value * _code_bits / 8
+def _(mo, shop_sales):
+    ch4_dict_column = mo.ui.radio(
+        options={f"{_c} ({shop_sales[_c].nunique():,} different)": _c for _c in ("country", "product", "sale_date", "total_price")},
+        value=f"country ({shop_sales['country'].nunique():,} different)",
+        label="Column:",
+        inline=True,
+    )
+    return (ch4_dict_column,)
+
+
+@app.cell
+def _(TIER, alt, ch4_dict_column, chart_or_table, format_bytes, math, mo, pd, shop_sales, tier_chart):
+    _column = shop_sales[ch4_dict_column.value]
+    # Each value as the CSV writes it, in bytes.
+    _text = _column.dt.strftime("%Y-%m-%d") if ch4_dict_column.value == "sale_date" else _column.astype(str)
+    _rows_n, _unique = len(_text), _text.nunique()
+    _code_bits = max(1, math.ceil(math.log2(_unique)))
+    _raw_bytes = sum(len(_v.encode()) for _v in _text)
+    _dictionary_bytes = sum(len(_v.encode()) for _v in _text.unique())
+    _index_bytes = _rows_n * _code_bits / 8
     _ratio = (_dictionary_bytes + _index_bytes) / _raw_bytes
 
     _rows = [
-        {"metric": "Raw storage (no dictionary)", "formula": "rows x bytes_per_value", "value": _raw_bytes},
-        {"metric": "Dictionary storage", "formula": "unique_values x bytes_per_value", "value": _dictionary_bytes},
-        {"metric": "Code size per row", "formula": "ceil(log2(unique_values)) bits", "value": _code_bits},
-        {"metric": "Encoded indexes storage", "formula": "rows x code_bits/8", "value": round(_index_bytes, 2)},
-        {"metric": "Estimated encoded/raw ratio", "formula": "(dictionary + indexes) / raw", "value": round(_ratio, 4)},
-        {"metric": "Estimated savings", "formula": "1 - ratio", "value": f"{(1 - _ratio) * 100:.2f}%"},
+        {"metric": "Values in full (no dictionary)", "formula": "sum of value lengths", "value": _raw_bytes},
+        {"metric": "Dictionary", "formula": "sum of the different values' lengths", "value": _dictionary_bytes},
+        {"metric": "Code size per sale (bits)", "formula": "ceil(log2(different values))", "value": _code_bits},
+        {"metric": "Codes", "formula": "sales x code bits / 8", "value": round(_index_bytes, 2)},
+        {"metric": "Encoded / in full", "formula": "(dictionary + codes) / in full", "value": round(_ratio, 4)},
     ]
     _parts = pd.DataFrame(
         {
@@ -2985,11 +3063,11 @@ def _(TIER, alt, chart_or_table, dict_rows, dict_unique, dict_value_bytes, forma
         {
             "stored": ["every value in full", "dictionary + codes"],
             "bytes": [_raw_bytes, _dictionary_bytes + _index_bytes],
-            "label": [format_bytes(_raw_bytes), f"{format_bytes(_dictionary_bytes + _index_bytes)}, ratio {_ratio:.2f}"],
+            "label": [format_bytes(_raw_bytes), f"{format_bytes(_dictionary_bytes + _index_bytes)}, {_ratio:.0%} of in full"],
         }
     )
     _y = alt.Y("stored:N", sort=None, title=None)
-    _x = alt.X("bytes:Q", title="bytes", stack="zero", scale=alt.Scale(domain=[0, _totals["bytes"].max() * 1.35]))
+    _x = alt.X("bytes:Q", title="bytes", stack="zero", scale=alt.Scale(domain=[0, _totals["bytes"].max() * 1.45]))
     _chart = (
         alt.Chart(_parts)
         .mark_bar(cornerRadiusEnd=4)
@@ -3006,11 +3084,24 @@ def _(TIER, alt, chart_or_table, dict_rows, dict_unique, dict_value_bytes, forma
         )
         + alt.Chart(_totals).mark_text(align="left", dx=6).encode(y=_y, x="bytes:Q", text="label:N")
     ).properties(width="container", height=130)
+    _verdict = (
+        "Nearly every value is different, so the dictionary is the whole column again, and the codes come on top: "
+        "**bigger than writing the values in full.**"
+        if _ratio > 1
+        else f"Few different values, short codes: **{1 - _ratio:.0%} saved.**"
+    )
     mo.vstack(
         [
-            chart_or_table(tier_chart(_chart, "data"), _rows, label="Dictionary encoding (toy calculation)"),
+            mo.md("### Try it: Which of Our Columns Does a Dictionary Help?"),
             mo.md(
-                f"Fewer unique values, fewer bits per code (here **{_code_bits}**). All unique, and the dictionary is the whole column."
+                "The same count on four real columns of our 3,360 sales, each value in bytes as the CSV writes it. "
+                "A column with 8 different values needs 3-bit codes; one with 3,358 needs 12."
+            ),
+            ch4_dict_column,
+            chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Dictionary encoding of {ch4_dict_column.value}"),
+            mo.md(
+                f"**What to notice:** {ch4_dict_column.value} has {_unique:,} different values in {_rows_n:,} sales, so each "
+                f"code needs **{_code_bits} bits**. {_verdict}"
             ),
         ],
         gap=0.6,
@@ -3024,12 +3115,14 @@ def _(mo):
     <div class="section-card">
       <h3>Discussion — Compression</h3>
       <details>
-        <summary><strong>Q1:</strong> A 2 GB CSV crosses the network every minute. Compress it?</summary>
-        <p><strong>Answer:</strong> Probably: over a network, moving bytes dominates. Time it on the real link.</p>
+        <summary><strong>Q1:</strong> Every night we send the sales history to the analyst in Berlin. Compress it?</summary>
+        <p><strong>Answer:</strong> Yes: over a network, moving bytes dominates, and gzip sends a third of them.
+        Time it on the real link.</p>
       </details>
       <details>
-        <summary><strong>Q2:</strong> May sensor readings be rounded to save space?</summary>
-        <p><strong>Answer:</strong> Only to the sensor's own precision, noted in the schema. Prices, ids, dates: never.</p>
+        <summary><strong>Q2:</strong> May we store prices rounded to the franc to save space?</summary>
+        <p><strong>Answer:</strong> Never: the total revenue drifts and the exact prices are gone. Rounding is for
+        measurements, to the instrument's own precision, noted in the schema. Prices, ids, dates: never.</p>
       </details>
       <details>
         <summary><strong>Q3:</strong> Why did the shuffled Parquet file in chapter 3 come out larger?</summary>
@@ -3042,30 +3135,38 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        """
+def _(SALES_SEED, gzip, io, mo, pd):
+    _sales = pd.read_parquet(SALES_SEED)
+    _csv = _sales.to_csv(index=False).encode()
+    _gz = gzip.compress(_csv, 6)
+    _back = pd.read_csv(io.BytesIO(gzip.decompress(_gz)))["total_price"].sum()
+    mo.vstack(
+        [
+            mo.md(
+                f"""
     ### Chapter 4 Conclusion
 
-    - Lossless gives back every byte; lossy an approximation, never for prices, ids or dates.
-    - Compression feeds on repetition: five values per column handed Parquet the win.
-    - Smaller is not automatically faster: in memory, unpacking costs CPU and saves no I/O.
-            """
-    ).callout(kind="success")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
+    - **Mia's answer:** yes. gzip shrinks the sales CSV to {len(_gz) / len(_csv):.0%} ({len(_gz):,} of
+      {len(_csv):,} bytes), and the total after unpacking is still CHF {_back:,.2f}, to the cent.
+    - Lossless gives back every byte; lossy (rounding, PCA) only an approximation: never for prices, ids or dates.
+    - Compression feeds on repetition: the category column shrinks to a sliver, the prices only about halve.
+    - Smaller is not automatically faster: in memory, unpacking costs CPU and saves no I/O; on the way to
+      Berlin, it pays.
+                """
+            ).callout(kind="success"),
+            mo.md(
+                """
     ### Bridge to Next Chapter
 
-    Smaller files help; the engine must also skip work:
+    Smaller files help; the reader must also skip work:
     $\\text{query time} \\approx \\text{I/O time} + \\text{compute time}$.
-    DuckDB reads only the columns and row groups a query needs, and computes on whole columns.
-            """
-    ).callout(kind="neutral")
+    Next, DuckDB answers Mia's revenue per region straight from these files, reading only the columns and
+    row groups the query needs.
+                """
+            ).callout(kind="neutral"),
+        ],
+        gap=1,
+    )
     return
 
 
