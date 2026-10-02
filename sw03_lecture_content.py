@@ -4720,62 +4720,56 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## 10. Honest Charts (Signal vs Noise)
-    """)
+def _(chapter_intro, mo):
+    mo.vstack(
+        [
+            mo.md("## 10. Honest Charts (Signal vs Noise)"),
+            chapter_intro(
+                "presentation",
+                "Which pattern is signal, and which is noise?",
+                "The last decision of the whole stack: what a chart claims is what people believe.",
+            ),
+        ],
+        gap=1,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md(
+    _more = mo.md(
         """
-    ### Chapter 10 Introduction
-
-    > **Key Question:** Which pattern is signal, and which is noise?
-
-    *Still in the **presentation tier**, and the last decision of the whole stack: what a chart claims is what people believe.*
-
-    Charts help humans detect patterns quickly. A linear regression summarises a trend with two numbers:
-
-    $$
-    y = \\alpha + \\beta x
-    $$
-
-    - $\\alpha$: baseline level, the value of y where x is 0
-    - $\\beta$: change in y for one unit change in x
-    """
-    ).callout(kind="neutral")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
+    - $\\alpha$ is the baseline level, the value of y where x is 0; $\\beta$ is the change in y for one
+      unit of x. The margin of error is two standard errors, about 95% confidence.
+    - **Slope 0, noise high:** the equation still prints confidently, and the ± tells you not to
+      believe it. About 1 seed in 20 still clears the bar at slope 0: that is what 95% means.
+    - **Noise 1.4, slope 0.4:** $R^2$ calls the line nearly useless, yet the slope is clearly real.
+    - **More rows** shrink the ±, but they do not push $R^2$ up. $R^2$ measures how predictable single
+      points are, not whether a trend exists.
         """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                """
     ### Lab: Signal or Noise?
 
-    Generate a dataset where **you** set the true slope and the noise, then watch what the
-    regression reports back. It gives two separate answers:
+    The regression $y = \\alpha + \\beta x$ gives two separate answers:
 
-    - **Trend:** $\\beta$ plus or minus its margin of error (two standard errors, about 95%
-      confidence). If that range includes 0, the data cannot tell the slope from zero.
-    - **Fit:** $R^2$, the share of the up-and-down in y that the line explains: how well it
-      predicts a *single* point.
+    <div class="tiles tier-presentation">
+      <div class="tile"><div class="tile-key">&beta; &plusmn; 2 SE</div><div class="tile-title">Trend: is there a slope?</div>
+        <p>If the range includes 0, the data cannot tell the slope from zero.</p></div>
+      <div class="tile"><div class="tile-key">R&sup2;</div><div class="tile-title">Fit: how close are the points?</div>
+        <p>How well the line predicts a <em>single</em> point: the share of the spread it explains.</p></div>
+    </div>
 
-    Set the slope to 0 and the noise high: the equation still prints confidently, and the ± tells
-    you not to believe it. Still, about 1 seed in 20 clears the bar at slope 0: that is what
-    95% means.
-
-    Then put the noise back to 1.4 and set the slope to 0.4: $R^2$ calls the line nearly useless,
-    yet the slope is clearly real. More rows shrink the ±, but they do not push $R^2$ up. $R^2$ measures
-    how predictable single points are, not whether a trend exists.
-
-    The mini-lab below then asks one question of real data three different ways, and gets three
-    different answers.
-    """
-    ).callout(kind="neutral")
+    **Try:** slope 0 with noise 5 · slope 0.4 with noise 1.4 · then more rows.
+                """
+            ),
+            mo.accordion({"What each experiment shows": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
@@ -4797,8 +4791,10 @@ def _(mo):
 
 @app.cell
 def _(
+    TIER,
     alt,
     chart_noise,
+    chart_or_table,
     chart_rows,
     chart_seed,
     chart_slope,
@@ -4806,6 +4802,7 @@ def _(
     pd,
     random,
     statistics,
+    tier_chart,
 ):
     _rng = random.Random(chart_seed.value)
     _xs = [_rng.gauss(0, 1) for _ in range(chart_rows.value)]
@@ -4834,18 +4831,47 @@ def _(
         f"**Fit:** $R^2 = {_r2:.2f}$, the line explains {_fit}."
     ).callout(kind="success" if _nonzero else "warn")
 
+    # The fan: every line whose slope lies in beta ± 2 SE, pivoting on the centre of the data.
+    _xbar, _ybar = statistics.fmean(_xs), statistics.fmean(_ys)
+    _grid = [min(_xs) + (max(_xs) - min(_xs)) * _i / 40 for _i in range(41)]
+    _ends = [((_beta - 2 * _se) * (_g - _xbar), (_beta + 2 * _se) * (_g - _xbar)) for _g in _grid]
+    _fan = pd.DataFrame(
+        {
+            "x": _grid,
+            "low": [_ybar + min(_e) for _e in _ends],
+            "high": [_ybar + max(_e) for _e in _ends],
+            "flat": _ybar,
+        }
+    )
+    _x = alt.X("x:Q").axis(tickCount=8)
     _points = (
         alt.Chart(pd.DataFrame({"x": _xs, "y": _ys}))
-        .mark_circle(size=40, opacity=0.6, color="#3b82f6")
-        .encode(x=alt.X("x:Q").axis(tickCount=8), y="y:Q")
+        .mark_circle(size=36, opacity=0.45, color=TIER["muted"])
+        .encode(x=_x, y="y:Q")
     )
-    _line = _points.transform_regression("x", "y").mark_line(color="#f59e0b", strokeWidth=4)
-    _chart = (
-        (_points + _line)
-        .properties(width="container", height=320)
-        .configure_axis(labelFontSize=13, titleFontSize=14)
+    _band = alt.Chart(_fan).mark_area(opacity=0.25, color=TIER["presentation"]).encode(x=_x, y=alt.Y("low:Q", title="y"), y2="high:Q")
+    _flat = alt.Chart(_fan).mark_line(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x=_x, y=alt.Y("flat:Q", title="y"))
+    _line = _points.transform_regression("x", "y").mark_line(color=TIER["presentation"], strokeWidth=4)
+    _chart = (_band + _points + _flat + _line).properties(width="container", height=320)
+    _summary = [
+        {"quantity": "slope you set", "value": chart_slope.value},
+        {"quantity": "fitted slope β", "value": round(_beta, 3)},
+        {"quantity": "margin of error (2 SE)", "value": round(2 * _se, 3)},
+        {"quantity": "intercept α", "value": round(_alpha, 3)},
+        {"quantity": "R²", "value": round(_r2, 3)},
+        {"quantity": "rows (n)", "value": len(_xs)},
+    ]
+    mo.vstack(
+        [
+            _verdict,
+            chart_or_table(tier_chart(_chart, "presentation"), _summary, label="Regression summary"),
+            mo.md(
+                '<p class="vis-caption">Orange fan: every slope inside &beta; &plusmn; 2 SE. If the dashed flat '
+                "line fits inside it, the data cannot rule out zero.</p>"
+            ),
+        ],
+        gap=0.6,
     )
-    mo.vstack([_verdict, _chart], gap=0.8)
     return
 
 
@@ -4859,17 +4885,18 @@ def _(mo):
         ],
         value="A - aggregate the dots",
         label="Ask the same question a different way",
+        inline=True,
     )
     mo.vstack(
         [
-            mo.md("### Mini-lab: Three Ways to Change the Finding Without Changing the Data"),
             mo.md(
                 """
-    One question, asked of the repo's real 3,360 sales: **does spending more make customers
-    happier?** Nothing below adds or removes a single sale. Only the way we look changes.
-    (The lab reads the seed files directly, a notebook shortcut past the API; the dashboard asks the API.)
-    """
-            ).callout(kind="info"),
+    ### Mini-lab: Three Ways to Change the Finding Without Changing the Data
+
+    One question of the repo's real 3,360 sales: **does spending more make customers happier?**
+    Every view uses every sale; only the way we look changes.
+                """
+            ),
             honest_view,
         ],
         gap=0.6,
@@ -4878,7 +4905,7 @@ def _(mo):
 
 
 @app.cell
-def _(SEED_DIR, duckdb, honest_view, mo, static_table):
+def _(SEED_DIR, TIER, alt, chart_or_table, duckdb, honest_view, mo, tier_chart):
     _con = duckdb.connect()
     _con.execute(
         f"""
@@ -4902,61 +4929,111 @@ def _(SEED_DIR, duckdb, honest_view, mo, static_table):
         return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
 
     if honest_view.value.startswith("A"):
-        _rows = [
-            _measure("one dot per sale"),
-            _measure("one dot per product per month", _averaged("product, month")),
-            _measure("one dot per category per month", _averaged("category, month")),
-            _measure("one dot per category", _averaged("category")),
+        _views = [
+            ("one dot per sale", "sales", ()),
+            ("per product per month", _averaged("product, month"), ()),
+            ("per category per month", _averaged("category, month"), ()),
+            ("per category", _averaged("category"), ()),
         ]
-        _lesson = f"""
-    **$R^2$ climbed from {_rows[0]["R²"]:.2f} to {_rows[-1]["R²"]:.2f} and no new information entered the room.**
-
-    Every row above is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
-    strengthen a relationship, it **deletes the disagreement** that was telling you the
-    relationship is weak. The last row has {_rows[-1]["dots (n)"]} dots and a story you could put on a slide.
-
-    This is why a goodness-of-fit number is meaningless without its sample size. Always read
-    $R^2$ and $n$ together, which is why the table prints both. The dashboard's *What goes with a
-    good rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
-    """
     elif honest_view.value.startswith("B"):
         _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
-        _rows = [_measure("all sales pooled together")]
-        _rows += [_measure(f"only {_c}", "sales WHERE category = ?", _c) for _c in _cats]
+        _views = [("all sales pooled", "sales", ())] + [(f"only {_c}", "sales WHERE category = ?", (_c,)) for _c in _cats]
+    else:
+        _views = [("all sales", "sales", ()), ("every sale except Services", "sales WHERE category <> 'Services'", ())]
+    _rows = [_measure(_label, _source, *_params) for _label, _source, _params in _views]
+
+    def _panel(i, row, source, params):
+        """Small multiple i: the dots and their least-squares line, red when it slopes down."""
+        df = _con.execute(f"SELECT x, y FROM {source}", params).df()
+        dots = (
+            alt.Chart(df)
+            .mark_circle(size=18 if len(df) > 1000 else 60, opacity=0.15 if len(df) > 1000 else 0.7, color=TIER["muted"])
+            .encode(
+                x=alt.X("x:Q", title="CHF spent", axis=alt.Axis(format="~s", tickCount=4)),
+                y=alt.Y("y:Q", title="rating" if i == 0 else None, scale=alt.Scale(domain=[1, 5])),
+            )
+        )
+        slope = row["slope (rating per CHF 10k)"]
+        line = dots.transform_regression("x", "y").mark_line(
+            strokeWidth=4, color=TIER["hot"] if slope < 0 else TIER["presentation"]
+        )
+        return (dots + line).properties(
+            width=190 if len(_views) > 2 else 430,
+            height=230,
+            title=alt.TitleParams(
+                row["what we plotted"],
+                subtitle=f"n {row['dots (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
+                fontSize=15,
+                subtitleFontSize=14,
+            ),
+        )
+
+    _panels = alt.hconcat(*[_panel(_i, _row, _view[1], _view[2]) for _i, (_row, _view) in enumerate(zip(_rows, _views, strict=True))])
+
+    if honest_view.value.startswith("A"):
+        _lesson = (
+            f"**$R^2$ climbed from {_rows[0]['R²']:.2f} to {_rows[-1]['R²']:.2f} and no new information entered "
+            f"the room.** The last panel has {_rows[-1]['dots (n)']} dots and a story you could put on a slide."
+        )
+        _more = mo.md(
+            f"""
+    Every panel is the same {_rows[0]["dots (n)"]:,} sales. Averaging dots together does not
+    strengthen a relationship, it **deletes the disagreement** that was telling you the
+    relationship is weak.
+
+    This is why a goodness-of-fit number is meaningless without its sample size. Always read $R^2$
+    and $n$ together, which is why every panel prints both. The dashboard's *What goes with a good
+    rating?* chart offers the same choice: compare *Sale* with *Category (monthly)*.
+            """
+        )
+    elif honest_view.value.startswith("B"):
         _down = [_c for _c, _row in zip(_cats, _rows[1:], strict=True) if _row["slope (rating per CHF 10k)"] < 0]
         _up = [_c for _c in _cats if _c not in _down]
-        _lesson = f"""
-    **The pooled line does not describe any of the groups.**
+        _lesson = (
+            f"**The pooled line does not describe the groups.** Pooled, the slope is positive. Inside "
+            f"{' and '.join(_down)} it points the other way (red); only {' and '.join(_up)} still slopes upward."
+        )
+        _more = mo.md(
+            f"""
+    The upward pooled line is mostly describing the gaps **between** categories: Services happen to
+    be expensive and well rated, while Hardware is mid-priced and rated worst.
 
-    Pooled, the slope is positive: spend more, be happier. Inside {" and ".join(_down)} it points
-    the other way, and only {" and ".join(_up)} still slopes upward. The upward pooled line is mostly
-    describing the gaps **between** categories: Services happen to be expensive and well rated,
-    while Hardware is mid-priced and rated worst.
-
-    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here
-    it reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap.
-    Three groups' worth of difference, wearing three thousand dots' worth of authority.
-    """
+    When a trend reverses inside *every* group it was built from, that is Simpson's paradox. Here it
+    reverses in {len(_down)} of {len(_cats)} groups: not the textbook case, but the same trap. Three
+    groups' worth of difference, wearing three thousand dots' worth of authority.
+            """
+        )
     else:
-        _rows = [
-            _measure("all sales"),
-            _measure("every sale except Services", "sales WHERE category <> 'Services'"),
-        ]
-        _lesson = """
-    **One group out of three decided the direction of the answer.**
-
-    Remove Services and the slope flips sign: the finding reverses completely. Now look at the
-    $R^2$ column. It barely moved.
-
-    That is the warning worth leaving this chapter with. $R^2$ tells you how tightly the dots hug
-    the line. It never tells you whether the line was the right line to draw, and it will not
-    warn you when one group is carrying the entire result.
-    """
+        _lesson = (
+            "**One group out of three decided the direction of the answer.** Remove Services and the slope "
+            "flips sign, and $R^2$ barely moves."
+        )
+        _more = mo.md(
+            """
+    $R^2$ tells you how tightly the dots hug the line. It never tells you whether the line was the
+    right line to draw, and it will not warn you when one group is carrying the entire result.
+            """
+        )
 
     mo.vstack(
         [
-            static_table(_rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"),
+            chart_or_table(
+                tier_chart(_panels, "presentation"), _rows, label=f"Same {_rows[0]['dots (n)']:,} sales, same question"
+            ),
             mo.md(_lesson).callout(kind="warn"),
+            mo.accordion(
+                {
+                    "Why it happens": mo.vstack(
+                        [
+                            _more,
+                            mo.md(
+                                "*The lab reads the seed files directly, a notebook shortcut past the API; "
+                                "the dashboard asks the API.*"
+                            ),
+                        ]
+                    )
+                }
+            ),
         ],
         gap=0.6,
     )
@@ -4965,54 +5042,101 @@ def _(SEED_DIR, duckdb, honest_view, mo, static_table):
 
 @app.cell
 def _(mo):
+    mo.md("""
+    <div class="section-card">
+      <h3>Discussion — Honest Charts</h3>
+      <details>
+        <summary><strong>Q1:</strong> A slide shows a tight line and a high R². What do you ask first?</summary>
+        <p><strong>Answer:</strong> What one dot is, and how many there are. View A turns the same sales from a
+        weak per-sale relationship into a tight line of category averages, with no new information.</p>
+      </details>
+      <details>
+        <summary><strong>Q2:</strong> When is it fair to drop a category?</summary>
+        <p><strong>Answer:</strong> When the reason is stated before you look at the result (a different
+        business, a data error), and both answers are shown. Dropping a group because it spoils the story is
+        exactly how view C reverses the finding.</p>
+      </details>
+    </div>
+    """)
+    return
+
+
+@app.cell
+def _(mo):
     mo.md(
         """
-    ### Wrap-up
+    ### Chapter 10 Conclusion
 
-    We built one data product, one tier at a time. The map from the start, filled in:
+    - Read a slope with its ± range, and $R^2$ with its $n$.
+    - $R^2$ says how close single points sit, not whether a trend exists.
+    - Averaging, splitting or dropping a group can reverse a finding without changing one row: say which you did.
+            """
+    ).callout(kind="success")
+    return
 
-    - **Data tier, where the bytes rest:** keep writes correct (ch. 1), pick a format (ch. 2),
-      choose a layout (ch. 3), shrink it (ch. 4), query it with DuckDB (ch. 5).
-    - **Logic tier, the rules and the API:** agree on a contract (ch. 6), check what comes in
-      with Pydantic (ch. 7), serve it with FastAPI (ch. 8).
-    - **Presentation tier, what people see:** choose a frontend (ch. 9), show the numbers
-      honestly (ch. 10).
 
-    Each tier only talks to its neighbour. Move the sales from Parquet files into a DuckDB
-    database and only the storage code in `sw03_demo_api.py` changes (the file names in `TABLES`
-    and `reset`, `read`, `write`), not one endpoint. Swap Streamlit for React and neither lower
-    tier notices.
-
-    If you remember one thing: correctness is designed in, not bought with a tool. Get it first,
-    then performance, then usability.
-    """
-    ).callout(kind="neutral")
+@app.cell
+def _(mo, tier_map):
+    _more = mo.md(
+        """
+    Move the sales from Parquet files into a DuckDB database and only the storage code in
+    `sw03_demo_api.py` changes (the file names in `TABLES` and `reset`, `read`, `write`), not one
+    endpoint. Swap Streamlit for React and neither lower tier notices.
+        """
+    )
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+    <div class="section-card">
+      <h3>Wrap-up: the Map, Filled In</h3>
+      {tier_map}
+      <p class="vis-caption">Each tier only talks to its neighbour, so any one can be replaced without
+      rewriting the others.</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-key">1</div><div class="tile-title">Correctness</div>
+          <p>Designed in, not bought with a tool. Get it first.</p></div>
+        <div class="tile"><div class="tile-key">2</div><div class="tile-title">Performance</div>
+          <p>Then make it fast.</p></div>
+        <div class="tile"><div class="tile-key">3</div><div class="tile-title">Usability</div>
+          <p>Then make it clear, and honest.</p></div>
+      </div>
+    </div>
+                """
+            ),
+            mo.accordion({"What replacing one tier would touch": _more}),
+        ],
+        gap=0.6,
+    )
     return
 
 
 @app.cell
 def _(mo):
-    mo.md("""
-    ## Some Useful Links
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    - [marimo docs](https://docs.marimo.io) · [gallery](https://marimo.io/gallery)
-    - [DuckDB](https://duckdb.org/docs) · [SQLite](https://www.sqlite.org/docs.html)
-    - [Apache Parquet](https://parquet.apache.org) · [Arrow](https://arrow.apache.org) ·
-      [Avro](https://avro.apache.org)
-    - [FastAPI](https://fastapi.tiangolo.com) · [Pydantic](https://docs.pydantic.dev) ·
-      [Streamlit](https://docs.streamlit.io)
-    - [OpenAPI spec](https://spec.openapis.org/oas/latest.html) ·
-      [HTTP semantics, RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) ·
-      [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes)
-    - [Dash gallery](https://dash.gallery/Portal/) · [React community](https://react.dev/community) ·
-      [Flask patterns](https://flask.palletsprojects.com/en/stable/patterns/)
-    """)
+    mo.vstack(
+        [
+            mo.md("## Some Useful Links"),
+            mo.md("""
+    <div class="tiles">
+      <div class="tile tier-data"><div class="tile-title">Data tier</div>
+        <p><a href="https://duckdb.org/docs">DuckDB</a> · <a href="https://www.sqlite.org/docs.html">SQLite</a> ·
+        <a href="https://parquet.apache.org">Apache&nbsp;Parquet</a> · <a href="https://arrow.apache.org">Arrow</a> ·
+        <a href="https://avro.apache.org">Avro</a></p></div>
+      <div class="tile tier-logic"><div class="tile-title">Logic tier</div>
+        <p><a href="https://fastapi.tiangolo.com">FastAPI</a> · <a href="https://docs.pydantic.dev">Pydantic</a> ·
+        <a href="https://spec.openapis.org/oas/latest.html">OpenAPI&nbsp;spec</a> ·
+        <a href="https://www.rfc-editor.org/rfc/rfc9110.html">HTTP semantics, RFC&nbsp;9110</a> ·
+        <a href="https://en.wikipedia.org/wiki/List_of_HTTP_status_codes">HTTP&nbsp;status&nbsp;codes</a></p></div>
+      <div class="tile tier-presentation"><div class="tile-title">Presentation tier</div>
+        <p><a href="https://docs.marimo.io">marimo&nbsp;docs</a> · <a href="https://marimo.io/gallery">gallery</a> ·
+        <a href="https://docs.streamlit.io">Streamlit</a> · <a href="https://dash.gallery/Portal/">Dash&nbsp;gallery</a> ·
+        <a href="https://react.dev/community">React&nbsp;community</a> ·
+        <a href="https://flask.palletsprojects.com/en/stable/patterns/">Flask&nbsp;patterns</a></p></div>
+    </div>
+            """),
+        ],
+        gap=1,
+    )
     return
 
 
