@@ -138,7 +138,9 @@ Use separate terminals so each service stays running.
 | Terminal 3 | 🚀 FastAPI demo | `uvicorn sw03_demo_api:app --host 127.0.0.1 --port 8000` |
 | Terminal 4 (optional) | 🎛️ Streamlit demo | `streamlit run sw03_demo_streamlit.py` |
 
-Part 3 of the lecture talks to the API, so start Terminal 3 before that part.
+Part 3 of the lecture talks to the API, so start Terminal 3 before that part. One Part 3 slide also
+requests a weather forecast from the public Open-Meteo API; without internet access it shows a
+recorded response instead.
 The Streamlit demo needs the API too; its default base URL is `http://127.0.0.1:8000`.
 
 To stop a running process in a terminal: `Ctrl + C`.

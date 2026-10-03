@@ -152,11 +152,11 @@ def _(mo):
       <p class="vis-caption">After this lecture, you can</p>
       <ol class="question-list">
         <li class="tier-data">compare CSV, JSON, Avro, Parquet, Arrow and Pickle by readability, size, speed, types, schema support and safety;</li>
-        <li class="tier-data">explain why a columnar layout and compression make analytical queries fast, and query Parquet files with SQL;</li>
+        <li class="tier-data">explain why a columnar layout, partitioning and compression make analytical queries fast, and query Parquet files with SQL;</li>
         <li class="tier-data">explain what a database transaction adds compared with a plain file;</li>
         <li class="tier-logic">describe an HTTP request and its response, and retrieve data from an API with Python;</li>
         <li class="tier-logic">build a small API with FastAPI that validates its input with Pydantic;</li>
-        <li class="tier-presentation">compare Streamlit, marimo and Dash, and choose a framework for a given dashboard.</li>
+        <li class="tier-presentation">compare Streamlit, marimo and Dash, choose a framework for a given dashboard, and a chart type for a given question.</li>
       </ol>
     </div>
     """)
@@ -298,7 +298,7 @@ def _(html, mo, requests, timeit):
         value = float(num_bytes)
         for unit in ("B", "KB", "MB", "GB"):
             if value < 1024:
-                return f"{value:,.2f} {unit}"
+                return f"{value:,.0f} B" if unit == "B" else f"{value:,.2f} {unit}"
             value /= 1024
         return f"{value:,.2f} TB"
 
@@ -327,13 +327,14 @@ def _(html, mo, requests, timeit):
     # ponytail: marimo 0.25 reports theme "system" as light, so on a dark OS those users get light-theme label ink
     _dark = mo.app_meta().theme == "dark"
     # the --tier-* hues of sw03_deck.css, a grey for the bars that are not the point (darker than a hue on dark),
-    # and the --red of sw03_deck.css for what broke (the dg-hot of the diagrams)
+    # the --red of sw03_deck.css for what broke (the dg-hot of the diagrams), and its --amber for decompression
     TIER = {
         "data": "#2f7fe0",
         "logic": "#c9479f",
         "presentation": "#dd6325",
         "muted": "#626b78" if _dark else "#9aa4b2",
         "hot": "#ff9b8f" if _dark else "#b42318",
+        "amber": "#f5b43c" if _dark else "#d97706",
     }
 
     def tier_chart(chart, tier: str):
@@ -414,6 +415,7 @@ def _(chapter_intro, mo):
                     "Serialization",
                     "Text and binary formats",
                     "Encodings and CSV dialects",
+                    "Dates and time zones",
                     "Schemas and schema evolution",
                     "Arrow and Pickle",
                     "Latency and throughput",
@@ -726,6 +728,95 @@ def _(in_plain, io, mo, p1_csv_reader, pd, shop_sales, static_table):
                 gap=2,
             ),
             _verdict,
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    p1_day_boundary = mo.ui.radio(
+        options={"local time of the store": "local", "UTC": "UTC", "Zurich (head office)": "Europe/Zurich"},
+        value="local time of the store",
+        label="Count each sale on its date in:",
+        inline=True,
+    )
+    return (p1_day_boundary,)
+
+
+@app.cell
+def _(in_plain, mo, p1_day_boundary, pd, shop_sales, static_table):
+    # Six sales around midnight at the end of January, each recorded in its store's local time. The amounts are
+    # EdgeWorks sales of these countries; the clock times are illustrative, since the sales files store dates only.
+    _stores = [
+        ("United States", "New York", "America/New_York", "2026-01-31 22:30"),
+        ("Canada", "Toronto", "America/Toronto", "2026-01-31 18:05"),
+        ("United Kingdom", "London", "Europe/London", "2026-01-31 23:40"),
+        ("Germany", "Berlin", "Europe/Berlin", "2026-02-01 00:15"),
+        ("Japan", "Tokyo", "Asia/Tokyo", "2026-02-01 06:30"),
+        ("India", "Mumbai", "Asia/Kolkata", "2026-02-01 03:10"),
+    ]
+    _sales = [
+        (_city, pd.Timestamp(_local).tz_localize(_zone), float(shop_sales.loc[shop_sales["country"] == _country, "total_price"].iloc[-1]))
+        for _country, _city, _zone, _local in _stores
+    ]
+
+    def _month(moment, boundary):
+        """The month a sale counts towards when its date is taken in `boundary` (a time zone, or "local")."""
+        return (moment if boundary == "local" else moment.tz_convert(boundary)).strftime("%B")
+
+    def _january(boundary):
+        return sum(_amount for _, _moment, _amount in _sales if _month(_moment, boundary) == "January")
+
+    _boundary = p1_day_boundary.value
+    _rows = [
+        {
+            "store": _city,
+            "recorded (local time)": _moment.strftime("%d %b %H:%M"),
+            "UTC": _moment.tz_convert("UTC").strftime("%d %b %H:%M"),
+            "Zurich": _moment.tz_convert("Europe/Zurich").strftime("%d %b %H:%M"),
+            "counts towards": _month(_moment, _boundary),
+            "amount (CHF)": round(_amount, 2),
+        }
+        for _city, _moment, _amount in _sales
+    ]
+    _in_january = sum(_r["counts towards"] == "January" for _r in _rows)
+    _us_style = pd.to_datetime("01/03/2026", format="%m/%d/%Y")
+    _european = pd.to_datetime("01/03/2026", format="%d/%m/%Y")
+    mo.vstack(
+        [
+            mo.md("### Dates and time zones"),
+            in_plain(
+                "A date written as text needs its format: `01/03/2026` is 1 March in Europe and 3 January in the US. A "
+                "point in time also needs its time zone. **ISO 8601** (`2026-03-01T22:30:00+01:00`) fixes the order of "
+                "the parts, and storing times in **UTC** gives every system the same reference."
+            ),
+            mo.hstack(
+                [
+                    mo.md(f'`format="%m/%d/%Y"` reads `01/03/2026` as **{_us_style.day} {_us_style:%B %Y}**').callout(kind="neutral"),
+                    mo.md(f'`format="%d/%m/%Y"` reads it as **{_european.day} {_european:%B %Y}**').callout(kind="neutral"),
+                    mo.md("`2026-03-01`, in ISO 8601, has only one reading").callout(kind="success"),
+                ],
+                widths="equal",
+                gap=1,
+            ),
+            p1_day_boundary,
+            mo.hstack(
+                [
+                    static_table(_rows, label="Six sales around midnight on 31 January (illustrative clock times)"),
+                    mo.stat(f"CHF {_january(_boundary):,.0f}", label="January revenue", caption=f"{_in_january} of 6 sales", bordered=True),
+                ],
+                widths=[4, 1],
+                gap=2,
+                align="center",
+            ),
+            mo.md(
+                f"**Observation:** the same six sales give a January revenue of CHF {_january('local'):,.0f} counted in "
+                f"local time, CHF {_january('UTC'):,.0f} in UTC and CHF {_january('Europe/Zurich'):,.0f} in Zurich time. A "
+                "report is reproducible only if it states the time zone of its day boundary; storing UTC and converting "
+                "for display avoids the ambiguity."
+            ),
         ],
         gap=0.6,
     )
@@ -1469,7 +1560,8 @@ def _(mo, shop_sales):
 
     - Serialization converts objects into bytes; the format determines these bytes. Text formats (CSV, JSON)
       are readable, binary formats (Avro, Parquet, Arrow, Pickle) are compact and typed.
-    - Text files require the matching encoding (UTF-8) and CSV dialect (separator, decimal mark).
+    - Text files require the matching encoding (UTF-8) and CSV dialect (separator, decimal mark); dates need
+      an explicit format and a time zone (ISO 8601, stored in UTC).
     - CSV stores no types (`007` becomes `7`); Avro, Parquet and Arrow carry a schema, and Avro's defaults
       support schema evolution.
     - Arrow exchanges tables between tools in memory; Pickle executes code when it is loaded.
@@ -1510,6 +1602,7 @@ def _(chapter_intro, mo):
                     "Inside a Parquet file",
                     "Compression",
                     "SQL on files with DuckDB",
+                    "Partitioned datasets",
                     "Schema on read and on write",
                     "Transactions and ACID",
                 ),
@@ -1826,108 +1919,85 @@ def _(SALES_SEED, box, diagram, in_plain, label_w, mo, pd):
 
 
 @app.cell
-def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes, mo, pd, tempfile, tier_chart):
+def _(Path, SALES_SEED, diagram, duckdb, format_bytes, in_plain, mo, pd, tempfile):
     _df = pd.read_parquet(SALES_SEED)
     _from, _to = "2026-01-01", "2026-02-01"
-    _wanted = ["sale_date", "total_price"]
-    _steps = ["every column", "date and price only", "date and price, footer skips"]
+    _query = f"SELECT sum(total_price) FROM 'sales.parquet' WHERE sale_date >= '{_from}' AND sale_date < '{_to}'"
 
     with tempfile.TemporaryDirectory() as _td:
-        _ordered = Path(_td) / "date_ordered.parquet"
-        _shuffled = Path(_td) / "shuffled.parquet"
-        _df.sort_values("sale_date").to_parquet(_ordered, index=False, row_group_size=420)
-        _df.sample(frac=1, random_state=7).to_parquet(_shuffled, index=False, row_group_size=420)
+        _files = {"sorted by date": Path(_td) / "sorted.parquet", "random order": Path(_td) / "shuffled.parquet"}
+        _df.sort_values("sale_date").to_parquet(_files["sorted by date"], index=False, row_group_size=420)
+        _df.sample(frac=1, random_state=7).to_parquet(_files["random order"], index=False, row_group_size=420)
 
         _con = duckdb.connect()
-        _rows, _cards = [], {}
-        _ordered_size, _shuffled_size = _ordered.stat().st_size, _shuffled.stat().st_size
-        for _label, _path in (("sorted by date", _ordered), ("shuffled", _shuffled)):
+        _result = {}
+        for _label, _path in _files.items():
             _md = _con.execute(
                 "SELECT row_group_id, path_in_schema, total_compressed_size, stats_min, stats_max "
                 f"FROM parquet_metadata('{_path.as_posix()}')"
             ).df()
-            _two_cols = _md[_md["path_in_schema"].isin(_wanted)]
-            # The footer: a row group survives unless its dates end before January or start after it.
+            # The footer's min-max statistics: a row group is read unless its dates end before January or start after it.
             _dates = _md[_md["path_in_schema"] == "sale_date"].sort_values("row_group_id")
-            _maybe = (_dates["stats_max"] >= _from) & (_dates["stats_min"] < _to)
-            _live = _dates[_maybe]["row_group_id"]
-            _cards[_label] = list(zip(_dates["stats_min"].str[:7], _dates["stats_max"].str[:7], _maybe))
-            _answer = _con.execute(
-                f"SELECT round(sum(total_price), 2) FROM '{_path.as_posix()}' WHERE sale_date >= '{_from}' AND sale_date < '{_to}'"
-            ).fetchone()[0]
-            _rows.append(
-                {
-                    "file": _label,
-                    _steps[0]: int(_md["total_compressed_size"].sum()),
-                    _steps[1]: int(_two_cols["total_compressed_size"].sum()),
-                    _steps[2]: int(_two_cols[_two_cols["row_group_id"].isin(_live)]["total_compressed_size"].sum()),
-                    "row groups opened": f"{len(_live)} of {_md['row_group_id'].nunique()}",
-                    "January revenue (CHF)": _answer,
-                }
-            )
+            _read = (_dates["stats_max"] >= _from) & (_dates["stats_min"] < _to)
+            # what the query reads: the date and price chunks of those row groups
+            _chunks = _md[
+                _md["path_in_schema"].isin(["sale_date", "total_price"]) & _md["row_group_id"].isin(_dates["row_group_id"][_read])
+            ]
+            _result[_label] = {
+                "groups": list(zip(_dates["stats_min"].str[:7], _dates["stats_max"].str[:7], _read)),
+                "read": int(_read.sum()),
+                "bytes": int(_chunks["total_compressed_size"].sum()),
+                "revenue": _con.execute(_query.replace("'sales.parquet'", f"'{_path.as_posix()}'")).fetchone()[0],
+            }
         _con.close()
 
-    # One strip per file: every row group with its date range, opened (tier) or skipped (grey).
-    _strip = []
-    for _r, (_label, _card) in enumerate(_cards.items()):
-        _y = _r * 76
-        _opened = sum(_open for *_, _open in _card)
-        _strip.append(f'<text x="0" y="{_y + 24}" font-weight="700">{_label}</text>')
-        _strip.append(
-            f'<text class="{"dg-hot" if _opened == len(_card) else "dg-ok"}" x="0" y="{_y + 48}">opened {_opened} of {len(_card)}</text>'
+    # One strip per file: each row group with the date range its footer records, read (tier) or skipped (grey).
+    _parts = []
+    for _r, (_label, _res) in enumerate(_result.items()):
+        _y, _all = _r * 84, len(_res["groups"])
+        _parts.append(f'<text x="0" y="{_y + 25}" font-weight="700">{_label}</text>')
+        _parts.append(
+            f'<text class="{"dg-hot" if _res["read"] == _all else "dg-ok"}" x="0" y="{_y + 51}">'
+            f'reads {_res["read"]} of {_all} · {format_bytes(_res["bytes"])}</text>'
         )
-        for _s, (_lo, _hi, _open) in enumerate(_card):
-            _x = 170 + _s * 111
-            _strip.append(
-                f'<rect class="{"dg-tier" if _open else "dg-box"}" x="{_x}" y="{_y}" width="104" height="60" rx="10"/>'
-                f'<text x="{_x + 52}" y="{_y + 25}" text-anchor="middle">{_lo}</text>'
-                f'<text class="dg-muted" x="{_x + 52}" y="{_y + 49}" text-anchor="middle">to {_hi}</text>'
+        for _s, (_lo, _hi, _open) in enumerate(_res["groups"]):
+            _x = 230 + _s * 111
+            _parts.append(
+                f'<rect class="{"dg-tier" if _open else "dg-box"}" x="{_x}" y="{_y}" width="104" height="62" rx="10"/>'
+                f'<text x="{_x + 52}" y="{_y + 26}" text-anchor="middle">{_lo}</text>'
+                f'<text class="dg-muted" x="{_x + 52}" y="{_y + 50}" text-anchor="middle">to {_hi}</text>'
             )
-    _strip_svg = diagram(
-        "".join(_strip),
-        width=1060,
-        height=136,
-        label=f"File sorted by date: each row group spans three months and {_rows[0]['row groups opened']} are opened. "
-        f"Shuffled file: every row group spans the whole two years and {_rows[1]['row groups opened']} are opened.",
+    _parts.append(
+        '<text class="dg-muted" x="230" y="176">one box per row group of 420 sales, labelled with the date range in '
+        "the footer; blue: read, grey: skipped</text>"
+    )
+    _sorted, _random = _result.values()
+    _strip = diagram(
+        "".join(_parts),
+        width=1120,
+        height=184,
+        label=f"Sorted by date, each row group spans three months and the query reads {_sorted['read']} of "
+        f"{len(_sorted['groups'])}. In random order, every row group spans all dates and the query reads "
+        f"{_random['read']} of {len(_random['groups'])}.",
         tier="data",
     )
-
-    _bars = pd.DataFrame([{"file": _r["file"], "read": _s, "bytes": _r[_s]} for _r in _rows for _s in _steps])
-    _bars["label"] = [format_bytes(_b) for _b in _bars["bytes"]]
-    # red where the footer bought nothing: the last step still reads everything the one before it read
-    _bars["nothing skipped"] = [_s == _steps[2] and _r[_steps[2]] == _r[_steps[1]] for _r in _rows for _s in _steps]
-    _x = alt.X("bytes:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _bars["bytes"].max() * 1.3]))
-    _charts = []
-    for _i, _file in enumerate(_cards):
-        _base = alt.Chart(_bars[_bars["file"] == _file]).encode(
-            y=alt.Y("read:N", sort=None, title=None, axis=alt.Axis(labelLimit=280) if _i == 0 else None),
-            x=_x,
-            tooltip=["file:N", "read:N", "bytes:Q"],
-        )
-        _charts.append(
-            (
-                _base.mark_bar(cornerRadiusEnd=4).encode(
-                    color=alt.condition("datum['nothing skipped']", alt.value(TIER["hot"]), alt.value(TIER["data"]))
-                )
-                + _base.mark_text(align="left", dx=6).encode(text="label:N")
-            ).properties(width="container", height=150, title=f"{_file}: bytes the query must read")
-        )
-    _sorted, _mixed = _rows
     mo.vstack(
         [
             mo.md("### Does the Write Order of the Sales Matter?"),
-            mo.md(
-                "The 3,360 sales written to Parquet twice, 420 per row group: once sorted by date, once in random "
-                "order. Each file's footer determines which row groups the January query can skip."
+            in_plain(
+                f"Min-max statistics only help when similar values are stored together. The same {len(_df):,} sales "
+                "are written to Parquet twice, 420 per row group: sorted by date, and in random order. Both files "
+                "answer the same query:"
             ),
-            _strip_svg,
-            chart_or_table(mo.hstack([tier_chart(_c, "data") for _c in _charts], widths="equal", gap=2), _rows, label="Bytes the January query must read"),
+            mo.md(f"```sql\n{_query}\n```"),
+            _strip,
             mo.md(
-                f"**Observation:** sorted by date, reading only two columns reduces the query from "
-                f"**{format_bytes(_sorted[_steps[0]])}** to **{format_bytes(_sorted[_steps[1]])}**, and the footer reduces it to "
-                f"**{format_bytes(_sorted[_steps[2]])}**. Shuffled, the footer excludes **nothing** ({_mixed['row groups opened']} "
-                f"opened). Both files return CHF {_sorted['January revenue (CHF)']:,.2f}, and the shuffled file is also "
-                f"{_shuffled_size / _ordered_size - 1:.0%} larger: sorted values compress better."
+                f"**Observation:** both files return CHF {_sorted['revenue']:,.2f}. Sorted, the footer excludes "
+                f"{len(_sorted['groups']) - _sorted['read']} of {len(_sorted['groups'])} row groups, and the query "
+                f"reads {format_bytes(_sorted['bytes'])}. In random order, every row group spans all dates, nothing "
+                f"can be excluded, and the query reads {format_bytes(_random['bytes'])}, "
+                f"{_random['bytes'] / _sorted['bytes']:.0f}× as much. Sorting by a column that queries filter on "
+                "makes these queries cheaper."
             ),
         ],
         gap=0.6,
@@ -1936,55 +2006,50 @@ def _(Path, SALES_SEED, TIER, alt, chart_or_table, diagram, duckdb, format_bytes
 
 
 @app.cell
-def _(SALES_SEED, diagram, gzip, in_plain, mo, pd):
+def _(SALES_SEED, diagram, format_bytes, gzip, in_plain, mo, pd):
     _csv = pd.read_parquet(SALES_SEED).to_csv(index=False).encode()
     _gz = gzip.compress(_csv, 6)
     # A sketch of the timing model, not a measurement: segment lengths only show which step grows.
     _amber = ' style="fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.5"'
-    _kinds = {"read": ' class="dg-tier"', "decompress": _amber, "compute": ' class="dg-box"'}
+    _kinds = {"transfer": ' class="dg-tier"', "decompress": _amber, "compute": ' class="dg-box"'}
 
     def _bar(y, name, parts, verdict=""):
         x, out = 190, [f'<text x="0" y="{y + 25}">{name}</text>']
         for kind, w in parts:
             out.append(f'<rect{_kinds[kind]} x="{x}" y="{y}" width="{w}" height="38" rx="6"/>')
-            if w >= 70:
-                out.append(f'<text x="{x + w / 2:.0f}" y="{y + 25}" text-anchor="middle">{kind}</text>')
+            out.append(f'<text x="{x + w / 2:.0f}" y="{y + 25}" text-anchor="middle">{kind}</text>')
             x += w + 3
         return "".join(out) + verdict.format(x=x + 12, y=y + 25)
 
     _faster = '<text class="dg-ok" x="{x}" y="{y}">&#10003; faster</text>'
     _slower = '<text class="dg-hot" x="{x}" y="{y}">&#10007; slower</text>'
     _sketch = diagram(
-        '<text x="0" y="20" font-weight="700">Transferred over a network: moving the bytes dominates</text>'
-        + _bar(36, "plain CSV", [("read", 520), ("compute", 120)])
-        + _bar(82, "gzipped CSV", [("read", 190), ("decompress", 110), ("compute", 120)], _faster)
-        + '<text x="0" y="160" font-weight="700">Read by the dashboard from memory: decompression dominates</text>'
-        + _bar(176, "plain CSV", [("read", 40), ("compute", 120)])
-        + _bar(222, "gzipped CSV", [("read", 16), ("decompress", 110), ("compute", 120)], _slower),
+        '<text x="0" y="20" font-weight="700">Downloaded over a network: the transfer dominates</text>'
+        + _bar(36, "plain CSV", [("transfer", 540), ("compute", 110)])
+        + _bar(82, "gzipped CSV", [("transfer", 190), ("decompress", 120), ("compute", 110)], _faster)
+        + '<text x="0" y="160" font-weight="700">Already in memory: there is no transfer to shorten</text>'
+        + _bar(176, "plain CSV", [("compute", 110)])
+        + _bar(222, "gzipped CSV", [("decompress", 120), ("compute", 110)], _slower),
         width=1000,
         height=270,
-        label="A sketch: over a network, the gzipped file saves more read time than decompression adds, so the total "
-        "time decreases. In memory, there is little read time to save, and decompression makes it slower.",
+        label="A sketch: over a network, the gzipped file saves more transfer time than decompression adds, so the "
+        "total time decreases. In memory, there is no transfer to save, and decompression makes it slower.",
         tier="data",
     )
     mo.vstack(
         [
             mo.md("### The Compression Trade-off: Fewer Bytes, More Decompression"),
             in_plain(
-                "Compression encodes the same sales in fewer bytes by exploiting repetition. In return, every reader "
-                "must decompress the file before using it. Compression therefore pays off when moving bytes is slow, "
-                "as over a network, and costs time when the bytes are already in memory."
+                "Compression stores the same data in fewer bytes, and every reader must decompress it before using "
+                "it. Compression pays off when moving the bytes takes longer than decompressing them, and costs time "
+                "when the data is already in memory."
             ),
             _sketch,
             mo.md(
-                f"**Observation:** the sales as CSV take {len(_csv):,} bytes, gzipped {len(_gz):,} "
-                f"({len(_gz) / len(_csv):.0%}). Decompression costs the same in both scenarios; only the read time "
-                "shrinks, so compression pays off only when reading is slow. *A sketch, not a measurement: bar "
-                "lengths indicate which step grows.*"
-            ),
-            mo.md(
-                "**Formally:** total time ≈ read + decompress + compute. The compression ratio "
-                f"$r$ = compressed size / original size, here {len(_gz) / len(_csv):.2f}; the saving is $1 - r$."
+                "**Formally:** time ≈ transfer + decompress + compute. Compression shortens only the transfer, by "
+                f"the ratio $r$ = compressed size / original size: for the sales as CSV, {format_bytes(len(_gz))} / "
+                f"{format_bytes(len(_csv))} = {len(_gz) / len(_csv):.2f}. *The bar lengths are schematic; a later "
+                "experiment measures both cases.*"
             ),
         ],
         gap=0.6,
@@ -1993,71 +2058,71 @@ def _(SALES_SEED, diagram, gzip, in_plain, mo, pd):
 
 
 @app.cell
-def _(SALES_SEED, TIER, alt, chart_or_table, in_plain, io, mo, pd, tier_chart):
+def _(SALES_SEED, diagram, format_bytes, in_plain, io, mo, pd):
     _src = pd.read_parquet(SALES_SEED, columns=["sale_id", "total_price"])
     _truth = round(float(_src["total_price"].sum()), 2)
-    _rows = []
-    for _label, _digits, _codec in (
-        ("exact (lossless)", None, "snappy"),
-        ("exact + gzip (lossless)", None, "gzip"),
-        ("rounded to the franc (lossy)", 0, "gzip"),
-        ("rounded to 10 francs (lossy)", -1, "gzip"),
-        ("rounded to 100 francs (lossy)", -2, "gzip"),
-    ):
+    _variants = []
+    for _label, _digits in (("exact", None), ("rounded to 1 CHF", 0), ("rounded to 100 CHF", -2)):
         _stored = _src if _digits is None else _src.assign(total_price=_src["total_price"].round(_digits))
-        _blob = _stored.to_parquet(index=False, compression=_codec)  # no path: the file's bytes
-        _total = round(float(pd.read_parquet(io.BytesIO(_blob))["total_price"].sum()), 2)
-        _rows.append(
+        _blob = _stored.to_parquet(index=False, compression="gzip")  # no path: the file's bytes
+        _back = pd.read_parquet(io.BytesIO(_blob))["total_price"]
+        _variants.append(
             {
-                "how the prices are stored": _label,
+                "label": _label,
+                "first": float(_back.iloc[0]),
                 "bytes": len(_blob),
-                "reported total revenue": _total,
-                "deviation": round(_total - _truth, 2),
+                "deviation": round(float(_back.sum()) - _truth, 2),
+                "largest change": float((_back - _src["total_price"]).abs().max()),
             }
         )
-    _exact, _exact_gz, *_, _hundred = _rows
+    _exact, _franc, _hundred = _variants
 
-    _df = pd.DataFrame(_rows)
-    _df["verdict"] = [f"total deviates by CHF {_off:+,.2f}" if _off else "exact total" for _off in _df["deviation"]]
-    _base = alt.Chart(_df).encode(
-        y=alt.Y("how the prices are stored:N", sort=None, title=None, axis=alt.Axis(labelLimit=280)),
-        x=alt.X("bytes:Q", title="file size (bytes)", scale=alt.Scale(domain=[0, _df["bytes"].max() * 1.6])),
-        tooltip=list(_rows[0]),
-    )
-    _chart = (
-        _base.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum['deviation'] != 0", alt.value(TIER["hot"]), alt.value(TIER["data"]))
+    # One card per way of storing the prices: the first sale's price, the file size, what the total becomes.
+    _cards = []
+    for _i, _v in enumerate(_variants):
+        _x, _cx = _i * 350, _i * 350 + 160
+        _size = format_bytes(_v["bytes"]) + (f" ({_v['bytes'] / _exact['bytes'] - 1:+.0%})" if _i else "")
+        _total = f"total off by CHF {_v['deviation']:+,.2f}" if _v["deviation"] else "total revenue exact"
+        _cards.append(
+            f'<rect class="dg-box {"dg-hot" if _i else "dg-ok"}" x="{_x}" y="0" width="320" height="150" rx="12"/>'
+            f'<text x="{_cx}" y="32" text-anchor="middle" font-weight="700">{_v["label"]}</text>'
+            f'<text x="{_cx}" y="64" text-anchor="middle">sale #1: CHF {_v["first"]:,.2f}</text>'
+            f'<text class="dg-muted" x="{_cx}" y="94" text-anchor="middle">file: {_size}</text>'
+            f'<text class="{"dg-hot" if _v["deviation"] else "dg-ok"}" x="{_cx}" y="126" text-anchor="middle">{_total}</text>'
         )
-        + _base.mark_text(align="left", dx=6).encode(text="verdict:N")
-    ).properties(width="container", height=48 * len(_df), title="File size and deviation of the total")
-
+    _drawing = diagram(
+        "".join(_cards),
+        width=1020,
+        height=150,
+        label=f"The prices stored exactly: {format_bytes(_exact['bytes'])}, exact total. Rounded to 1 franc: "
+        f"{format_bytes(_franc['bytes'])}, total off by CHF {_franc['deviation']:+,.2f}. Rounded to 100 francs: "
+        f"{format_bytes(_hundred['bytes'])}, total off by CHF {_hundred['deviation']:+,.2f}.",
+        tier="data",
+    )
     mo.vstack(
         [
-            mo.md("### Lossless and Lossy Compression: Rounded Prices"),
+            mo.md("### Lossless and Lossy Compression"),
             mo.md(
                 """
     <div class="tiles tier-data">
       <div class="tile"><div class="tile-key">=</div><div class="tile-title">Lossless</div>
         <p>Decompression restores every bit: gzip, zstd, PNG, Parquet's encodings. Required for prices, identifiers and dates.</p></div>
       <div class="tile"><div class="tile-key">&asymp;</div><div class="tile-title">Lossy</div>
-        <p>Smaller, but only an approximation, and the original cannot be recovered: JPEG, MP3, rounding.</p></div>
+        <p>Smaller, but the original cannot be restored: JPEG, MP3, video. Acceptable where small deviations go unnoticed.</p></div>
     </div>
                 """
             ),
             in_plain(
-                "Rounding is a lossy transformation of numbers: fewer distinct values give compression more "
-                "repetition, so the file shrinks. Below, the 3,360 EdgeWorks prices are stored exactly and rounded."
+                "Lossy methods usually round values first (quantisation) and then compress losslessly: fewer distinct "
+                f"values give more repetition. Below, the {len(_src):,} EdgeWorks prices are stored as Parquet with "
+                "gzip, once exactly and twice rounded."
             ),
-            chart_or_table(tier_chart(_chart, "data"), _rows, label=f"Same {len(_src):,} prices, stored five ways"),
+            _drawing,
             mo.md(
-                f"**Observation:** the true revenue is CHF {_truth:,.2f}. Rounded to 100 francs, the file is "
-                f"{1 - _hundred['bytes'] / _exact_gz['bytes']:.0%} smaller than the exact gzipped one, and the total "
-                f"deviates by CHF {_hundred['deviation']:+,.2f}."
+                f"**Observation:** rounded to 100 francs, the file is {1 - _hundred['bytes'] / _exact['bytes']:.0%} "
+                f"smaller, but each price changes by up to CHF {_hundred['largest change']:,.2f}, and the exact prices "
+                "cannot be recovered. For prices, identifiers and dates, only lossless compression is acceptable."
             ),
-            mo.md(
-                "**The same technique has different consequences.** Whether an approximation is acceptable depends "
-                "on the data: for a photo it usually is; for monetary amounts, identifiers or dates it is not."
-            ).callout(kind="danger"),
         ],
         gap=0.6,
     )
@@ -2123,24 +2188,23 @@ def _(box, diagram, in_plain, math, mo, shop_sales):
 
 @app.cell
 def _(mo):
-    compress_rows = mo.ui.slider(steps=[500, 1_000, 2_000, 3_360], value=3_360, label="Sales in the file", show_value=True, debounce=True)
     ch4_columns = mo.ui.radio(
         options=["the whole sale (7 fields)", "prices only", "category only"],
         value="the whole sale (7 fields)",
         label="Stored columns:",
         inline=True,
     )
-    return ch4_columns, compress_rows
+    return (ch4_columns,)
 
 
 @app.cell
-def _(TIER, alt, ch4_columns, chart_or_table, compress_rows, csv, gzip, io, json, mo, pa, pd, pq, shop_sales, tier_chart):
+def _(TIER, alt, ch4_columns, csv, format_bytes, gzip, io, json, mo, pa, pd, pq, shop_sales, tier_chart):
     _fields = {
         "the whole sale (7 fields)": ["sale_id", "sale_date", "product", "country", "units_sold", "total_price", "customer_rating"],
         "prices only": ["total_price"],
         "category only": ["category"],
     }[ch4_columns.value]
-    _sales = shop_sales.head(compress_rows.value)[_fields]
+    _sales = shop_sales[_fields]
     if "sale_date" in _fields:  # a date as a partner's file writes it
         _sales = _sales.assign(sale_date=_sales["sale_date"].dt.strftime("%Y-%m-%d"))
     _records = _sales.to_dict("records")
@@ -2149,56 +2213,53 @@ def _(TIER, alt, ch4_columns, chart_or_table, compress_rows, csv, gzip, io, json
     _writer.writeheader()
     _writer.writerows(_records)
 
-    # Sizes measured in memory: the bytes a file would hold, without writing one.
+    # Sizes measured in memory: the bytes a file would hold, without writing one. gzip at level 6, its usual default.
     _texts = {"JSON": json.dumps(_records).encode(), "CSV": _csv.getvalue().encode()}
     _sizes = {_name: len(_blob) for _name, _blob in _texts.items()}
-    # Level 1 is fastest, 9 squeezes hardest (Python's default), 6 is the gzip tool's default.
-    _sizes |= {f"{_name}+gzip (level {_lvl})": len(gzip.compress(_blob, _lvl)) for _name, _blob in _texts.items() for _lvl in (1, 6, 9)}
+    _sizes |= {f"{_name} + gzip": len(gzip.compress(_blob, 6)) for _name, _blob in _texts.items()}
     _table = pa.Table.from_pylist(_records)
-    for _codec in ("snappy", "gzip", "zstd", "brotli"):
+    for _codec, _name in (("snappy", "Parquet (snappy, the default)"), ("zstd", "Parquet (zstd)")):
         _buf = io.BytesIO()
         pq.write_table(_table, _buf, compression=_codec)
-        _sizes[f"Parquet ({_codec})"] = len(_buf.getvalue())
+        _sizes[_name] = len(_buf.getvalue())
 
-    _smallest = min(_sizes.values())
-    _best = " and ".join(_name for _name, _size in _sizes.items() if _size == _smallest)  # ties happen: gzip 6 and 9
-    _rows = [{"format": _name, "size (bytes)": _size, "ratio vs JSON": round(_size / _sizes["JSON"], 4)} for _name, _size in _sizes.items()]
-    _df = pd.DataFrame(_rows)
-    _df["smallest"] = _df["size (bytes)"] == _smallest
-    _df["label"] = [f"{_r:.1%} of JSON" for _r in _df["ratio vs JSON"]]
+    _best = min(_sizes, key=_sizes.get)
+    _compressed = [_size for _name, _size in _sizes.items() if _name not in ("JSON", "CSV")]
+    _df = pd.DataFrame({"format": list(_sizes), "bytes": list(_sizes.values())})
+    _df["label"] = [format_bytes(_b) for _b in _df["bytes"]]
+    _df["smallest"] = _df["format"] == _best
     _base = alt.Chart(_df).encode(
-        y=alt.Y("format:N", sort=None, title=None),
-        x=alt.X("size (bytes):Q", title="bytes", scale=alt.Scale(domain=[0, _df["size (bytes)"].max() * 1.25])),
-        tooltip=list(_rows[0]),
+        y=alt.Y("format:N", sort=None, title=None, axis=alt.Axis(labelLimit=320)),
+        x=alt.X("bytes:Q", title=None, axis=None, scale=alt.Scale(domain=[0, _df["bytes"].max() * 1.25])),
+        tooltip=["format:N", "bytes:Q"],
     )
     _chart = (
         _base.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.smallest", alt.value(TIER["data"]), alt.value(TIER["muted"])))
         + _base.mark_text(align="left", dx=6).encode(text="label:N")
-    ).properties(width="container", height=26 * len(_df), title=f"The first {len(_sales):,} sales in twelve encodings")
+    ).properties(width="container", height=40 * len(_df), title=f"{len(_sales):,} sales, {ch4_columns.value}")
 
     _distinct = _sales[_fields[0]].nunique()  # used for the one-column choices
     _reason = {
-        "the whole sale (7 fields)": "Parquet stores each field separately, so the fields with few distinct values (product, "
-        "country, rating) are encoded individually, while gzip processes all seven interleaved.",
-        "prices only": f"{_distinct:,} distinct prices in {len(_sales):,} sales: little repetition. Parquet stores each "
-        "as an 8-byte number; gzipped text stores only the digits written.",
-        "category only": f"{_distinct} distinct values, repeated: every compressed format reduces it to a small fraction "
-        "of the CSV. The remainder is mostly fixed overhead, such as Parquet's footer.",
+        "the whole sale (7 fields)": "Compression matters more than the format: every compressed variant needs "
+        f"{format_bytes(min(_compressed))} to {format_bytes(max(_compressed))}, the JSON {format_bytes(_sizes['JSON'])}.",
+        "prices only": f"{_distinct:,} distinct prices repeat little. Parquet stores each as an 8-byte number; the "
+        "CSV holds only the digits written, which gzip compresses well.",
+        "category only": f"{_distinct} distinct values, repeated {len(_sales):,} times: every compressed variant "
+        "reduces the column to almost nothing; what remains is mostly fixed overhead, such as Parquet's footer.",
     }[ch4_columns.value]
     mo.vstack(
         [
             mo.md("### Which Format Is Smallest for the Sales Data?"),
             mo.md(
-                "**Question:** JSON, CSV, gzip or Parquet? Does the answer change when only the prices, or only the "
-                "category, are stored?"
+                "**Question:** JSON, CSV or Parquet, with or without compression? Does the answer depend on the "
+                "stored columns?"
             ),
-            mo.hstack([ch4_columns, compress_rows], justify="start", align="center", gap=3),
-            chart_or_table(tier_chart(_chart, "data"), _rows, label="Sizes (baseline: JSON)"),
+            ch4_columns,
+            tier_chart(_chart, "data"),
             mo.md(
-                f"**Observation:** the smallest variant here is **{_best}**, at {_smallest / _sizes['JSON']:.1%} of the "
-                f"JSON and {_smallest / _sizes['CSV']:.0%} of the CSV. {_reason}"
+                f"**Observation:** the smallest variant is **{_best}**, {format_bytes(_sizes[_best])}, "
+                f"{_sizes[_best] / _sizes['JSON']:.1%} of the JSON. {_reason}"
             ),
-
         ],
         gap=0.6,
     )
@@ -2212,15 +2273,18 @@ def _(mo):
 
 
 @app.cell
-def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, io, mo, pd, run_ctime, tier_chart):
+def _(SALES_SEED, TIER, alt, best_seconds, format_bytes, gzip, io, mo, pd, run_ctime, tier_chart):
     _raw = pd.read_parquet(SALES_SEED).to_csv(index=False).encode("utf-8")
+    _gz = gzip.compress(_raw, 6)
+    _mbit = 50  # a typical home connection, as on the slide "Aggregate where the data is"
     _top = mo.vstack(
         [
             mo.md("### Is the Gzipped Sales File Faster to Query?"),
             mo.md(
-                f"The sales as CSV ({format_bytes(len(_raw))}), already in memory: decompress if gzipped, parse, sum the "
-                "prices. Four variants: uncompressed, and gzip at level 1 (fastest), 6 (default of the gzip tool) and 9 "
-                "(smallest, Python's default). Best of 5 bursts."
+                f"Total revenue is computed from the sales as CSV ({format_bytes(len(_raw))}) or gzipped "
+                f"({format_bytes(len(_gz))}), in two situations: the file is already in memory, or it is first "
+                f"downloaded at {_mbit} Mbit/s. Decompressing and parsing are measured on this computer; the download "
+                "time follows from the file size."
             ),
             run_ctime,
         ],
@@ -2232,7 +2296,8 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, i
             [
                 _top,
                 mo.md(
-                    "**Question:** the gzipped file is much smaller. Is the total computed faster or slower on it?"
+                    "**Question:** the gzipped file is about a third of the size. Is total revenue computed faster "
+                    "or slower from it?"
                 ).callout(kind="neutral"),
             ],
             gap=0.6,
@@ -2243,63 +2308,58 @@ def _(SALES_SEED, TIER, alt, best_seconds, chart_or_table, format_bytes, gzip, i
         """Milliseconds per call, fastest of 5 bursts. A burst averages out sub-millisecond noise."""
         return best_seconds(_fn, repeat=5, number=_calls) * 1000
 
-    def _answer(_csv_bytes):
-        return pd.read_csv(io.BytesIO(_csv_bytes))["total_price"].sum()
-
-    _plain = _ms(lambda: _answer(_raw))
-    _rows = [{"variant": "plain CSV", "bytes": len(_raw), "read + parse + sum (ms)": round(_plain, 2), "vs plain": "1.00x", "compress (ms)": "-", "decompress (ms)": "-"}]
-    for _level in (1, 6, 9):
-        _blob = gzip.compress(_raw, _level)
-        _read = _ms(lambda _b=_blob: _answer(gzip.decompress(_b)))
-        _rows.append(
-            {
-                "variant": f"gzip level {_level}",
-                "bytes": len(_blob),
-                "read + parse + sum (ms)": round(_read, 2),
-                "vs plain": f"{_read / _plain:.2f}x",
-                "compress (ms)": round(_ms(lambda _lv=_level: gzip.compress(_raw, _lv), 2), 2),
-                "decompress (ms)": round(_ms(lambda _b=_blob: gzip.decompress(_b)), 2),
-            }
-        )
-    _plain_row, _l1, _l6, _l9 = _rows
-    if min(_row["read + parse + sum (ms)"] for _row in (_l1, _l6, _l9)) > _plain_row["read + parse + sum (ms)"]:
-        _verdict = (
-            f"**no speed-up in this setting.** The gzipped file is {_l6['bytes'] / len(_raw):.0%} of the size and still "
-            "takes *longer* to answer the same query."
-        )
-    else:
-        _verdict = "**no measurable difference in this setting:** decompression costs about as much as the smaller file saves."
-
-    _df = pd.DataFrame(_rows)
-    _df["slower"] = _df["read + parse + sum (ms)"] > _plain_row["read + parse + sum (ms)"]
-    _query = alt.Chart(_df).encode(
-        y=alt.Y("variant:N", sort=None, title=None),
-        x=alt.X("read + parse + sum (ms):Q", title="ms", scale=alt.Scale(domain=[0, _df["read + parse + sum (ms)"].max() * 1.3])),
-        tooltip=["variant:N", "bytes:Q", "read + parse + sum (ms):Q", "vs plain:N"],
+    # Decompressed, the gzipped file holds the same bytes, so both variants parse the same text.
+    _parse = _ms(lambda: pd.read_csv(io.BytesIO(_raw))["total_price"].sum())
+    _decompress = _ms(lambda: gzip.decompress(_gz))
+    _steps = []
+    for _where in ("in memory", f"at {_mbit} Mbit/s"):
+        for _file, _size in (("plain CSV", len(_raw)), ("gzipped CSV", len(_gz))):
+            _variant = f"{_file}, {_where}"
+            if _where != "in memory":
+                _steps.append({"variant": _variant, "step": "download", "ms": _size * 8 / (_mbit * 1e6) * 1000})
+            if _file == "gzipped CSV":
+                _steps.append({"variant": _variant, "step": "decompress", "ms": _decompress})
+            _steps.append({"variant": _variant, "step": "parse + sum", "ms": _parse})
+    _df = pd.DataFrame(_steps)
+    _df["order"] = _df["step"].map({"download": 0, "decompress": 1, "parse + sum": 2})
+    _totals = _df.groupby("variant", sort=False)["ms"].sum()
+    _mem_plain, _mem_gz, _net_plain, _net_gz = _totals.tolist()
+    _ends = pd.DataFrame(
+        {
+            "variant": _totals.index,
+            "ms": _totals.values,
+            "label": [
+                f"{_mem_plain:.1f} ms",
+                f"{_mem_gz:.1f} ms ({_mem_gz / _mem_plain - 1:+.0%})",
+                f"{_net_plain:.1f} ms",
+                f"{_net_gz:.1f} ms ({_net_gz / _net_plain - 1:+.0%})",
+            ],
+        }
     )
-    _answer_chart = (
-        _query.mark_bar(cornerRadiusEnd=4).encode(color=alt.condition("datum.slower", alt.value(TIER["hot"]), alt.value(TIER["data"])))
-        + _query.mark_text(align="left", dx=6).encode(text="vs plain:N")
-        + alt.Chart(pd.DataFrame({"ms": [_plain]})).mark_rule(strokeDash=[6, 4], strokeWidth=2, color=TIER["muted"]).encode(x="ms:Q")
-    ).properties(width="container", height=200, title="Time to answer total revenue (vs plain CSV)")
-    _levels = pd.DataFrame(_rows[1:])
-    _write = alt.Chart(_levels).encode(
-        y=alt.Y("variant:N", sort=None, title=None),
-        x=alt.X("compress (ms):Q", title="ms", scale=alt.Scale(domain=[0, _levels["compress (ms)"].max() * 1.3])),
-        tooltip=["variant:N", "bytes:Q", "compress (ms):Q", "decompress (ms):Q"],
+    _y = alt.Y("variant:N", sort=None, title=None, axis=alt.Axis(labelLimit=320))
+    _bars = alt.Chart(_df).mark_bar().encode(
+        y=_y,
+        x=alt.X("ms:Q", stack="zero", title="ms", scale=alt.Scale(domain=[0, _totals.max() * 1.3])),
+        color=alt.Color(
+            "step:N",
+            title=None,
+            scale=alt.Scale(domain=["download", "decompress", "parse + sum"], range=[TIER["data"], TIER["amber"], TIER["muted"]]),
+        ),
+        order=alt.Order("order:Q"),
+        tooltip=["variant:N", "step:N", alt.Tooltip("ms:Q", format=".2f")],
     )
-    _write_chart = (
-        _write.mark_bar(cornerRadiusEnd=4, color=TIER["muted"]) + _write.mark_text(align="left", dx=6).encode(text=alt.Text("compress (ms):Q", format=".1f"))
-    ).properties(width="container", height=150, title="Compress once (ms)")
-
+    _chart = (_bars + alt.Chart(_ends).mark_text(align="left", dx=6).encode(y=_y, x="ms:Q", text="label:N")).properties(
+        width="container", height=200, title="Time to compute total revenue"
+    )
     mo.vstack(
         [
             _top,
-            chart_or_table(mo.hstack([tier_chart(_answer_chart, "data"), tier_chart(_write_chart, "data")], widths=[3, 2], gap=2), _rows, label="Same query, four variants"),
+            tier_chart(_chart, "data"),
             mo.md(
-                f"**Observation:** {_verdict} Decompression costs about the same at every level: **the compression level "
-                "affects the cost of writing, not of reading.** In memory there is no I/O to save; over a network, "
-                "the trade-off reverses."
+                f"**Observation:** in memory, the gzipped file is slower ({_mem_gz:.1f} vs {_mem_plain:.1f} ms): "
+                f"decompressing takes {_decompress:.1f} ms, and there is no download to shorten. Downloaded first, it "
+                f"is faster ({_net_gz:.1f} vs {_net_plain:.1f} ms): the download shrinks by more than decompressing "
+                "costs. Compression pays off when moving the bytes is the slowest step."
             ).callout(kind="warn"),
         ],
         gap=0.6,
@@ -2651,21 +2711,110 @@ def _(
 
 
 @app.cell
-def _(
-    Path,
-    SALES_SEED,
-    card_box,
-    diagram,
-    duckdb,
-    html,
-    in_plain,
-    mo,
-    pd,
-    random,
-    re,
-    static_table,
-    tempfile,
-):
+def _(mo):
+    p2_partition_filter = mo.ui.dropdown(
+        options={
+            "January 2026": "year = 2026 AND month = 1",
+            "the whole of 2025": "year = 2025",
+            "one product, all time": "product_id = 2",
+        },
+        value="January 2026",
+        label="Filter",
+    )
+    return (p2_partition_filter,)
+
+
+@app.cell
+def _(Path, SALES_SEED, diagram, duckdb, format_bytes, in_plain, mo, p2_partition_filter, re, tempfile):
+    _where = p2_partition_filter.value
+    _sql = (
+        "SELECT round(sum(total_price), 2) AS revenue, count(*) AS sales\n"
+        "FROM read_parquet('sales/*/*/*.parquet', hive_partitioning = true)\n"
+        f"WHERE {_where}"
+    )
+    with tempfile.TemporaryDirectory() as _td:
+        _root = Path(_td) / "sales"
+        with duckdb.connect() as _con:
+            # one folder per year and month, as data lakes store large tables
+            _con.execute(
+                "COPY (SELECT *, year(sale_date) AS year, month(sale_date) AS month "
+                f"FROM read_parquet('{SALES_SEED.as_posix()}')) "
+                f"TO '{_root.as_posix()}' (FORMAT parquet, PARTITION_BY (year, month))"
+            )
+            _run = _sql.replace("'sales/", f"'{_root.as_posix()}/")
+            _revenue, _count = _con.execute(_run).fetchone()
+            _plan = "\n".join(_row[-1] for _row in _con.execute(f"EXPLAIN ANALYZE {_run}").fetchall())
+            _keys = {
+                (int(re.search(r"year=(\d+)", _f.as_posix())[1]), int(re.search(r"month=(\d+)", _f.as_posix())[1])): _f.stat().st_size
+                for _f in _root.rglob("*.parquet")
+            }
+            # the folders the filter selects, decided on the folder names alone; a filter on other columns selects none
+            try:
+                _values = ", ".join(f"({_y}, {_m})" for _y, _m in _keys)
+                _picked = set(_con.execute(f"SELECT year, month FROM (VALUES {_values}) AS t(year, month) WHERE {_where}").fetchall())
+            except duckdb.Error:
+                _picked = set(_keys)
+    _files_read = int(re.search(r"Total Files Read:\s*(\d+)", _plan)[1])  # as DuckDB reports it
+    _bytes_read = sum(_size for _key, _size in _keys.items() if _key in _picked)
+
+    _parts = [
+        f'<text class="dg-muted" x="{150 + _m * 76:.0f}" y="18" text-anchor="middle">{_name}</text>'
+        for _m, _name in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+    ]
+    for _r, _year in enumerate(sorted({_y for _y, _ in _keys})):
+        _y0 = 30 + _r * 56
+        _parts.append(f'<text x="0" y="{_y0 + 28}" font-family="monospace" font-size="16">year={_year}/</text>')
+        for _m in range(1, 13):
+            if (_year, _m) in _keys:
+                _lit = (_year, _m) in _picked
+                _parts.append(
+                    f'<rect class="{"dg-tier" if _lit else "dg-box"}" x="{116 + (_m - 1) * 76}" y="{_y0}" width="68" height="44"'
+                    f' rx="8" opacity="{1 if _lit else 0.45}"/>'
+                    f'<text x="{150 + (_m - 1) * 76}" y="{_y0 + 28}" text-anchor="middle" font-size="15">month={_m}</text>'
+                )
+    _folders = diagram(
+        "".join(_parts),
+        width=1030,
+        height=30 + 56 * len({_y for _y, _ in _keys}),
+        label=f"The sales stored in {len(_keys)} folders, one per year and month. The filter {_where} reads "
+        f"{_files_read} of them.",
+        tier="data",
+    )
+    _pruned = _files_read < len(_keys)
+    mo.vstack(
+        [
+            mo.md("### Partitioned datasets: one folder per month"),
+            in_plain(
+                "Large tables are stored as many files in folders named after a column's values, for example "
+                "`sales/year=2026/month=1/`. A query that filters on these columns reads only the matching folders "
+                "(**partition pruning**); inside each file, Parquet's min-max statistics still apply."
+            ),
+            mo.hstack([p2_partition_filter, mo.md(f"```sql\n{_sql}\n```")], widths=[1, 3], gap=2, align="center"),
+            _folders,
+            mo.hstack(
+                [
+                    mo.stat(f"{_files_read} of {len(_keys)}", label="files read", bordered=True),
+                    mo.stat(format_bytes(_bytes_read if _pruned else sum(_keys.values())), label="bytes in the files read",
+                            caption=f"of {format_bytes(sum(_keys.values()))}", bordered=True),
+                    mo.stat(f"CHF {_revenue:,.0f}", label="revenue", caption=f"{_count:,} sales", bordered=True),
+                ],
+                widths="equal",
+            ),
+            mo.md(
+                f"**Observation:** the filter on the partition columns reads {_files_read} of {len(_keys)} files; DuckDB "
+                "skips the other folders without opening them."
+                if _pruned
+                else "**Observation:** `product_id` is not a partition column, so every folder has to be opened. "
+                "Partitioning pays off for the columns that most queries filter on, typically a date."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, random, re, tempfile):
     _src = pd.read_parquet(SALES_SEED).head(400)
     _export = _src[["sale_id", "sale_date", "product_id", "units_sold", "total_price"]].astype({"total_price": str})
     _bad_rows = random.Random(5).sample(range(len(_export)), 20)
@@ -2676,7 +2825,7 @@ def _(
         _export.to_csv(_csv, index=False)
         _con = duckdb.connect()
 
-        # Lane 1: let DuckDB infer the types, then do what a student would do next.
+        # Lane 1: let DuckDB infer the types, then convert the prices to numbers wherever possible.
         _inferred = dict(_row[:2] for _row in _con.execute("DESCRIBE FROM read_csv(?)", [_csv]).fetchall())["total_price"]
         _rows, _parsed, _revenue = _con.execute(
             "SELECT count(*), count(TRY_CAST(total_price AS DOUBLE)), "
@@ -2698,17 +2847,18 @@ def _(
         )
         try:
             _con.execute("INSERT INTO sales_clean FROM read_csv(?)", [_csv])
-            _told, _refused = "loaded without error", ("loaded", "no error")
+            _refused = ("loaded", "no error")
         except duckdb.Error as _exc:
             _lines = str(_exc).splitlines()
-            _told = f"{type(_exc).__name__}: {_lines[0]}. {_lines[2]}"
+            _told = f"{_lines[0]}. {_lines[2]}"
             _line = re.search(r"Line: (\d+)", _told)
             _value = re.search(r'string "([^"]*)"', _told)
             _refused = (
-                "INSERT rejected",
+                "load rejected",
                 f'line {_line[1]}: "{_value[1]}"' if _line and _value else type(_exc).__name__,
             )
         _loaded = _con.execute("SELECT count(*) FROM sales_clean").fetchone()[0]
+        _con.close()
 
     _true = _src["total_price"].sum()
     _low = 1 - _revenue / _true
@@ -2719,56 +2869,42 @@ def _(
         f'<text class="dg-hot" x="95" y="180" text-anchor="middle">{len(_bad_rows)} invalid prices</text>'
         '<path class="dg-edge" d="M190 120 C 215 120, 215 76, 234 76"/>'
         '<path class="dg-edge" d="M190 180 C 215 180, 215 226, 234 226"/>'
-        '<text x="240" y="24" font-weight="700">schema-on-read: <tspan class="dg-muted" font-weight="400">infer the type; errors surface late, if at all</tspan></text>'
-        + card_box(240, 40, "DuckDB infers", f"total_price: {html.escape(_inferred)}")
-        + card_box(505, 40, "TRY_CAST to DOUBLE", f"{_parsed:,} of {_rows:,} rows remain")
-        + card_box(770, 40, f"revenue {_revenue:,.0f}", f"{_low:.1%} too low · no warning", cls="dg-box dg-hot")
-        + '<text x="240" y="174" font-weight="700">schema-on-write: <tspan class="dg-muted" font-weight="400">declare the schema, reject at load time</tspan></text>'
-        + card_box(240, 190, "declared first", "DOUBLE NOT NULL CHECK (&gt; 0)")
-        + card_box(505, 190, _refused[0], html.escape(_refused[1]), cls="dg-box dg-ok")
-        + card_box(770, 190, f"{_loaded:,} rows loaded", "the error is reported", cls="dg-box dg-ok")
-        + '<path class="dg-edge" d="M475 76 H 499"/><path class="dg-edge" d="M740 76 H 764"/>'
-        + '<path class="dg-edge" d="M475 226 H 499"/><path class="dg-edge" d="M740 226 H 764"/>',
-        width=1010,
+        '<text x="240" y="24" font-weight="700">schema-on-read: <tspan class="dg-muted" font-weight="400">the types are inferred while reading</tspan></text>'
+        + card_box(240, 40, "infer the types", f"price read as text ({html.escape(_inferred)})", w=250)
+        + card_box(520, 40, "convert to numbers", f"{_rows - _parsed} prices become NULL", w=250)
+        + card_box(800, 40, f"revenue {_revenue:,.0f}", f"{_low:.1%} too low, no warning", cls="dg-box dg-hot", w=250)
+        + '<text x="240" y="174" font-weight="700">schema-on-write: <tspan class="dg-muted" font-weight="400">the types are declared before loading</tspan></text>'
+        + card_box(240, 190, "declare the types", "price: a number &gt; 0, required", w=250)
+        + card_box(520, 190, _refused[0], html.escape(_refused[1]), cls="dg-box dg-ok", w=250)
+        + card_box(800, 190, f"{_loaded:,} rows loaded", "the error is reported", cls="dg-box dg-ok", w=250)
+        + '<path class="dg-edge" d="M490 76 H 514"/><path class="dg-edge" d="M770 76 H 794"/>'
+        + '<path class="dg-edge" d="M490 226 H 514"/><path class="dg-edge" d="M770 226 H 794"/>',
+        width=1050,
         height=270,
-        label=f"One faulty CSV, two approaches. Schema-on-read infers {_inferred}, keeps {_parsed} of {_rows} rows and reports "
-        f"a revenue {_low:.1%} too low without a warning. Schema-on-write rejects the load and names the faulty line.",
+        label=f"One faulty CSV, two approaches. Schema-on-read reads the prices as {_inferred}, converts {_parsed} of "
+        f"{_rows} and reports a revenue {_low:.1%} too low without a warning. Schema-on-write rejects the load and "
+        "names the faulty line.",
         tier="data",
-    )
-    _read, _write = "schema-on-read (infer the types)", "schema-on-write (declare, then load)"
-    _table = static_table(
-        {
-            "": ["type of total_price", "rows in the file", "rows included in the result", "reported error", "revenue reported"],
-            _read: [_inferred, f"{_rows:,}", f"{_parsed:,}", "none", f"{_revenue:,.2f} (true total: {_true:,.2f})"],
-            _write: ["DOUBLE NOT NULL CHECK (> 0)", f"{_rows:,}", f"{_loaded:,}", _told, "none: the load was aborted"],
-        },
-        label="One faulty export, two approaches",
-        wrapped_columns=[_read, _write],
-        column_widths={_read: 400, _write: 440},
     )
     mo.vstack(
         [
             mo.md("### Schema-on-read or schema-on-write: when are invalid prices detected?"),
             in_plain(
-                "A **schema** defines each column's name and type (`total_price` is a number). A CSV file has none. "
-                "**Schema-on-read** infers the types while reading; **schema-on-write** declares the schema first and "
-                "loads only conforming rows. The two approaches differ in when an invalid value is detected, and who "
-                "is notified."
+                "A **schema** fixes the name and type of every column; a CSV file carries none. **Schema-on-read** "
+                "infers the types when the data is read. **Schema-on-write** declares them first and rejects rows "
+                "that do not conform. The two differ in when an invalid value is noticed."
             ),
             mo.md(
-                f"The file: {_rows:,} sales, {len(_bad_rows)} of them with deliberately corrupted prices, as they occur "
-                "in practice (`n/a`, empty, `1 234,50`, `EUR 900`)."
+                f"The file: {_rows:,} sales, {len(_bad_rows)} of them with invalid prices as they occur in practice "
+                "(`n/a`, empty, `1 234,50`, `EUR 900`)."
             ),
-            mo.ui.tabs({"Diagram": _lanes, "Table": _table}),
+            _lanes,
             mo.md(
-                f"**Observation:** the same file, the same {len(_bad_rows)} invalid values. Schema-on-read produced an "
-                "incorrect result that appears plausible. Schema-on-write produced no result but an explicit error, "
-                "which is preferable to a result that is trusted by mistake."
+                "**Observation:** schema-on-read returns a plausible but wrong total, without a warning: the "
+                f"{_rows - _parsed} invalid prices became `NULL`, which `SUM` ignores. Schema-on-write returns no "
+                "total, but an error that names the faulty line. Schema-on-read suits exploration; schema-on-write "
+                "suits data on which decisions are based."
             ).callout(kind="warn"),
-            mo.md(
-                f"`TRY_CAST` turned the {_rows - _parsed} unparseable prices into `NULL`, which `SUM` ignores. "
-                "Schema-on-read suits exploration; schema-on-write suits data on which decisions are based."
-            ),
         ],
         gap=0.6,
     )
@@ -2776,7 +2912,7 @@ def _(
 
 
 @app.cell
-def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, static_table, tempfile):
+def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, tempfile):
     _all = pd.read_parquet(SALES_SEED)
     with tempfile.TemporaryDirectory() as _td:
         _dir = Path(_td).as_posix()
@@ -2788,41 +2924,31 @@ def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, stati
         _sizes = _all.groupby(_all["sale_date"].dt.year).size()
         _con = duckdb.connect()
 
-        def _read(sql, params):
-            """What one reading of the folder gives back: (dg class, outcome, the same in words for the table)."""
+        def _read(sql):
+            """What one reading of the folder gives back: (dg class, outcome)."""
             try:
-                _df = _con.execute(sql, params).df()
+                _df = _con.execute(sql, [f"{_dir}/sales_*.parquet"]).df()
             except duckdb.Error as _exc:
-                _text = f"{type(_exc).__name__}: {str(_exc).splitlines()[0].replace(_dir + '/', '')}"
-                return "dg-box", f"rejected: {type(_exc).__name__}", _text
+                return "dg-box dg-hot", f"rejected: {type(_exc).__name__}"
             if "customer_rating" not in _df:
-                _text = f"{len(_df):,} rows, {_df.shape[1]} columns, no customer_rating, no error"
-                return "dg-box dg-hot", f"{len(_df):,} rows, customer_rating missing", _text
-            _rated = _df["customer_rating"]
-            _text = f"{len(_df):,} rows, rating on {_rated.count():,}, average {_rated.mean():.3f}"
-            return "dg-box dg-ok", f"{len(_df):,} rows, {_rated.count():,} rated, average {_rated.mean():.2f}", _text
+                return "dg-box dg-hot", f"{len(_df):,} rows, customer_rating missing"
+            return "dg-box dg-ok", f"{len(_df):,} rows, {_df['customer_rating'].count():,} with a rating"
 
-        _glob = f"{_dir}/sales_*.parquet"
         _readings = [
             (
                 "read_parquet('sales_*.parquet')",
-                "the glob reads in name order: 2024 first",
-                _read("FROM read_parquet(?)", [_glob]),
-                "the first file sets the schema: the new column is dropped",
+                "default: the first file defines the columns",
+                _read("FROM read_parquet(?)"),
+                "2024 comes first: the new column is dropped",
             ),
             (
-                "the same files, newest first",
-                "2026 first: it has the column",
-                _read("FROM read_parquet(?)", [list(_files.values())[::-1]]),
-                "the first file has the column and a later one does not",
-            ),
-            (
-                "read_parquet(..., union_by_name = true)",
-                "match columns by name",
-                _read("FROM read_parquet(?, union_by_name = true)", [_glob]),
-                "missing columns are filled with NULL",
+                "read_parquet('sales_*.parquet', union_by_name = true)",
+                "the columns of all files, matched by name",
+                _read("FROM read_parquet(?, union_by_name = true)"),
+                "the 2024 sales get NULL as their rating",
             ),
         ]
+        _con.close()
 
     _files_row = "".join(
         card_box(
@@ -2838,40 +2964,32 @@ def _(Path, SALES_SEED, card_box, diagram, duckdb, html, in_plain, mo, pd, stati
     _reading_rows = "".join(
         f'<text x="0" y="{_y + 30}" style="font-family: var(--monospace-font, monospace); font-size: 15px">{html.escape(_how)}</text>'
         f'<text class="dg-muted" x="0" y="{_y + 54}">{_hint}</text>'
-        f'<path class="dg-edge" d="M440 {_y + 36} H 494"/>'
-        + card_box(500, _y, html.escape(_outcome), _why, cls=_cls, w=510)
-        for _y, (_how, _hint, (_cls, _outcome, _text), _why) in zip((120, 210, 300), _readings, strict=True)
+        f'<path class="dg-edge" d="M500 {_y + 36} H 534"/>'
+        + card_box(540, _y, html.escape(_outcome), _why, cls=_cls, w=470)
+        for _y, (_how, _hint, (_cls, _outcome), _why) in zip((120, 210), _readings, strict=True)
     )
     _picture = diagram(
         _files_row + _reading_rows,
         width=1010,
-        height=380,
-        label="Three yearly files, only the newer two with customer_rating, read three ways: the glob silently drops "
-        "the column, newest first is rejected, union_by_name keeps every row and fills the gap with NULL.",
+        height=290,
+        label="Three yearly files, only the newer two with customer_rating. Read with the defaults, the column is "
+        "silently dropped; read with union_by_name, every row is kept and the 2024 sales get NULL.",
         tier="data",
-    )
-    _table = static_table(
-        [
-            {"how the folder is read": _how, "what happens": _text, "why": _why}
-            for _how, _hint, (_cls, _outcome, _text), _why in _readings
-        ],
-        label="One folder, two schemas, three ways of reading it",
-        wrapped_columns=["how the folder is read", "what happens", "why"],
-        column_widths={"how the folder is read": 250, "what happens": 480, "why": 330},
     )
     mo.vstack(
         [
             mo.md("### Schema drift across files: a column added in 2025"),
             in_plain(
-                "EdgeWorks keeps one sales file per year. Suppose the schema gained a field in 2025: the customer "
-                "rating. Then `sales_2024.parquet` has no `customer_rating` column, while the 2025 and 2026 files do. "
-                "(For this demonstration, the column is removed from the 2024 sales.) The folder, read in three ways:"
+                "EdgeWorks keeps one sales file per year. Suppose `customer_rating` was added to the schema in 2025: "
+                "the 2024 file lacks the column, the 2025 and 2026 files have it. (For this demonstration, the column "
+                "is removed from the 2024 sales.)"
             ),
-            mo.ui.tabs({"Diagram": _picture, "Table": _table}),
+            _picture,
             mo.md(
-                "**Observation:** only the third reading is correct. The first is the most problematic: nothing fails, "
-                "and `customer_rating` silently disappears. When files in a folder differ in their columns, this must "
-                "be specified explicitly when reading."
+                "**Observation:** the default reading takes its columns from the first file and drops "
+                "`customer_rating` without an error. `union_by_name = true` combines the columns of all files and "
+                "fills the gaps with `NULL`. When the files in a folder can differ in their columns, this must be "
+                "specified when reading."
             ).callout(kind="warn"),
         ],
         gap=0.6,
@@ -3092,140 +3210,97 @@ def _(in_plain, mo):
 
 
 @app.cell
-def _(mo):
-    ch1_crash = mo.ui.switch(value=True, label="Crash between the two writes")
-    return (ch1_crash,)
-
-
-@app.cell
-def _(Path, ch1_crash, chart_or_table, diagram, json, mo, shop_sales, sqlite3, tempfile):
-    # The move: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
+def _(Path, diagram, json, mo, shop_sales, sqlite3, tempfile):
+    # The correction: the biggest German sale, booked under Germany (Europe) but meant for Kenya (Africa).
     _sale = shop_sales.loc[shop_sales.loc[shop_sales["country"] == "Germany", "total_price"].idxmax()]
     # Money in whole cents: an integer never picks up float rounding, so "the total held" is exact.
     _move = int(round(float(_sale["total_price"]) * 100))
     _initial = {_r: int(round(_v * 100)) for _r, _v in shop_sales.groupby("region")["total_price"].sum().items()}
     _expected = sum(_initial.values())
-    _timeline = []
-
-    def _add_timeline(system, step, totals, note):
-        _timeline.append(
-            {
-                "system": system,
-                "step": step,
-                "Europe (CHF)": totals["Europe"] / 100,
-                "Africa (CHF)": totals["Africa"] / 100,
-                "total revenue (CHF)": sum(totals.values()) / 100,
-                "note": note,
-            }
-        )
+    _steps = {"file": [], "SQLite": []}  # (step, region totals in cents after it)
 
     with tempfile.TemporaryDirectory() as _tmp:
         # File: the region totals in one JSON file; the two saves are separate and nothing ties them together.
         _file_path = Path(_tmp) / "region_totals.json"
         _totals = dict(_initial)
         _file_path.write_text(json.dumps(_totals))
-        _add_timeline("file (JSON)", "start", _totals, "region totals before the move")
+        _steps["file"].append(("start", dict(_totals)))
         _totals["Europe"] -= _move
         _file_path.write_text(json.dumps(_totals))
-        _add_timeline("file (JSON)", "subtract from Europe", _totals, "first write")
-        if ch1_crash.value:
-            _add_timeline("file (JSON)", "crash", _totals, "crash before the second write")
-        else:
-            _totals["Africa"] += _move
-            _file_path.write_text(json.dumps(_totals))
-            _add_timeline("file (JSON)", "add to Africa", _totals, "second write")
-        _file_total = sum(json.loads(_file_path.read_text()).values())
+        _steps["file"].append(("subtract from Europe", dict(_totals)))
+        # the crash: the program ends before the second write; what remains is what the file holds
+        _steps["file"].append(("after the crash", json.loads(_file_path.read_text())))
 
         # SQLite: both writes inside one transaction.
-        _con = sqlite3.connect(Path(_tmp) / "region_totals.db", isolation_level=None)
+        _db = Path(_tmp) / "region_totals.db"
+        _con = sqlite3.connect(_db, isolation_level=None)
         _con.execute("CREATE TABLE region_totals (region TEXT PRIMARY KEY, cents INTEGER)")
         _con.executemany("INSERT INTO region_totals VALUES (?, ?)", _initial.items())
-
-        def _db_totals():
-            return dict(_con.execute("SELECT region, cents FROM region_totals").fetchall())
-
-        _add_timeline("SQLite", "start", _db_totals(), "region totals before the move")
+        _query = "SELECT region, cents FROM region_totals"
+        _steps["SQLite"].append(("start", dict(_con.execute(_query).fetchall())))
         _con.execute("BEGIN")
         _con.execute("UPDATE region_totals SET cents = cents - ? WHERE region = 'Europe'", (_move,))
-        _add_timeline("SQLite", "subtract from Europe", _db_totals(), "inside the transaction, not committed")
-        try:
-            if ch1_crash.value:
-                raise RuntimeError("simulated crash between the two writes")
-            _con.execute("UPDATE region_totals SET cents = cents + ? WHERE region = 'Africa'", (_move,))
-            _con.execute("COMMIT")
-            _add_timeline("SQLite", "commit", _db_totals(), "both writes kept")
-        except RuntimeError:
-            _con.execute("ROLLBACK")
-            _add_timeline("SQLite", "roll back", _db_totals(), "first write undone")
-        _db_total = sum(_db_totals().values())
+        _steps["SQLite"].append(("subtract from Europe", dict(_con.execute(_query).fetchall())))
+        _con.close()  # the crash: the connection ends before COMMIT, so SQLite discards the transaction
+        _con = sqlite3.connect(_db)  # the database, opened again after the crash
+        _steps["SQLite"].append(("after the crash", dict(_con.execute(_query).fetchall())))
         _con.close()
 
-    # One lane per system, one box per step: the two region totals after it, and total revenue at the end.
-    _style = {"crash": "dg-box dg-hot", "add to Africa": "dg-box dg-ok", "commit": "dg-box dg-ok", "roll back": "dg-box dg-ok"}
-
-    def _lane(y, system, label, total):
-        steps = [_row for _row in _timeline if _row["system"] == system]
-        parts = [f'<text x="0" y="{y + 50}" font-weight="700">{label}</text>']
-        for _i, _row in enumerate(steps):
-            x = 110 + _i * 270
+    def _lane(y, system, label):
+        """One lane: a box per step with the two region totals after it, then total revenue at the end."""
+        parts = [f'<text x="0" y="{y + 54}" font-weight="700">{label}</text>']
+        total = sum(_steps[system][-1][1].values())
+        for _i, (_step, _t) in enumerate(_steps[system]):
+            x = 150 + _i * 270
+            cls = "dg-box" if _i < 2 else "dg-box dg-ok" if total == _expected else "dg-box dg-hot"
             parts.append(
-                f'<rect class="{_style.get(_row["step"], "dg-box")}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
-                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_row["step"]}</text>'
-                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_row["Europe (CHF)"]:,.0f}</text>'
-                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_row["Africa (CHF)"]:,.0f}</text>'
+                f'<rect class="{cls}" x="{x}" y="{y}" width="230" height="96" rx="12"/>'
+                f'<text x="{x + 115}" y="{y + 28}" text-anchor="middle" font-weight="700">{_step}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 56}" text-anchor="middle">Europe {_t["Europe"] / 100:,.0f}</text>'
+                f'<text class="dg-muted" x="{x + 115}" y="{y + 80}" text-anchor="middle">Africa {_t["Africa"] / 100:,.0f}</text>'
             )
             if _i:
                 parts.append(f'<path class="dg-edge" d="M{x - 36} {y + 48} H {x - 6}"/>')
-        _ok = total == _expected
+        ok = total == _expected
         parts.append(
-            f'<text class="{"dg-ok" if _ok else "dg-hot"}" x="930" y="{y + 44}" font-size="22">'
-            f"{'&#10003;' if _ok else '&#10007;'} {total / 100:,.0f}</text>"
+            f'<text class="{"dg-ok" if ok else "dg-hot"}" x="960" y="{y + 44}" font-size="22">'
+            f"{'&#10003;' if ok else '&#10007;'} {total / 100:,.0f}</text>"
+            f'<text class="{"dg-ok" if ok else "dg-hot"}" x="960" y="{y + 72}">'
+            + ("unchanged" if ok else f"{(_expected - total) / 100:,.2f} missing")
+            + "</text>"
         )
-        if not _ok:
-            parts.append(f'<text class="dg-hot" x="930" y="{y + 72}">{(_expected - total) / 100:,.2f} missing</text>')
         return "".join(parts)
 
     _picture = diagram(
-        '<text x="930" y="18" font-weight="700">total revenue (CHF)</text>'
-        + _lane(36, "file (JSON)", "file", _file_total)
-        + '<rect x="370" y="176" width="520" height="120" rx="16" fill="none" stroke="currentColor"'
+        '<text x="960" y="18" font-weight="700">total revenue (CHF)</text>'
+        + _lane(36, "file", "file (JSON)")
+        + '<rect x="404" y="176" width="262" height="120" rx="16" fill="none" stroke="currentColor"'
         ' stroke-dasharray="8 6" opacity="0.45"/>'
-        + '<text class="dg-muted" x="630" y="322" text-anchor="middle">one transaction: BEGIN ... COMMIT or ROLLBACK</text>'
-        + _lane(188, "SQLite", "SQLite", _db_total),
-        width=1160,
+        + '<text class="dg-muted" x="535" y="322" text-anchor="middle">transaction: BEGIN, no COMMIT</text>'
+        + _lane(188, "SQLite", "SQLite"),
+        width=1150,
         height=334,
-        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa: the file ends with total revenue CHF {_file_total / 100:,.2f}, "
-        f"SQLite with CHF {_db_total / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
+        label=f"Moving CHF {_move / 100:,.2f} from Europe to Africa, with a crash between the two writes: the file ends "
+        f"with total revenue CHF {sum(_steps['file'][-1][1].values()) / 100:,.2f}, SQLite with CHF "
+        f"{sum(_steps['SQLite'][-1][1].values()) / 100:,.2f}; both should be CHF {_expected / 100:,.2f}.",
     )
-
-    _file_ok = _file_total == _expected
-    _file_callout = mo.md(
-        "**File:** the two writes are independent. "
-        + (
-            "Both were applied, because no crash occurred."
-            if _file_ok
-            else f"The crash occurred between them: CHF {_move / 100:,.2f} was subtracted from Europe but never added to Africa."
-        )
-    ).callout(kind="success" if _file_ok else "danger")
-    _db_callout = mo.md(
-        "**SQLite:** both writes belong to one transaction. "
-        + ("The crash triggered a rollback of the first write, so total revenue is preserved." if ch1_crash.value else "They were committed together.")
-    ).callout(kind="success" if _db_total == _expected else "danger")
-
+    _lost = _expected - sum(_steps["file"][-1][1].values())
     mo.vstack(
         [
-            mo.md("### Atomicity: reassigning a sale to another region, with a crash"),
+            mo.md("### Atomicity: a crash between two writes"),
             mo.md(
-                f"Sale #{_sale['sale_id']} ({_sale['product']}, CHF {_sale['total_price']:,.2f}) was recorded under "
-                "Germany but belongs to Kenya. Reassigning it requires two writes to the region totals (in CHF) that "
-                "the dashboard reads: **subtract it from Europe**, then **add it to Africa**. The reassignment must "
-                "leave total revenue unchanged."
+                f"Sale #{_sale['sale_id']} (CHF {_sale['total_price']:,.2f}) was recorded under Germany but belongs "
+                "to Kenya. The correction takes two writes to the region totals that the dashboard reads: **subtract "
+                "it from Europe**, then **add it to Africa**. Without a crash, a file and a database give the same "
+                "result. Here, the program crashes between the two writes."
             ),
-            ch1_crash,
-            chart_or_table(_picture, _timeline, label="Every step, in order"),
-            mo.hstack([_file_callout, _db_callout], widths="equal"),
-            mo.md("**Observation:** with the crash enabled, only the transaction preserves total revenue at "
-                  f"CHF {_expected / 100:,.2f}."),
+            _picture,
+            mo.md(
+                f"**Observation:** the file keeps the first write: CHF {_lost / 100:,.2f} of revenue have disappeared. "
+                "In SQLite, both writes belong to one transaction, which was never committed; when the database is "
+                "opened again, the first write is undone and the totals are as before. **Atomicity:** a transaction "
+                "takes effect completely or not at all."
+            ).callout(kind="warn"),
         ],
         gap=0.6,
     )
@@ -3273,7 +3348,8 @@ def _(mo):
     ### Part 2 Summary
 
     - Row layouts suit single records (OLTP), column layouts suit aggregates (OLAP). Parquet reads only the
-      requested columns and skips row groups using their min-max statistics.
+      requested columns and skips row groups using their min-max statistics; partitioned folders let a query
+      skip whole files.
     - Compression trades CPU time for fewer bytes and pays off for slow transfers. Lossless compression keeps
       every value; rounding loses information. Columns with few distinct values compress best.
     - DuckDB runs SQL directly on Parquet and CSV files. Schema-on-write rejects invalid data when it is loaded;
@@ -3312,6 +3388,7 @@ def _(chapter_intro, mo):
                     "URLs",
                     "Verbs and status codes",
                     "From JSON to a DataFrame",
+                    "A public API",
                     "APIs as data sources",
                     "FastAPI",
                     "Validation with Pydantic",
@@ -3747,6 +3824,100 @@ def _(alt, api_base_url, in_plain, mo, p3_consume_run, pd, requests, static_tabl
                 f"**Observation:** the response contains {len(_sales):,} sales as JSON objects with {_sales.shape[1]} fields "
                 "each, and `pd.DataFrame` turns them into a table in one step. The server evaluated the query parameter "
                 "`start_date`, so only the requested rows were transferred."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    p3_weather_run = mo.ui.run_button(label="Request the forecast", kind="success")
+    return (p3_weather_run,)
+
+
+@app.cell
+def _(alt, in_plain, json, mo, p3_weather_run, pd, requests, tier_chart):
+    # Run from this text, so the slide shows exactly the code that runs.
+    _code = (
+        'params = {"latitude": 47.05, "longitude": 8.31, "hourly": "temperature_2m",\n'
+        '          "timezone": "Europe/Zurich", "forecast_days": 2}\n'
+        'response = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=5)\n'
+        "response.raise_for_status()\n"
+        'weather = pd.DataFrame(response.json()["hourly"])    # one row per hour'
+    )
+    # A response recorded on 2 October 2026, shown when the lecture room has no network.
+    _recorded = {
+        "latitude": 47.04,
+        "longitude": 8.32,
+        "timezone": "Europe/Zurich",
+        "hourly_units": {"time": "iso8601", "temperature_2m": "°C"},
+        "hourly": {
+            "time": [f"2026-10-{2 + _h // 24:02d}T{_h % 24:02d}:00" for _h in range(48)],
+            "temperature_2m": [
+                16.6, 15.8, 15.2, 15.2, 15.3, 14.9, 14.9, 14.9, 14.7, 14.8, 15.3, 15.9, 17.0, 17.8, 18.5, 19.5,
+                19.7, 19.1, 18.8, 17.9, 16.7, 16.8, 16.9, 15.8, 15.0, 14.8, 14.1, 13.4, 13.7, 13.1, 13.1, 12.8,
+                12.6, 13.9, 15.1, 16.7, 18.6, 20.0, 21.1, 21.8, 22.1, 22.0, 21.6, 20.6, 19.4, 18.4, 17.7, 16.9,
+            ],
+        },
+    }
+    _top = mo.vstack(
+        [
+            mo.md("### A public API: the weather forecast for Lucerne"),
+            in_plain(
+                "**Open-Meteo** returns weather forecasts as JSON, without an API key; location, variables and time "
+                "zone are query parameters."
+            ),
+            mo.md(f"```python\n{_code}\n```"),
+            p3_weather_run,
+        ],
+        gap=0.6,
+    )
+    mo.stop(
+        not p3_weather_run.value,
+        mo.vstack([_top, mo.md("**Question:** what structure will the JSON response have?").callout(kind="neutral")], gap=0.6),
+    )
+    _names = {"requests": requests, "pd": pd}
+    try:
+        exec(_code, _names)
+        _data = _names["response"].json()
+        _status, _kind = f"`{_names['response'].status_code} {_names['response'].reason}` · live response", "success"
+    except (requests.RequestException, KeyError, ValueError) as _exc:
+        _data = _recorded
+        _names["weather"] = pd.DataFrame(_data["hourly"])
+        _status = f"No usable response (`{type(_exc).__name__}`): showing a response recorded on 2 October 2026."
+        _kind = "warn"
+    _weather = _names["weather"].assign(time=lambda d: pd.to_datetime(d["time"]))
+    # The response, abridged to lines that fit beside the chart: the top-level keys, the first value of each list.
+    _meta = [f"{json.dumps(_k)}: {json.dumps(_data[_k], ensure_ascii=False)}" for _k in ("latitude", "longitude", "timezone") if _k in _data]
+    _hourly = [f"{json.dumps(_k)}: [{json.dumps(_v[0])}, …]" for _k, _v in _data["hourly"].items()]
+    _preview = "{" + ",\n ".join(_meta) + ',\n "hourly": {' + ",\n            ".join(_hourly) + "}}"
+    _chart = (
+        alt.Chart(_weather)
+        .mark_line(strokeWidth=3)
+        .encode(x=alt.X("time:T", title=None), y=alt.Y("temperature_2m:Q", title="°C", scale=alt.Scale(zero=False)))
+        .properties(width="container", height=180, title="Temperature in Lucerne, next 48 hours")
+    )
+    mo.vstack(
+        [
+            _top,
+            mo.hstack(
+                [
+                    mo.md(f"{_status}\n\n```json\n{_preview}\n```").callout(kind=_kind),
+                    tier_chart(_chart, "logic"),
+                ],
+                widths=[2, 3],
+                gap=2,
+            ),
+            mo.md(
+                f"**Observation:** metadata at the top level, the {len(_weather)} hourly values as parallel lists under "
+                "`hourly`; `pd.DataFrame(...[\"hourly\"])` turns these lists into columns. With `timezone`, the times "
+                "are local ISO 8601 times (Part 1)."
+            ),
+            mo.md(
+                '<p class="vis-caption">Weather data by <a href="https://open-meteo.com">Open-Meteo.com</a>, '
+                'licensed under CC BY 4.0: the attribution is part of the terms of use.</p>'
             ),
         ],
         gap=0.6,
@@ -4316,8 +4487,8 @@ def _(mo):
     - An HTTP request consists of a verb, a URL (path and query parameters), headers and an optional body; the
       response returns a status code and usually JSON.
     - 2xx means success, 4xx a client error, 5xx a server error. GET, PUT and DELETE are idempotent, POST is not.
-    - `requests` retrieves data from an API, and the JSON converts directly into a DataFrame; authentication,
-      rate limits and pagination have to be handled.
+    - `requests` retrieves data from the sales API and from public APIs alike, and the JSON converts directly
+      into a DataFrame; authentication, rate limits, pagination and terms of use have to be handled.
     - FastAPI maps Python functions to endpoints and generates the documentation (`/docs`) from the code.
     - Pydantic validates every request against a model before the endpoint code runs; it checks structure,
       not truth.
@@ -4349,13 +4520,16 @@ def _(chapter_intro, mo):
             chapter_intro(
                 "presentation",
                 "With which framework should the dashboard be built, and how is the data presented faithfully?",
-                "The role of a frontend, Streamlit, marimo, Dash and React compared, and how analysis choices shape a chart.",
+                "The role of a frontend, Streamlit, marimo, Dash and React compared, and how the chart type and the "
+                "analysis choices shape what a chart shows.",
                 topics=(
                     "Role of the frontend",
+                    "Aggregate where the data is",
                     "Framework landscape",
                     "One dashboard, three frameworks",
                     "Live: marimo and Streamlit",
                     "Choosing a framework",
+                    "Choosing a chart type",
                     "Analysis choices",
                 ),
             ),
@@ -4415,6 +4589,102 @@ def _(box, diagram, in_plain, mo):
                 "**Observation:** the dashboard's *Units sold* field starts at 1 (`min_value=1`), a convenience for "
                 "users. The rule itself, 1 to 100,000 units, is enforced in the API, where it also applies to the "
                 "partner's script. The frontend still sorts, aggregates and draws, but it owns no business rules."
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    p4_volume = mo.ui.slider(
+        steps=[3_360, 33_600, 336_000, 3_360_000], value=3_360, label="Sales in the system", show_value=True, debounce=True
+    )
+    return (p4_volume,)
+
+
+@app.cell
+def _(best_seconds, format_bytes, in_plain, json, mo, p4_volume, shop_sales):
+    # The records GET /sales returns (13 fields, as in sw03_demo_api.py) and the 4 rows of GET /revenue.
+    _fields = {
+        "sale_id": "sale_id", "sale_date": "sale_date", "units_sold": "units_sold", "total_price": "total_price",
+        "customer_rating": "customer_rating", "product_id": "product_id", "product": "product_name",
+        "category_id": "category_id", "category": "category_name", "country_id": "country_id",
+        "country": "country_name", "region_id": "region_id", "region": "region_name",
+    }
+    _records = (
+        shop_sales.assign(sale_date=shop_sales["sale_date"].dt.strftime("%Y-%m-%d"))[list(_fields)]
+        .rename(columns=_fields)
+        .to_dict("records")
+    )
+    _rows_json = json.dumps(_records)
+    _revenue_json = json.dumps(
+        shop_sales.groupby("region", as_index=False)["total_price"].sum().round(2)
+        .rename(columns={"total_price": "revenue"}).to_dict("records")
+    )
+    _scale = p4_volume.value / len(_records)  # more sales: proportionally more rows, the same 4 aggregates
+    _rows_bytes, _revenue_bytes = len(_rows_json) * _scale, len(_revenue_json)
+    _parse_ms = best_seconds(json.loads, _rows_json) * 1000 * _scale
+
+    def _transfer(num_bytes, mbit=50):
+        """Seconds to send num_bytes over a 50 Mbit/s connection."""
+        return num_bytes * 8 / (mbit * 1e6)
+
+    _a = """
+# A: every row to the dashboard, aggregated there
+sales = pd.DataFrame(requests.get(f"{API}/sales").json())
+chart = sales.groupby("region_name")["total_price"].sum()
+"""
+    _b = """
+# B: the API aggregates, the dashboard displays
+chart = pd.DataFrame(requests.get(f"{API}/revenue").json())
+"""
+    mo.vstack(
+        [
+            mo.md("### Aggregate where the data is"),
+            in_plain(
+                "A dashboard shows totals, not single sales. If the API returns every row, all rows travel over the "
+                "network and the browser aggregates them; if the API aggregates first, only the result travels."
+            ),
+            p4_volume,
+            mo.hstack(
+                [
+                    mo.vstack(
+                        [
+                            mo.md(f"```python\n{_a.strip()}\n```"),
+                            mo.hstack(
+                                [
+                                    mo.stat(format_bytes(_rows_bytes), label="JSON sent", caption=f"{p4_volume.value:,} rows", bordered=True),
+                                    mo.stat(f"{_transfer(_rows_bytes):,.2f} s", label="transfer at 50 Mbit/s", caption=f"+ {_parse_ms:,.0f} ms to parse", bordered=True),
+                                ],
+                                widths="equal",
+                            ),
+                        ],
+                        gap=0.4,
+                    ),
+                    mo.vstack(
+                        [
+                            mo.md(f"```python\n{_b.strip()}\n```"),
+                            mo.hstack(
+                                [
+                                    mo.stat(format_bytes(_revenue_bytes), label="JSON sent", caption="4 rows", bordered=True),
+                                    mo.stat(f"{_transfer(_revenue_bytes) * 1000:,.3f} ms", label="transfer at 50 Mbit/s", bordered=True),
+                                ],
+                                widths="equal",
+                            ),
+                        ],
+                        gap=0.4,
+                    ),
+                ],
+                widths="equal",
+                gap=2,
+            ),
+            mo.md(
+                f"**Observation:** both variants draw the same chart. Variant A sends {format_bytes(_rows_bytes)} and grows "
+                f"with every sale; variant B sends {format_bytes(_revenue_bytes)}, {_rows_bytes / _revenue_bytes:,.0f} times "
+                "less, whatever the number of sales. Aggregations belong where the data is, in the database or the API; "
+                "the frontend requests what it displays."
             ),
         ],
         gap=0.6,
@@ -4676,32 +4946,120 @@ def _(in_plain, mo, static_table):
 
 @app.cell
 def _(mo):
-    # The three-ways lab's control, shown by the slide below.
-    honest_view = mo.ui.radio(
+    p4_question = mo.ui.radio(
         options=[
-            "A - aggregate the sales into fewer points",
-            "B - stratify by category",
-            "C - exclude one category",
+            "Comparison: revenue per region",
+            "Trend: revenue per month",
+            "Relationship: units and sale value",
+            "Share: categories within each region",
         ],
-        value="A - aggregate the sales into fewer points",
-        label="Analysis variant",
+        value="Comparison: revenue per region",
+        label="Question:",
+        inline=True,
+    )
+    return (p4_question,)
+
+
+@app.cell
+def _(TIER, alt, in_plain, mo, p4_question, shop_sales, tier_chart):
+    _q = p4_question.value
+    _muted = TIER["muted"]
+    if _q.startswith("Comparison"):
+        _df = shop_sales.groupby("region", as_index=False)["total_price"].sum()
+        _good = alt.Chart(_df).mark_bar(cornerRadiusEnd=4).encode(
+            x=alt.X("total_price:Q", title="revenue (CHF)"), y=alt.Y("region:N", sort="-x", title=None)
+        )
+        _poor = alt.Chart(_df).mark_line(point=alt.OverlayMarkDef(color=_muted, size=80), strokeWidth=3, color=_muted).encode(
+            x=alt.X("region:N", sort=None, title=None), y=alt.Y("total_price:Q", title="revenue (CHF)", scale=alt.Scale(zero=False))
+        )
+        _why = (
+            "bars from zero, sorted by value: the ranking is visible at once.",
+            "a line suggests a development between unrelated regions, and the axis without zero exaggerates the differences.",
+        )
+    elif _q.startswith("Trend"):
+        _df = (
+            shop_sales.assign(month=shop_sales["sale_date"].dt.to_period("M").dt.to_timestamp())
+            .groupby("month", as_index=False)["total_price"].sum()
+        )
+        _df["label"] = _df["month"].dt.strftime("%b %Y")
+        _good = alt.Chart(_df).mark_line(point=True, strokeWidth=3).encode(
+            x=alt.X("month:T", title=None), y=alt.Y("total_price:Q", title="revenue (CHF)")
+        )
+        _poor = alt.Chart(_df).mark_bar(color=_muted).encode(
+            x=alt.X("label:N", sort="-y", title="months, sorted by revenue", axis=alt.Axis(labels=False, ticks=False)),
+            y=alt.Y("total_price:Q", title="revenue (CHF)"),
+        )
+        _why = (
+            "a line along the time axis shows the development from month to month.",
+            "bars sorted by value destroy the time order: the trend can no longer be seen.",
+        )
+    elif _q.startswith("Relationship"):
+        _df = shop_sales.sample(600, random_state=3)[["units_sold", "total_price"]].reset_index(drop=True)
+        _good = alt.Chart(_df).mark_circle(size=45, opacity=0.5).encode(
+            x=alt.X("units_sold:Q", title="units sold"), y=alt.Y("total_price:Q", title="sale value (CHF)")
+        )
+        _poor = alt.Chart(_df.reset_index()).mark_line(strokeWidth=1, color=_muted).encode(
+            x=alt.X("index:Q", title="row in the file"), y=alt.Y("total_price:Q", title="sale value (CHF)")
+        )
+        _why = (
+            "a scatter plot places each sale by both measures, and the relationship becomes visible.",
+            "a line in row order connects unrelated sales, and the second measure is missing entirely.",
+        )
+    else:
+        _df = shop_sales.groupby(["region", "category"], as_index=False)["total_price"].sum()
+        _good = alt.Chart(_df).mark_bar().encode(
+            x=alt.X("total_price:Q", stack="normalize", title="share of revenue", axis=alt.Axis(format="%")),
+            y=alt.Y("region:N", title=None),
+            color=alt.Color("category:N", title=None),
+        )
+        _poor = alt.Chart(_df).mark_arc().encode(
+            theta=alt.Theta("total_price:Q", stack=True),
+            color=alt.Color("category:N", title=None),
+            facet=alt.Facet("region:N", columns=4, title=None),
+        )
+        _why = (
+            "bars normalised to 100% align the shares on one axis, so the regions can be compared directly.",
+            "angles in separate pie charts are hard to compare from one region to the next.",
+        )
+    _good = _good.properties(width="container", height=250)
+    _poor = _poor.properties(width=120, height=120) if _q.startswith("Share") else _poor.properties(width="container", height=250)
+    mo.vstack(
+        [
+            mo.md("### Choosing a chart type"),
+            in_plain(
+                "The chart type follows from the question: a **comparison** of categories uses bars, a **trend** over "
+                "time a line, a **relationship** between two measures a scatter plot, and a **share** of a whole "
+                "stacked bars. A mismatched type hides the answer or suggests a false one."
+            ),
+            p4_question,
+            mo.hstack(
+                [
+                    mo.vstack([mo.md(f"**Suitable:** {_why[0]}").callout(kind="success"), tier_chart(_good, "presentation")], gap=0.4),
+                    mo.vstack([mo.md(f"**Misleading:** {_why[1]}").callout(kind="danger"), tier_chart(_poor, "presentation")], gap=0.4),
+                ],
+                widths="equal",
+                gap=2,
+            ),
+        ],
+        gap=0.6,
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    # The analysis-choices lab's control, shown by the slide below.
+    honest_view = mo.ui.radio(
+        options=["A: average the sales", "B: one line per category", "C: leave out one category"],
+        value="A: average the sales",
+        label="Analysis choice:",
         inline=True,
     )
     return (honest_view,)
 
 
 @app.cell
-def _(
-    SEED_DIR,
-    TIER,
-    alt,
-    chart_or_table,
-    duckdb,
-    honest_view,
-    in_plain,
-    mo,
-    tier_chart,
-):
+def _(SEED_DIR, TIER, alt, duckdb, honest_view, in_plain, mo, pd, tier_chart):
     _con = duckdb.connect()
     _con.execute(
         f"""
@@ -4713,106 +5071,108 @@ def _(
         JOIN '{(SEED_DIR / "categories.parquet").as_posix()}' c USING (category_id)
         """
     )
+    _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
+    _palette = alt.Scale(domain=_cats, range=["#4c78a8", "#b279a2", "#54a24b", "#9d755d"][: len(_cats)])
+    _averages = "(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY product, month)"
+    _choice = honest_view.value[0]
+    # Two panels per choice: (title, the points, one fitted line per value of this expression)
+    _views = {
+        "A": [("each sale", "sales", "'all'"), ("average per product and month", _averages, "'all'")],
+        "B": [("all sales, one line", "sales", "'all'"), ("one line per category", "sales", "category")],
+        "C": [("all sales", "sales", "'all'"), ("without Services", "sales WHERE category <> 'Services'", "'all'")],
+    }[_choice]
 
-    def _measure(label, source="sales", *params):
-        # DuckDB fits the line itself: regr_slope and regr_r2 are ordinary least squares.
-        _n, _slope, _r2 = _con.execute(
-            f"SELECT count(*), regr_slope(y, x) * 10000, regr_r2(y, x) FROM {source}", params
-        ).fetchone()
-        return {"unit of analysis": label, "points (n)": _n, "slope (rating per CHF 10k)": round(_slope, 3), "R²": round(_r2, 3)}
+    def _fit(source, group):
+        """Least squares, computed by DuckDB: one line per group, as (group, slope, intercept, R², n, x min, x max)."""
+        return _con.execute(
+            f"SELECT {group} AS grp, regr_slope(y, x), regr_intercept(y, x), regr_r2(y, x), count(*), min(x), max(x) "
+            f"FROM {source} GROUP BY grp ORDER BY grp"
+        ).fetchall()
 
-    def _averaged(group_by):
-        return f"(SELECT avg(x) AS x, avg(y) AS y FROM sales GROUP BY {group_by})"
-
-    if honest_view.value.startswith("A"):
-        _trick = (
-            "**Variant A:** many sales are averaged into one point. Fewer points mean less variance between them, "
-            "so the line appears to fit closely."
+    def _panel(i, title, source, group):
+        """One scatter plot with its fitted lines; a single line is red where it slopes down."""
+        fits = _fit(source, group)
+        per_category = group == "category"
+        points = _con.execute(f"SELECT x, y{', category AS grp' if per_category else ''} FROM {source}").df()
+        segments = pd.DataFrame(
+            [{"grp": g, "x": _x, "y": b + a * _x, "down": a < 0} for g, a, b, _r2, _n, lo, hi in fits for _x in (lo, hi)]
         )
-        _views = [
-            ("one point per sale", "sales", ()),
-            ("per product per month", _averaged("product, month"), ()),
-            ("per category per month", _averaged("category, month"), ()),
-            ("per category", _averaged("category"), ()),
-        ]
-    elif honest_view.value.startswith("B"):
-        _trick = (
-            "**Variant B:** one line through all sales, or one line per category. The pooled line mainly reflects "
-            "the differences between the categories."
+        if per_category:
+            subtitle = "slope per CHF 10,000: " + " · ".join(f"{g} {a * 10_000:+.2f}" for g, a, *_ in fits)
+        else:
+            _g, a, _b, r2, n, *_ = fits[0]
+            subtitle = f"n = {n:,} · R² = {r2:.2f} · slope {a * 10_000:+.2f} per CHF 10,000"
+        x = alt.X("x:Q", title="sale amount (CHF)", axis=alt.Axis(format="~s", tickCount=5))
+        y = alt.Y("y:Q", title="rating" if i == 0 else None, scale=alt.Scale(domain=[1, 5]))
+        dense = len(points) > 1000
+        dots = alt.Chart(points).mark_circle(size=22 if dense else 60, opacity=0.35 if dense else 0.7).encode(x=x, y=y)
+        lines = alt.Chart(segments).mark_line(strokeWidth=4).encode(x=x, y=y, detail="grp:N")
+        if per_category:
+            color = alt.Color(
+                "grp:N", scale=_palette, title=None, legend=alt.Legend(orient="bottom", symbolOpacity=1, symbolSize=160)
+            )
+            dots, lines = dots.encode(color=color), lines.encode(color=color)
+        else:
+            dots = dots.encode(color=alt.value(TIER["muted"]))
+            lines = lines.encode(color=alt.condition("datum.down", alt.value(TIER["hot"]), alt.value(TIER["presentation"])))
+        chart = (dots + lines).properties(
+            width="container",
+            height=240,
+            title=alt.TitleParams(title, subtitle=subtitle, fontSize=16, subtitleFontSize=14),
         )
-        _cats = [_c for (_c,) in _con.execute("SELECT DISTINCT category FROM sales ORDER BY 1").fetchall()]
-        _views = [("all sales pooled", "sales", ())] + [(f"only {_c}", "sales WHERE category = ?", (_c,)) for _c in _cats]
-    else:
-        _trick = "**Variant C:** excluding one category can reverse the sign of the slope."
-        _views = [("all sales", "sales", ()), ("all sales except Services", "sales WHERE category <> 'Services'", ())]
-    _rows = [_measure(_label, _source, *_params) for _label, _source, _params in _views]
+        return chart, fits
 
-    def _panel(i, row, source, params):
-        """Small multiple i: the dots and their least-squares line, red when it slopes down."""
-        df = _con.execute(f"SELECT x, y FROM {source}", params).df()
-        dots = (
-            alt.Chart(df)
-            .mark_circle(size=18 if len(df) > 1000 else 60, opacity=0.15 if len(df) > 1000 else 0.7, color=TIER["muted"])
-            .encode(
-                x=alt.X("x:Q", title="CHF spent", axis=alt.Axis(format="~s", tickCount=4)),
-                y=alt.Y("y:Q", title="rating" if i == 0 else None, scale=alt.Scale(domain=[1, 5])),
+    _made = [_panel(_i, *_view) for _i, _view in enumerate(_views)]
+    _panels = mo.hstack([tier_chart(_chart, "presentation") for _chart, _ in _made], widths="equal", gap=2)
+    _all_line = _made[0][1][0]  # (group, slope, intercept, R², n, x min, x max)
+    if _choice == "A":
+        _avg_line = _made[1][1][0]
+        _lesson = (
+            f"**Averaging raised R² from {_all_line[3]:.2f} to {_avg_line[3]:.2f} without adding any information.** "
+            "Each average hides the spread of the sales behind it, so the points lie closer to the line; between "
+            "single sales, the relationship remains weak."
+        )
+    elif _choice == "B":
+        # per category: negative, about zero (under 0.02 rating per CHF 10,000) or positive
+        _slopes = {_g: _a * 10_000 for _g, _a, *_ in _made[1][1]}
+        _kinds = {
+            "negative": [_g for _g, _s in _slopes.items() if _s <= -0.02],
+            "about zero": [_g for _g, _s in _slopes.items() if abs(_s) < 0.02],
+            "positive": [_g for _g, _s in _slopes.items() if _s >= 0.02],
+        }
+        _per = [f"{_kind} within {' and '.join(_gs)}" for _kind, _gs in _kinds.items() if _gs]
+        _priciest = _con.execute("SELECT category FROM sales GROUP BY 1 ORDER BY avg(x) DESC LIMIT 1").fetchone()[0]
+        _best_rated = _con.execute("SELECT category FROM sales GROUP BY 1 ORDER BY avg(y) DESC LIMIT 1").fetchone()[0]
+        _lesson = (
+            f"**The pooled line contradicts the categories.** Across all sales, the slope is "
+            f"{'positive' if _all_line[1] > 0 else 'negative'}; per category, it is "
+            + (", ".join(_per[:-1]) + " and " + _per[-1] if len(_per) > 1 else _per[0])
+            + "."
+            + (
+                f" The pooled line mainly reflects that {_priciest}, the most expensive category, is also rated "
+                "highest (related to Simpson's paradox)."
+                if _priciest == _best_rated
+                else ""
             )
         )
-        slope = row["slope (rating per CHF 10k)"]
-        line = dots.transform_regression("x", "y").mark_line(
-            strokeWidth=4, color=TIER["hot"] if slope < 0 else TIER["presentation"]
-        )
-        return (dots + line).properties(
-            width="container",
-            height=220,
-            title=alt.TitleParams(
-                row["unit of analysis"],
-                subtitle=f"n {row['points (n)']:,} · R² {row['R²']:.2f} · slope {slope:+.2f}",
-                fontSize=15,
-                subtitleFontSize=14,
-            ),
-        )
-
-    _panels = mo.hstack(
-        [
-            tier_chart(_panel(_i, _row, _view[1], _view[2]), "presentation")
-            for _i, (_row, _view) in enumerate(zip(_rows, _views, strict=True))
-        ],
-        widths="equal",
-        gap=1,
-    )
-
-    if honest_view.value.startswith("A"):
-        _lesson = (
-            f"**$R^2$ rose from {_rows[0]['R²']:.2f} to {_rows[-1]['R²']:.2f} without any new information.** The last "
-            f"panel has only {_rows[-1]['points (n)']} points and suggests a much stronger relationship than the "
-            "individual sales support: averaging removes the variance that showed the relationship is weak."
-        )
-    elif honest_view.value.startswith("B"):
-        _down = [_c for _c, _row in zip(_cats, _rows[1:], strict=True) if _row["slope (rating per CHF 10k)"] < 0]
-        _up = [_c for _c in _cats if _c not in _down]
-        _lesson = (
-            f"**The pooled line does not describe the groups.** Pooled, the slope is positive. Within "
-            f"{' and '.join(_down)} it is negative (red); only {' and '.join(_up)} still has a positive slope. The "
-            "pooled slope mainly reflects the differences between the categories (related to Simpson's paradox)."
-        )
     else:
+        _without = _made[1][1][0]
         _lesson = (
-            "**One group out of three determines the direction of the result.** Without Services, the slope "
-            "changes sign, while $R^2$ barely changes: it does not reveal that a single group drives the result."
+            f"**Leaving out one category reverses the slope**, from {_all_line[1] * 10_000:+.2f} to "
+            f"{_without[1] * 10_000:+.2f} per CHF 10,000, while R² barely changes ({_all_line[3]:.2f} → "
+            f"{_without[3]:.2f}). R² does not reveal that a single group determines the direction."
         )
 
     mo.vstack(
         [
             mo.md("### Three Analysis Choices That Change the Result Without Changing the Data"),
             in_plain(
-                f"Every variant below uses the same {_rows[0]['points (n)']:,} sales and the same question: rating "
-                "against CHF spent. Only the analysis changes. Each panel reports its number of points (n), its R² "
-                "and its slope."
+                f"The same {_all_line[4]:,} sales and the same question: do customers who spend more give higher "
+                "ratings? Each choice below changes only the analysis. **R²** measures how closely the points follow "
+                "the fitted line (0 to 1); the **slope** gives its direction."
             ),
             honest_view,
-            mo.md(_trick),
-            chart_or_table(_panels, _rows, label=f"Same {_rows[0]['points (n)']:,} sales, same question"),
+            _panels,
             mo.md(_lesson).callout(kind="warn"),
         ],
         gap=0.6,
@@ -4838,7 +5198,12 @@ def _(mo):
         React frontend on top of the API then fits better.</p>
       </details>
       <details>
-        <summary><strong>Q3:</strong> A slide shows a closely fitting line and a high R². What should be asked first?</summary>
+        <summary><strong>Q3:</strong> The dashboard becomes slow once EdgeWorks has three million sales. What should change?</summary>
+        <p><strong>Answer:</strong> Aggregate in the API or the database and request only the figures the dashboard
+        displays, cache repeated requests, and page through tables instead of loading every row.</p>
+      </details>
+      <details>
+        <summary><strong>Q4:</strong> A slide shows a closely fitting line and a high R². What should be asked first?</summary>
         <p><strong>Answer:</strong> What one point represents, and how many points there are. Averaging the same sales
         into a few groups turns a weak per-sale relationship into a close fit, without any new information.</p>
       </details>
@@ -4856,9 +5221,12 @@ def _(mo):
     ### Part 4 Summary
 
     - A frontend presents data and collects input; the rules remain in the API, which every client must pass.
+      Aggregations belong in the API or the database: the dashboard requests what it displays.
     - Streamlit reruns a script, marimo reruns dependent cells, Dash calls callbacks; Flask and React require
       web development skills.
     - The choice depends on who builds and maintains the app, the layout control required and the audience.
+    - The chart type follows from the question: bars compare, lines show trends, scatter plots show
+      relationships, stacked bars show shares.
     - Aggregating, stratifying or excluding a group can change a finding without changing the data: the unit of
       analysis and the number of points must be reported.
                 """
@@ -4976,9 +5344,10 @@ def _(mo):
       <h3>Wrap-up: Key Takeaways</h3>
       <ol class="question-list" style="font-size: 1.15rem; gap: 10px">
         <li class="tier-data"><strong>Formats:</strong> CSV and JSON are readable text; Avro, Parquet and Arrow are
-        binary and typed. Parquet suits analytics, Avro streams, Arrow in-memory exchange; Pickle only trusted data.</li>
+        binary and typed. Parquet suits analytics, Avro streams, Arrow in-memory exchange; Pickle only trusted data.
+        Dates need an explicit format and time zone.</li>
         <li class="tier-data"><strong>Storage:</strong> a column layout reads only the needed columns and compresses
-        well; compression trades CPU time for fewer bytes.</li>
+        well; partitioning lets a query skip whole files; compression trades CPU time for fewer bytes.</li>
         <li class="tier-data"><strong>Queries:</strong> DuckDB runs SQL directly on files; schema-on-write rejects
         invalid data early, schema-on-read fails silently.</li>
         <li class="tier-data"><strong>Transactions:</strong> concurrent read-modify-write cycles on files lose updates;
@@ -4986,7 +5355,8 @@ def _(mo):
         <li class="tier-logic"><strong>APIs:</strong> a request is a verb and a URL, the response a status code and JSON.
         <code>requests</code> retrieves data; FastAPI and Pydantic serve and validate it.</li>
         <li class="tier-presentation"><strong>Presentation:</strong> Streamlit, marimo and Dash differ in how they react
-        to input; the choice depends on team, layout and audience. Analysis choices change what a chart shows.</li>
+        to input; the dashboard requests aggregates, and the chart type follows the question. Analysis choices
+        change what a chart shows.</li>
       </ol>
       <p class="vis-caption">Practice: exercises 1–2 (marimo) · 3–4 (CSV and Parquet) · 5–6 (compression) ·
       7–8 (building and calling an API), in <code>sw03_lecture_exercises.py</code>.</p>
